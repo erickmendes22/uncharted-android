@@ -46,23 +46,26 @@ void PrintHostBacktrace(const char* prefix); // vk_semaphore.cpp
 #ifdef BB_ADRENOTOOLS
 // g2-arm64: BB_VK_DRIVER=<soname> (e.g. libvulkan_freedreno.so, Turnip): that driver, from the
 // APK's native library directory (BB_NATIVE_LIB_DIR, set by GameActivity; the libadrenotools
-// hook libraries are there too), replaces the system one. The system Vulkan loader is loaded
+// hook libraries are there too) or from BB_VK_DRIVER_DIR (a driver package the user installed:
+// the launcher's driver list), replaces the system one. The system Vulkan loader is loaded
 // into a separate linker namespace whose driver lookups libadrenotools redirects.
 static PFN_vkGetInstanceProcAddr CustomDriverProcAddr() {
     const char* driver = std::getenv("BB_VK_DRIVER");
     const char* lib_dir = std::getenv("BB_NATIVE_LIB_DIR");
+    const char* driver_dir = std::getenv("BB_VK_DRIVER_DIR");
     if (!driver || !driver[0] || !lib_dir) {
         return nullptr;
     }
-    const std::string dir = std::string(lib_dir) + "/";
+    const std::string hooks = std::string(lib_dir) + "/";
+    const std::string dir = driver_dir && driver_dir[0] ? std::string(driver_dir) + "/" : hooks;
     void* handle = adrenotools_open_libvulkan(RTLD_NOW, ADRENOTOOLS_DRIVER_CUSTOM, nullptr,
-                                              dir.c_str(), dir.c_str(), driver, nullptr, nullptr);
+                                              hooks.c_str(), dir.c_str(), driver, nullptr, nullptr);
     if (!handle) {
         std::printf("Vulkan: custom driver %s from %s failed: %s\n", driver, dir.c_str(),
                     dlerror());
         return nullptr;
     }
-    std::printf("Vulkan: custom driver %s loaded\n", driver);
+    std::printf("Vulkan: custom driver %s from %s loaded\n", driver, dir.c_str());
     return reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(handle, "vkGetInstanceProcAddr"));
 }
 #endif

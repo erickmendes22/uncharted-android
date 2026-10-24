@@ -36,12 +36,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -51,6 +55,8 @@ import org.json.JSONObject;
  *  then GameActivity with files/args*.txt and env*.txt written from them. Nothing of the game
  *  ships with the app: the patch presets are checked against the user's executables first.
  *  adb automation: am start -n <app>/dev.unchartedg2.game.Launcher --es game_dir <path> [--ez backup_saves true]
+ *  [--es driver turnip|system|pkg:<name>] [--es driver_zip <path>: install and select that package]
+ *  [--es extra_env "KEY=VALUE\\nKEY=VALUE": the extra environment field]
  *  [--ez prepare true] [--ez play true]. */
 public class Launcher extends Activity {
     static {
@@ -79,7 +85,12 @@ public class Launcher extends Activity {
         {"1920x1080", "1920x1080, the game's own (much slower)"},
     };
     private static final String[] MODULES = {"sce_module/libc.prx", "sce_module/libSceFios2.prx", "sce_sys/param.sfo"};
-    private static final int PICK_FOLDER = 1;
+    private static final int PICK_FOLDER = 1, PICK_DRIVER = 2;
+    /** Where driver packages are downloaded from: the GitHub releases of the community Turnip
+     *  builds (the zips the Android emulators share: meta.json and the driver library). */
+    private static final String[] DRIVER_SOURCES = {
+        "K11MCH1/AdrenoToolsDrivers", "MrPurple666/purple-turnip", "StevenMXZ/Adreno-Tools-Drivers",
+    };
 
     private SharedPreferences prefs;
     private File files;
@@ -89,7 +100,9 @@ public class Launcher extends Activity {
     private RadioGroup resolution;
     private RadioGroup fpsLimit;
     private RadioGroup touchPad;
-    private CheckBox turnip, showFps, uncapped;
+    private CheckBox showFps, uncapped;
+    private LinearLayout driverList;
+    private RadioGroup drivers;
     private volatile boolean busy;
 
     @Override
@@ -110,6 +123,16 @@ public class Launcher extends Activity {
         if (getIntent().hasExtra("resolution")) prefs.edit().putString("resolution", getIntent().getStringExtra("resolution")).apply();
         if (getIntent().hasExtra("fps_limit")) prefs.edit().putString("fps_limit", getIntent().getStringExtra("fps_limit")).apply();
         if (getIntent().hasExtra("touch_pad")) prefs.edit().putString("touch_pad", getIntent().getStringExtra("touch_pad")).apply();
+        if (getIntent().hasExtra("driver")) prefs.edit().putString("driver", getIntent().getStringExtra("driver")).apply();
+        if (getIntent().hasExtra("extra_env")) // "\\n" between the lines (adb passes one string)
+            prefs.edit().putString("extra_env", getIntent().getStringExtra("extra_env").replace("\\n", "\n")).apply();
+        if (getIntent().hasExtra("driver_zip")) {
+            try (InputStream in = new java.io.FileInputStream(getIntent().getStringExtra("driver_zip"))) {
+                prefs.edit().putString("driver", "pkg:" + installDriver(in, "driver")).apply();
+            } catch (IOException e) {
+                android.util.Log.w("Launcher", "driver_zip: " + e.getMessage());
+            }
+        }
         File d = getExternalFilesDir(null);
         files = d != null ? d : getFilesDir();
         buildViews();
@@ -347,11 +370,26 @@ public class Launcher extends Activity {
                  + "executables (the app ships recipes, no code of the game) and the movies play through the "
                  + "port's decoder. FSR 3.1 and TAA (the panel in the game) are anti-aliasing at that size; the port "
                  + "scales the picture to the screen.", 14, false);
-        boolean kgsl = new File("/dev/kgsl-3d0").exists();
-        turnip = check(root, "Turnip Vulkan driver (Adreno; recommended there)", "turnip", kgsl);
-        if (!kgsl)
-            text(root, "No Adreno GPU (KGSL) found: the system's Vulkan driver will be used, which has not been tested "
-                     + "with these games.", 14, false);
+        text(root, "Vulkan driver:", 14, false);
+        driverList = new LinearLayout(this);
+        driverList.setOrientation(LinearLayout.VERTICAL);
+        root.addView(driverList);
+        buildDriverList();
+        LinearLayout driverRow = row(root);
+        button(driverRow, "Add a package (zip)", v -> {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            i.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {"application/zip", "application/octet-stream"});
+            startActivityForResult(i, PICK_DRIVER);
+        });
+        button(driverRow, "Download...", v -> downloadDriver());
+        button(driverRow, "Remove", v -> removeDriver());
+        text(root, "The bundled Turnip (tested, with the port's KGSL fixes) is the one to keep on Adreno. Driver "
+                 + "packages are the zips the Android emulators use (meta.json and the driver library): the Turnip "
+                 + "builds by K11MCH1, MrPurple, StevenMXZ (the Gen8 ones for Adreno 8xx: Snapdragon 8 Elite) and "
+                 + "others, or Qualcomm's own driver builds. They are untested with these games; if the bundled "
+                 + "driver gives a black screen, try one of them.", 14, false);
         ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
         ((ActivityManager) getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
         // An 8 GB device shows ~7.1-7.5 GiB to apps (the G2: 7.15), a 6 GB one ~5.5.
@@ -430,6 +468,13 @@ public class Launcher extends Activity {
             status(done != null ? "Saves copied to " + done : "Backing up failed (no saves yet, or no access).");
         });
         button(saves, "Restore saves", v -> restoreSaves());
+        LinearLayout helpCard = card(root, "Bug reports");
+        note(helpCard, "The game writes its log to the app's own folder, which other apps cannot read on recent "
+                     + "Android. Copy it to " + backups() + " to attach it to a report.");
+        button(helpCard, "Copy the log", v -> {
+            String done = exportLog();
+            status(done != null ? "Log copied to " + done : "No log yet (the game has not run), or no access.");
+        });
         button(root, "Licenses", v -> showLicenses());
         setContentView(scroll);
     }
@@ -448,7 +493,23 @@ public class Launcher extends Activity {
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
-        if (request != PICK_FOLDER || result != RESULT_OK || data == null || data.getData() == null) return;
+        if (result != RESULT_OK || data == null || data.getData() == null) return;
+        if (request == PICK_DRIVER) {
+            Uri uri = data.getData();
+            status("Installing the driver package ...");
+            new Thread(() -> {
+                try (InputStream in = getContentResolver().openInputStream(uri)) {
+                    String name = installDriver(in, "driver");
+                    prefs.edit().putString("driver", "pkg:" + name).apply();
+                    runOnUiThread(this::buildDriverList);
+                    status("Driver package installed and selected: " + name);
+                } catch (Exception e) {
+                    status("Installing the package failed: " + e.getMessage());
+                }
+            }).start();
+            return;
+        }
+        if (request != PICK_FOLDER) return;
         String path = treeToPath(data.getData());
         if (path == null) status("That folder is not on the device's own storage or SD card: type its path instead.");
         else setFolder(path);
@@ -777,7 +838,14 @@ public class Launcher extends Activity {
         e.append("BB_DUMP_REQUEST=").append(d).append("/dump-request\n");
         String cpus = fastCpus();
         if (cpus != null) e.append("BB_RENDER_CPUS=").append(cpus).append('\n');
-        if (turnip.isChecked()) e.append("BB_VK_DRIVER=libvulkan_freedreno.so\n");
+        String driver = driver();
+        if (driver.equals("turnip")) e.append("BB_VK_DRIVER=libvulkan_freedreno.so\n");
+        else if (driver.startsWith("pkg:")) {
+            File pkg = new File(driversDir(), driver.substring(4));
+            String lib = packageLibrary(pkg);
+            if (lib != null) e.append("BB_VK_DRIVER=").append(lib).append("\nBB_VK_DRIVER_DIR=").append(pkg.getAbsolutePath()).append('\n');
+            else report.append("The chosen driver package is missing or broken: the system driver is used. ");
+        }
         if (uncapped.isChecked()) e.append("BB_VBLANK_HZ=0\n");
         if (showFps.isChecked()) e.append("BB_SHOW_FPS=1\n");
         e.append(extraEnv.getText().toString().trim()).append('\n');
@@ -793,6 +861,205 @@ public class Launcher extends Activity {
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(i);
         finish();
+    }
+
+    // ---- Vulkan drivers ----
+
+    /** Installed driver packages live in the app's private storage: Android loads libraries from
+     *  there, not from shared storage. One folder per package: meta.json and the library. */
+    private File driversDir() {
+        File d = new File(getFilesDir(), "drivers");
+        d.mkdirs();
+        return d;
+    }
+
+    /** "turnip" (the bundled Turnip), "system", or "pkg:<folder>" (an installed package). */
+    private String driver() {
+        String d = prefs.getString("driver", null);
+        if (d == null) d = prefs.getBoolean("turnip", new File("/dev/kgsl-3d0").exists()) ? "turnip" : "system";
+        return d;
+    }
+
+    private static JSONObject packageMeta(File dir) {
+        try {
+            String text = readText(new File(dir, "meta.json"));
+            return text.isEmpty() ? null : new JSONObject(text);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** The package's library (meta.json libraryName) when the file is there, else null. */
+    private static String packageLibrary(File dir) {
+        JSONObject meta = packageMeta(dir);
+        String lib = meta != null ? meta.optString("libraryName", "") : "";
+        return !lib.isEmpty() && new File(dir, lib).isFile() ? lib : null;
+    }
+
+    private void buildDriverList() {
+        driverList.removeAllViews();
+        drivers = new RadioGroup(this);
+        boolean kgsl = new File("/dev/kgsl-3d0").exists();
+        List<String[]> options = new ArrayList<>();
+        options.add(new String[] {"turnip", "Bundled Turnip (Mesa 26.2.5 with the port's fixes; Adreno)"
+                                            + (kgsl ? "" : " - no Adreno GPU (KGSL) found here")});
+        options.add(new String[] {"system", "The system's Vulkan driver" + (kgsl ? " (untested with these games)" : "")});
+        File[] installed = driversDir().listFiles(File::isDirectory);
+        if (installed != null) {
+            java.util.Arrays.sort(installed);
+            for (File d : installed) {
+                JSONObject meta = packageMeta(d);
+                String label = meta != null ? meta.optString("name", d.getName()) : d.getName();
+                String version = meta != null ? meta.optString("driverVersion", "") : "";
+                String author = meta != null ? meta.optString("author", "") : "";
+                String detail = version.isEmpty() ? author : author.isEmpty() ? version : version + ", " + author;
+                if (!detail.isEmpty()) label += " (" + detail + ")";
+                if (packageLibrary(d) == null) label += " - broken: no library";
+                options.add(new String[] {"pkg:" + d.getName(), label});
+            }
+        }
+        drivers.setOnCheckedChangeListener((g, id) -> {
+            RadioButton b = g.findViewById(id);
+            if (b != null) prefs.edit().putString("driver", (String) b.getTag()).apply();
+        });
+        String current = driver();
+        for (String[] o : options) {
+            RadioButton b = new RadioButton(this);
+            b.setText(o[1]);
+            b.setId(View.generateViewId());
+            b.setTag(o[0]);
+            drivers.addView(b);
+            if (o[0].equals(current)) drivers.check(b.getId());
+        }
+        // The chosen package is gone: back to the default.
+        if (drivers.getCheckedRadioButtonId() == -1) drivers.check(drivers.getChildAt(kgsl ? 0 : 1).getId());
+        driverList.addView(drivers);
+    }
+
+    /** Unpacks a driver package (a zip with meta.json and the driver library) into
+     *  driversDir()/<name>; the folder's name. */
+    private String installDriver(InputStream in, String fallbackName) throws IOException {
+        File tmp = new File(driversDir(), ".new-" + System.currentTimeMillis());
+        if (!tmp.mkdirs()) throw new IOException("cannot create " + tmp);
+        try {
+            long total = 0;
+            try (ZipInputStream zip = new ZipInputStream(new java.io.BufferedInputStream(in))) {
+                for (ZipEntry e; (e = zip.getNextEntry()) != null;) {
+                    if (e.isDirectory()) continue;
+                    String name = new File(e.getName()).getName(); // a package is one flat folder
+                    if (name.isEmpty() || name.startsWith(".")) continue;
+                    try (OutputStream out = new FileOutputStream(new File(tmp, name))) {
+                        byte[] buf = new byte[1 << 16];
+                        for (int n; (n = zip.read(buf)) > 0;) {
+                            out.write(buf, 0, n);
+                            if ((total += n) > (256L << 20)) throw new IOException("the package is over 256 MB");
+                        }
+                    }
+                }
+            }
+            JSONObject meta = packageMeta(tmp);
+            if (meta == null) throw new IOException("no meta.json in the package (not a driver package?)");
+            if (packageLibrary(tmp) == null) throw new IOException("the library named in meta.json is not in the package");
+            String name = meta.optString("name", fallbackName).replaceAll("[^A-Za-z0-9._-]+", "_");
+            if (name.isEmpty() || name.startsWith(".")) name = "driver";
+            if (name.length() > 60) name = name.substring(0, 60);
+            File dir = new File(driversDir(), name);
+            if (dir.exists()) deleteTree(dir);
+            if (!tmp.renameTo(dir)) throw new IOException("cannot rename to " + dir);
+            return name;
+        } finally {
+            if (tmp.exists()) deleteTree(tmp);
+        }
+    }
+
+    /** The zip assets of the sources' latest releases, picked from a list, then fetchDriver. */
+    private void downloadDriver() {
+        status("Looking up the driver releases ...");
+        new Thread(() -> {
+            List<String[]> found = new ArrayList<>(); // {label, url, file name}
+            StringBuilder errors = new StringBuilder();
+            for (String repo : DRIVER_SOURCES) {
+                try {
+                    JSONArray releases = new JSONArray(fetch("https://api.github.com/repos/" + repo + "/releases?per_page=6"));
+                    for (int i = 0; i < releases.length(); i++) {
+                        JSONObject r = releases.getJSONObject(i);
+                        JSONArray assets = r.getJSONArray("assets");
+                        for (int j = 0; j < assets.length(); j++) {
+                            JSONObject a = assets.getJSONObject(j);
+                            String name = a.getString("name");
+                            long size = a.getLong("size");
+                            if (!name.toLowerCase(Locale.ROOT).endsWith(".zip") || size > (256L << 20)) continue;
+                            found.add(new String[] {repo.substring(0, repo.indexOf('/')) + ": " + name + "  ("
+                                                    + r.optString("published_at", "").replaceAll("T.*", "") + ", "
+                                                    + Math.max(1, size >> 20) + " MB)",
+                                                    a.getString("browser_download_url"), name});
+                        }
+                    }
+                } catch (Exception e) {
+                    errors.append(repo).append(": ").append(e.getMessage()).append(". ");
+                }
+            }
+            runOnUiThread(() -> {
+                if (found.isEmpty()) {
+                    status("No packages found. " + errors);
+                    return;
+                }
+                status(errors.toString());
+                CharSequence[] items = new CharSequence[found.size()];
+                for (int i = 0; i < items.length; i++) items[i] = found.get(i)[0];
+                new android.app.AlertDialog.Builder(this).setTitle("Download a driver package")
+                    .setItems(items, (d, which) -> fetchDriver(found.get(which)[1], found.get(which)[2]))
+                    .setNegativeButton("Cancel", null).show();
+            });
+        }).start();
+    }
+
+    private void fetchDriver(String url, String fileName) {
+        status("Downloading " + fileName + " ...");
+        new Thread(() -> {
+            try (InputStream in = open(url).getInputStream()) {
+                String name = installDriver(in, fileName.replaceAll("(?i)\\.zip$", ""));
+                prefs.edit().putString("driver", "pkg:" + name).apply();
+                runOnUiThread(this::buildDriverList);
+                status("Driver package installed and selected: " + name);
+            } catch (Exception e) {
+                status("Downloading failed: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    private void removeDriver() {
+        String d = driver();
+        if (!d.startsWith("pkg:")) {
+            status("Select an installed package to remove it.");
+            return;
+        }
+        File dir = new File(driversDir(), d.substring(4));
+        new android.app.AlertDialog.Builder(this).setTitle("Remove the driver package")
+            .setMessage("Remove " + dir.getName() + "?")
+            .setPositiveButton("Remove", (dl, w) -> {
+                deleteTree(dir);
+                prefs.edit().putString("driver", new File("/dev/kgsl-3d0").exists() ? "turnip" : "system").apply();
+                buildDriverList();
+                status("Removed " + dir.getName());
+            })
+            .setNegativeButton("Cancel", null).show();
+    }
+
+    private static HttpURLConnection open(String url) throws IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(60000);
+        c.setRequestProperty("User-Agent", "uncharted-android");
+        c.setRequestProperty("Accept", "application/vnd.github+json, */*");
+        if (c.getResponseCode() != 200) throw new IOException("HTTP " + c.getResponseCode() + " from " + new URL(url).getHost());
+        return c;
+    }
+
+    private static String fetch(String url) throws IOException {
+        try (InputStream in = open(url).getInputStream()) {
+            return new String(in.readAllBytes(), "UTF-8");
+        }
     }
 
     // ---- saves ----
@@ -811,6 +1078,22 @@ public class Launcher extends Activity {
         File to = new File(backups(), "saves-" + stamp);
         try {
             copyTree(user, to);
+            return to.getAbsolutePath();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** files/bb-probe.log copied to backups() (other apps cannot read the app's folder on recent
+     *  Android); the copy's path, or null. */
+    private String exportLog() {
+        File log = new File(files, "bb-probe.log");
+        if (!log.isFile()) return null;
+        String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new java.util.Date());
+        File to = new File(backups(), "bb-probe-" + stamp + ".log");
+        try {
+            backups().mkdirs();
+            copyTree(log, to);
             return to.getAbsolutePath();
         } catch (IOException e) {
             return null;

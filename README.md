@@ -4,7 +4,7 @@ Uncharted: The Nathan Drake Collection (PS4) on Android handhelds with Snapdrago
 A fork of [uncharted_pc](https://github.com/Supermedo/uncharted_pc) by SuperMedo, the native port
 of the PS4 game, rebuilt for ARM64 Android.
 
-> **Experimental, an early preview (version 0.1.0).** Tested on one device so far (Retroid Pocket G2).
+> **Experimental, an early preview (version 0.2.0).** Tested on one device so far (Retroid Pocket G2).
 > **No game files are included.** You need your own decrypted dump of the collection.
 > This project is not affiliated with Sony Interactive Entertainment or Naughty Dog.
 
@@ -70,7 +70,7 @@ as assets; they hold no bytes of the game. The steps one by one are the scripts 
 
 ## Using the app
 
-1. Install the APK (`uncharted-android-0.1.0.apk` from
+1. Install the APK (`uncharted-android-0.2.0.apk` from
    [Releases](https://github.com/revvv991/uncharted-android/releases)) and open it. Allow access to
    all files when the launcher asks: the loader reads the dump from its folder by path.
 2. **Choose folder**: the folder of your decrypted collection - with `eboot.bin` (Uncharted 1),
@@ -81,9 +81,15 @@ as assets; they hold no bytes of the game. The steps one by one are the scripts 
    folder. Run it again after you replace the dump.
 4. **Settings**: the size the game renders at - 640x360, 960x540, 1280x720 (recommended) or the
    game's own 1920x1080 (much slower); below 1080p a few byte patches, made on the device from
-   your executables, set it. The Turnip Vulkan driver (on Adreno: keep it on), showing each frame
-   at once, the frame rate counter, the frame rate limit (30 / 60 / 120 / off; the panel in the
-   game has it too), the on-screen gamepad (Auto: shown while no gamepad is connected).
+   your executables, set it. The Vulkan driver: the bundled Turnip (tested, with the port's KGSL
+   fixes; keep it on Adreno), the system's driver, or a driver package you add - the zips the
+   Android emulators use (meta.json and the driver library), from a file or downloaded in the
+   app from the GitHub releases of K11MCH1, MrPurple and StevenMXZ (the Gen8 builds are for the
+   Adreno 8xx of the Snapdragon 8 Elite); they are untested with these games - on the G2 one of
+   three worked. Showing each frame at once, the frame rate counter, the frame rate limit
+   (30 / 60 / 120 / off; the panel in the game has it too), the on-screen gamepad (Auto: shown
+   while no gamepad is connected), extra environment variables for the port (for example
+   `TU_DEBUG=sysmem` for a driver package).
 5. **Play**: the collection's menu starts; Uncharted 2 and 3 are started from it (the app
    restarts itself).
 6. **In the game**: swipe in from the right edge of the screen (or press L3+R3) for the settings
@@ -101,7 +107,9 @@ as assets; they hold no bytes of the game. The steps one by one are the scripts 
 
 In the game, L3+R3 opens the port's menu. The first time a place is shown its shaders are compiled
 (stutters). The saves live in the app's folder, which Android deletes with the app: **Back up
-saves** copies them to `Documents/uncharted-android`, **Restore saves** brings them back.
+saves** copies them to `Documents/uncharted-android`, **Restore saves** brings them back. For a bug
+report, **Copy the log** puts the game's log (`bb-probe.log`) into the same folder, since other
+apps cannot read the app's own folder on recent Android.
 
 ## Authors
 

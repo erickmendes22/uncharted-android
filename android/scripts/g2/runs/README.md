@@ -27,6 +27,11 @@ playing) alone.
 - `movie_pause.sh <tag> <pause secs> [menu-keys]`: a pause in U3's intro movie (New Game), presses
   in the pause menu, the wait, Continue, 70 s of watching for a hang (a thread dump then); for
   the castle movie hang of 2026-10-24, which it did not reproduce.
+- `driver_test.sh <tag> zip:<path>|turnip|system [install] [KEY=VALUE ...]`: the public app with
+  that Vulkan driver (a driver package from a zip on the device through the launcher's `driver_zip`
+  extra, the bundled Turnip or the system driver), extra environment lines, Play, screenshots of
+  the launcher and the game, the driver and frame rate lines, the log pulled; the hook's logcat
+  lines say which driver file was loaded (2026-10-24).
 - `background.sh <tag> home|sleep [secs]`: the app in the background in U2 (the home screen or the
   sleep button) and back; prints the lifecycle lines and port 0's audio queue (`BB_AUDIO_STATS=1`):
   how the sound 28.7 s late after 30 s on the home screen was measured (port 0078).
