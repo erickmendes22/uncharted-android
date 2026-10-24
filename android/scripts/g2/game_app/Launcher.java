@@ -744,10 +744,10 @@ public class Launcher extends Activity {
     }
 
     /** The frame rate limit to offer first: the display's rate when it is 120 Hz, else 60. */
+    /** 60 whatever the display does: at 120 a phone's GPU falls behind and the game runs
+     *  ahead of it (issue #5); 120 stays a choice. */
     private String defaultFpsLimit() {
-        float hz = 60;
-        try { hz = getWindowManager().getDefaultDisplay().getRefreshRate(); } catch (Exception e) { }
-        return hz >= 110 ? "120" : "60";
+        return "60";
     }
 
     /** The port's settings file (bbport.ini, BB_CONFIG): the in-game panel writes it; the
@@ -835,6 +835,10 @@ public class Launcher extends Activity {
         e.append("# Written by the launcher on every start; edit the settings there.\n");
         e.append("BB_FULLSCREEN=1\nBB_FPS_LOG=1\nBB_MIDFRAME_FLUSH=10\nBB_DEFERRED_SUBMIT=1\nBB_SKIN_BATCH=1\n");
         e.append("BB_CS_SPLIT=256:8f067540\nBB_OBJECT_MOTION=0\nBB_THREAD_NICE=0\n");
+        // The game waits when it is two frames ahead of the GPU side (gnmdriver.cpp): a GPU that
+        // falls behind (shaders compiling, a slow device) made it trip its own command buffer
+        // check (issue #5); no cost on the G2.
+        e.append("BB_MAX_FRAMES_AHEAD=2\n");
         e.append("BB_DUMP_REQUEST=").append(d).append("/dump-request\n");
         String cpus = fastCpus();
         if (cpus != null) e.append("BB_RENDER_CPUS=").append(cpus).append('\n');

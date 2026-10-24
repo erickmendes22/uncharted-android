@@ -23,6 +23,13 @@ for v in FEX_SOURCE_DIR FEX_BUILD_DIR ADRENOTOOLS_SOURCE_DIR ADRENOTOOLS_BUILD_D
     if [ -n "${!v:-}" ]; then DIRS+=("-D$v=${!v}"); fi
 done
 export PKG_CONFIG_LIBDIR=$P/lib/pkgconfig PKG_CONFIG_PATH=
+# The port's patches to the FSR-Vulkan submodule (gpu/patches/fsr-vulkan), applied to its working
+# tree once, as the port's build.sh does on a PC (0003: the frame generation's leak).
+for patch in "$SRC"/gpu/patches/fsr-vulkan/*.patch; do
+    if ! git -C "$SRC/gpu/third_party/fsr-vulkan" apply --reverse --check "$patch" 2>/dev/null; then
+        git -C "$SRC/gpu/third_party/fsr-vulkan" apply "$patch"
+    fi
+done
 cmake -S "$SRC/gpu" -B "$OUT" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
     -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=$API -DANDROID_STL=c++_shared \
