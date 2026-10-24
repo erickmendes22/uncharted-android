@@ -1,0 +1,47 @@
+diff --git a/lib/BC/TraceLifter.cpp b/lib/BC/TraceLifter.cpp
+index 83a88b0..8f74076 100644
+--- a/lib/BC/TraceLifter.cpp
++++ b/lib/BC/TraceLifter.cpp
+@@ -414,7 +414,41 @@ bool TraceLifter::Impl::Lift(
+ 
+         case Instruction::kCategoryIndirectJump: {
+           try_add_delay_slot(true, block);
+-          AddTerminatingTailCall(block, intrinsics->jump, *intrinsics);
++
++          // Devirtualized targets (e.g. a recovered jump table): switch on the computed PC.
++          // Trace-local targets become blocks of this trace; anything else still goes
++          // through the `jump` intrinsic.
++          std::vector<std::pair<uint64_t, DevirtualizedTargetKind>> targets;
++          std::set<uint64_t> seen;
++          manager.ForEachDevirtualizedTarget(
++              inst, [&](uint64_t target, DevirtualizedTargetKind kind) {
++                if (seen.insert(target).second) {
++                  targets.emplace_back(target, kind);
++                }
++              });
++          if (targets.empty()) {
++            AddTerminatingTailCall(block, intrinsics->jump, *intrinsics);
++            break;
++          }
++          auto default_block = llvm::BasicBlock::Create(context, "", func);
++          AddTerminatingTailCall(default_block, intrinsics->jump, *intrinsics);
++          auto pc = LoadProgramCounter(block, *intrinsics);
++          auto pc_type = llvm::cast<llvm::IntegerType>(pc->getType());
++          auto sw = llvm::SwitchInst::Create(pc, default_block,
++                                             static_cast<unsigned>(targets.size()),
++                                             block);
++          for (auto [target, kind] : targets) {
++            llvm::BasicBlock *dest = nullptr;
++            if (kind == DevirtualizedTargetKind::kTraceLocal) {
++              inst_work_list.insert(target);
++              dest = GetOrCreateBlock(target);
++            } else {
++              trace_work_list.insert(target);
++              dest = llvm::BasicBlock::Create(context, "", func);
++              AddTerminatingTailCall(dest, get_trace_decl(target), *intrinsics);
++            }
++            sw->addCase(llvm::ConstantInt::get(pc_type, target), dest);
++          }
+           break;
+         }
+ 

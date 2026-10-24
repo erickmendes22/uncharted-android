@@ -1,0 +1,47 @@
+From de6c0fd1c7193951f177ef8483599d575e7c03c9 Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] g2-android: guest pause becomes wfe (BB_PAUSE=yield: yield);
+ idle-spinning guest threads no longer heat the SoC
+
+---
+ FEXCore/Source/Interface/Core/JIT/MiscOps.cpp | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/FEXCore/Source/Interface/Core/JIT/MiscOps.cpp b/FEXCore/Source/Interface/Core/JIT/MiscOps.cpp
+index 6c2b3499a..62591cb45 100644
+--- a/FEXCore/Source/Interface/Core/JIT/MiscOps.cpp
++++ b/FEXCore/Source/Interface/Core/JIT/MiscOps.cpp
+@@ -17,6 +17,9 @@ $end_info$
+ #include <FEXCore/Debug/InternalThreadState.h>
+ #include <FEXCore/Utils/EnumUtils.h>
+ 
++#include <cstdlib>
++#include <cstring>
++
+ namespace FEXCore::CPU {
+ 
+ DEF_OP(WFET) {
+@@ -313,7 +316,19 @@ DEF_OP(RDRAND) {
+ }
+ 
+ DEF_OP(Yield) {
+-  yield();
++  // g2-android: the guest pause (spin-wait loops) becomes wfe. The core then idles until the
++  // next event, at the latest the timer event stream (about 100 us), instead of polling at full
++  // clock: U1's job workers spin while idle (by design on the PS4) and heated the SoC into its
++  // hardware limits. BB_PAUSE=yield: the plain yield.
++  static const bool use_wfe = [] {
++    const char* env = getenv("BB_PAUSE");
++    return !(env && strcmp(env, "yield") == 0);
++  }();
++  if (use_wfe) {
++    wfe();
++  } else {
++    yield();
++  }
+ }
+ 
+ DEF_OP(MonoBackpatcherWrite) {
+-- 
+2.43.0
+

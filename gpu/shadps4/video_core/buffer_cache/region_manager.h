@@ -18,6 +18,7 @@
 #include "common/spin_lock.h"
 #endif
 #include "common/debug.h"
+#include "common/spin_lock.h"
 #include "common/types.h"
 #include "video_core/buffer_cache/region_definitions.h"
 #include "video_core/page_manager.h"
@@ -105,6 +106,7 @@ public:
                     gpu_frame[page] = frame;
                     gpu_tick[page] = tick;
                 }
+                DropHotPages(start_page, end_page);
             }
         } else {
             bits.UnsetRange(start_page, end_page);
@@ -263,9 +265,15 @@ private:
     // cost a protection fault in the writing thread plus an mprotect with TLB shootdowns on
     // every upload. After HotFaults faults a page stays writable and counts as always CPU
     // modified, so it is uploaded on every use instead. The set is rebuilt every HotPeriod.
-    // Opt-in (BB_HOT_PAGES=1): in Hunter's Nightmare the set grew to ~14k pages (56 MB), each
-    // re-uploaded on every binding, which cost far more than the faults (33 FPS) and preceded
-    // a GPU ring timeout.
+    // Opt-in upstream (BB_HOT_PAGES=1): in Hunter's Nightmare the set grew to ~14k pages (56 MB),
+    // each re-uploaded on every binding, which cost far more than the faults (33 FPS) and
+    // preceded a GPU ring timeout.
+    // g2-arm64: opt-in as upstream (BB_HOT_PAGES=1), with the set capped (HotPagesMax) and
+    // GPU-written pages kept out of it (DropHotPages). It was on by default for a day: U3's
+    // pub had gone from 27.5 to 31-35 FPS with ~2200-3000 hot pages, but that gain was the
+    // clobbering of the GPU's data (the characters' shading flickered); with GPU-written pages
+    // excluded the set holds ~350 pages there and the fault rate equals the off run's
+    // (2026-10-23).
     static bool HotPagesEnabled() {
         static const bool enabled = [] {
             const char* env = std::getenv("BB_HOT_PAGES");
@@ -275,8 +283,34 @@ private:
     }
     // A short period re-protects thousands of pages at once and each faults again before it is
     // hot, a fault storm (a 2 s period gave ~20k faults/s and frame spikes).
-    static constexpr u8 HotFaults = 2;
-    static constexpr auto HotPeriod = std::chrono::seconds(20);
+    // g2-arm64: a page is hot after its first fault and the set is rebuilt every 60 s
+    // (upstream: two faults, 20 s): on U3's pub 30.2 -> 35.5 / 34.7 FPS, faults 520 -> 290/s,
+    // host protections 1035 -> 600/s, no more long frames (interleaved A/B with cool-downs).
+    // BB_HOT_FAULTS and BB_HOT_PERIOD (seconds) override them.
+    static u8 HotFaults() {
+        static const u8 faults = [] {
+            const char* env = std::getenv("BB_HOT_FAULTS");
+            return env ? static_cast<u8>(std::clamp(std::atoi(env), 1, 200)) : u8{1};
+        }();
+        return faults;
+    }
+    static std::chrono::seconds HotPeriod() {
+        static const std::chrono::seconds period = [] {
+            const char* env = std::getenv("BB_HOT_PERIOD");
+            return std::chrono::seconds(env ? std::clamp(std::atoi(env), 1, 3600) : 60);
+        }();
+        return period;
+    }
+    // g2-arm64: no more hot pages than this in the whole process (BB_HOT_PAGES_MAX; 32 MB):
+    // past it the set's re-uploads cost more than the faults did (Bloodborne's 14k pages).
+    // U3's pub holds ~4500 with a page hot after one fault.
+    static size_t HotPagesMax() {
+        static const size_t max = [] {
+            const char* env = std::getenv("BB_HOT_PAGES_MAX");
+            return env ? static_cast<size_t>(std::strtoull(env, nullptr, 10)) : size_t{8192};
+        }();
+        return max;
+    }
 
     void CountWriteFaults(size_t start_page, size_t end_page) {
         const bool hot_enabled = HotPagesEnabled();
@@ -285,14 +319,15 @@ private:
                 continue; // not protected: no fault
             }
             BbStats::tracker_faults.fetch_add(1, std::memory_order_relaxed);
-            if (!hot_enabled) {
-                continue;
+            if (!hot_enabled || gpu.Get(page)) {
+                continue; // GPU-written data on the page: its uploads must stay fault-driven
             }
-            if (write_faults[page] < HotFaults) {
+            if (write_faults[page] < HotFaults()) {
                 ++write_faults[page];
                 continue;
             }
-            if (!hot.Get(page)) {
+            if (!hot.Get(page) &&
+                BbStats::hot_pages.load(std::memory_order_relaxed) < HotPagesMax()) {
                 if (num_hot == 0) {
                     hot_since = std::chrono::steady_clock::now();
                 }
@@ -308,7 +343,7 @@ private:
             return;
         }
         if (!HotPagesEnabled() ||
-            std::chrono::steady_clock::now() - hot_since > HotPeriod) {
+            std::chrono::steady_clock::now() - hot_since > HotPeriod()) {
             // Re-protect them (on this upload) and start counting again.
             BbStats::hot_pages.fetch_sub(num_hot, std::memory_order_relaxed);
             hot.Clear();
@@ -317,6 +352,30 @@ private:
             return;
         }
         cpu |= RegionBits(hot, start_page, end_page);
+    }
+
+    /// g2-arm64: pages the GPU writes leave the hot set and are protected again, and a page
+    /// with GPU-written data does not become hot (CountWriteFaults). A hot page counts as
+    /// CPU-modified on every use, so the next use would copy guest memory over the GPU's data
+    /// (zeros where it wrote skinned vertices: no fault, nothing shadowed), and the characters'
+    /// shading flickered in all three games (2026-10-23). Such a page behaves as without hot
+    /// pages: a fault, a shadow of the page, an upload of the blocks the guest changed.
+    void DropHotPages(size_t start_page, size_t end_page) {
+        if (num_hot == 0 || !hot.AnyInRange(start_page, end_page)) {
+            return;
+        }
+        u32 dropped = 0;
+        for (size_t page = start_page; page < end_page; ++page) {
+            if (hot.Get(page)) {
+                hot.Unset(page);
+                cpu.Unset(page); // set by KeepHotPagesModified, not by a guest write
+                ++dropped;
+            }
+            write_faults[page] = 0;
+        }
+        num_hot -= dropped;
+        BbStats::hot_pages.fetch_sub(dropped, std::memory_order_relaxed);
+        UpdateProtection<true, false>();
     }
 
     std::array<u8, NUM_PAGES_PER_REGION> write_faults{};

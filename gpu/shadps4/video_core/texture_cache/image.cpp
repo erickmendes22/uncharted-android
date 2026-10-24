@@ -91,12 +91,16 @@ static vk::FormatFeatureFlags2 FormatFeatureFlags(const vk::ImageUsageFlags usag
 UniqueImage::~UniqueImage() {
     if (image) {
         vmaDestroyImage(allocator, image, allocation);
+        BbStats::image_bytes -= static_cast<s64>(size_bytes);
+        --BbStats::image_count;
     }
 }
 
 void UniqueImage::Destroy() {
     if (image) {
         vmaDestroyImage(allocator, image, allocation);
+        BbStats::image_bytes -= static_cast<s64>(size_bytes);
+        --BbStats::image_count;
         image = vk::Image{};
         allocation = {};
     }
@@ -123,6 +127,8 @@ void UniqueImage::Create(const vk::ImageCreateInfo& image_ci) {
                vk::to_string(vk::Result{result}));
     image = vk::Image{unsafe_image};
     size_bytes = alloc_info.size;
+    BbStats::image_bytes += static_cast<s64>(size_bytes);
+    ++BbStats::image_count;
 }
 
 Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
@@ -158,7 +164,17 @@ Image::Image(const Vulkan::Instance& instance, Vulkan::Runtime& runtime_,
     }
 
     constexpr auto tiling = vk::ImageTiling::eOptimal;
-    const auto supported_format = instance.GetSupportedFormat(info.pixel_format, format_features);
+    auto supported_format = instance.GetSupportedFormat(info.pixel_format, format_features);
+    // g2-arm64 experiment (BB_NO_SRGB_IMAGES=1): 8-bit sRGB images are created with their UNORM
+    // format (sRGB views stay possible: the image has a mutable format).
+    static const bool no_srgb_images = std::getenv("BB_NO_SRGB_IMAGES") != nullptr;
+    if (no_srgb_images) {
+        if (supported_format == vk::Format::eR8G8B8A8Srgb) {
+            supported_format = vk::Format::eR8G8B8A8Unorm;
+        } else if (supported_format == vk::Format::eB8G8R8A8Srgb) {
+            supported_format = vk::Format::eB8G8R8A8Unorm;
+        }
+    }
     vk::PhysicalDeviceImageFormatInfo2 format_info{
         .format = supported_format,
         .type = ConvertImageType(info.type),

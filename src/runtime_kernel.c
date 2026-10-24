@@ -12,7 +12,13 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/time.h>
+#if defined(__x86_64__)
 #include <x86intrin.h>
+static inline uint64_t host_tsc(void) { return __rdtsc(); }
+#else
+/* g2-arm64: the virtual counter (its frequency is measured below like the TSC's). */
+static inline uint64_t host_tsc(void) { uint64_t v; __asm__ volatile("mrs %0, cntvct_el0" : "=r"(v)); return v; }
+#endif
 #ifndef _WIN32
 #include <sys/random.h>
 #include <sys/resource.h>
@@ -85,18 +91,18 @@ static ABI uint64_t process_time_counter(void) {
     return (uint64_t)(t.tv_sec-process_start.tv_sec)*1000000000+(uint64_t)(t.tv_nsec-process_start.tv_nsec);
 }
 static ABI uint64_t process_time_frequency(void) { return 1000000000; }
-static ABI uint64_t read_tsc(void) { return __rdtsc(); }
+static ABI uint64_t read_tsc(void) { return host_tsc(); }
 static uint64_t tsc_hz;
 static ABI uint64_t tsc_frequency(void) {
     if (!tsc_hz) {
         struct timespec a,b,nap={0,20000000};
-        clock_gettime(CLOCK_MONOTONIC,&a); uint64_t t0=__rdtsc();
+        clock_gettime(CLOCK_MONOTONIC,&a); uint64_t t0=host_tsc();
 #ifdef _WIN32
         (void)nap; compat_sleep_ns(20000000);
 #else
         nanosleep(&nap,NULL);
 #endif
-        clock_gettime(CLOCK_MONOTONIC,&b); uint64_t t1=__rdtsc();
+        clock_gettime(CLOCK_MONOTONIC,&b); uint64_t t1=host_tsc();
         uint64_t ns=(uint64_t)(b.tv_sec-a.tv_sec)*1000000000+(uint64_t)(b.tv_nsec-a.tv_nsec);
         tsc_hz=(t1-t0)*1000000000/(ns ? ns : 1);
     }
@@ -312,7 +318,7 @@ void runtime_thread_keys_cleanup(void) {
             void *value=key_values[i];
             if (!value || !keys[i].used || !keys[i].destructor) continue;
             key_values[i]=NULL; any=1;
-            keys[i].destructor(value);
+            GUEST_CALL(keys[i].destructor,(uint64_t)(uintptr_t)value);
         }
         if (!any) break;
     }

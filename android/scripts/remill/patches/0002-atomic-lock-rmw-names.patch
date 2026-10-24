@@ -1,0 +1,40 @@
+diff --git a/lib/Arch/X86/Arch.cpp b/lib/Arch/X86/Arch.cpp
+index dea1a54..8801c73 100644
+--- a/lib/Arch/X86/Arch.cpp
++++ b/lib/Arch/X86/Arch.cpp
+@@ -320,14 +320,33 @@ static std::string InstructionFunctionName(const xed_decoded_inst_t *xedd) {
+   // to remove it because we will already be surrounding the call to the
+   // semantics function with the atomic begin/end intrinsics.
+   auto iform = xed_decoded_inst_get_iform_enum(xedd);
+-  if (xed_operand_values_has_lock_prefix(xedd)) {
++  std::string iform_name = xed_iform_enum_t2str(iform);
++
++  // Read-modify-write forms that have truly atomic semantics (fetch-and-op / CAS intrinsics,
++  // see Semantics/PS4_AVX.cpp) keep their `*_LOCK_*` name: an ordinary read + write between
++  // atomic begin/end is not atomic on weakly ordered hosts. XCHG with memory is implicitly
++  // locked and gets `XCHG_LOCK_*`.
++  static const char *const kAtomicLockPrefixes[] = {
++      "XADD_LOCK_", "INC_LOCK_", "DEC_LOCK_", "ADD_LOCK_",
++      "SUB_LOCK_",  "AND_LOCK_", "OR_LOCK_",  "XOR_LOCK_"};
++  auto has_atomic_isel = [&iform_name]() {
++    for (auto prefix : kAtomicLockPrefixes) {
++      if (iform_name.rfind(prefix, 0) == 0) {
++        return true;
++      }
++    }
++    return false;
++  };
++  if (XED_IFORM_XCHG_MEMv_GPRv == iform || XED_IFORM_XCHG_MEMb_GPR8 == iform) {
++    iform_name = "XCHG_LOCK_" + iform_name.substr(5);
++  } else if (xed_operand_values_has_lock_prefix(xedd) && !has_atomic_isel()) {
+     CHECK(kUnlockedIform.count(iform))
+         << xed_iform_enum_t2str(iform) << " has no unlocked iform mapping.";
+     iform = kUnlockedIform[iform];
++    iform_name = xed_iform_enum_t2str(iform);
+   }
+ 
+   std::stringstream ss;
+-  std::string iform_name = xed_iform_enum_t2str(iform);
+   ss << iform_name;
+ 
+   // Some instructions are "scalable", i.e. there are variants of the

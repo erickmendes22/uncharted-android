@@ -1,0 +1,216 @@
+<?xml version="1.0"?>
+<!-- uncharted-android: own patches for U2 (big2-ps4_Shipping.elf 01.02) and U3 (big3-ps4_Shipping.elf
+     01.02), for scripts/g2/u1_patches.py (with -elf). They complete the catalog's "Resolution: 720p"
+     into a full 720p like U1's o720n. ExpectedSha256: the SHA-256 of the original bytes at the
+     address (as many as Value has), which u1_patches.py checks; the game's bytes are not kept here. -->
+<Patch>
+    <TitleID>
+        <ID>CUSA02344</ID>
+    </TitleID>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Display size 1280x720" Note="The catalog's 'Uncharted 2: Resolution: 720p' sets the display configuration's +0x08, +0x18, +0x38 sizes and the tile grid but leaves displaySize (+0x24/+0x28, the output size) at 1920x1080: like U1's 'N render, 1080p output', the screen-space shadows and post-processing land in the wrong places (x1.5 from the top left corner). This sets it too." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00fd2350" ExpectedSha256="67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249" Value="00050000"/>
+            <Line Type="bytes" Address="0x00fd2357" ExpectedSha256="421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29" Value="d0020000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Movie chroma plane at 1920x1088" Note="With the display size below 1080p, instead of the catalog line @0xffb131 (the movie renderer takes 1920x1080 for both the chroma offset and the YUV-to-RGB dispatch, which then writes past the display buffer): only the decoded frame's chroma plane offset displaySize.w * AlignUp(displaySize.h, 64) is pinned to 1920 * 1088, the dispatch keeps the display size. Same code as U1 @0x8fb8be. With the port's BB_VDEC_CONTENT set to the output size the whole movie shows." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00ffb23e" ExpectedSha256="1e2b472fc1251a27a16032216ed74dde8dccce20349567ad5f86e5f77030635a" Value="be00e01f00eb2590909090909090909090909090909090909090909090909090909090909090909090909090"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Display size 1280x720" Note="As for U2: the catalog's 'Uncharted 3: Resolution: 720p' leaves displaySize (+0x24/+0x28) at 1920x1080." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x012396e0" ExpectedSha256="67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249" Value="00050000"/>
+            <Line Type="bytes" Address="0x012396e7" ExpectedSha256="421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29" Value="d0020000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Movie chroma plane at 1920x1088" Note="As for U2, instead of the catalog line @0x125d641." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0125d74e" ExpectedSha256="1e2b472fc1251a27a16032216ed74dde8dccce20349567ad5f86e5f77030635a" Value="be00e01f00eb2590909090909090909090909090909090909090909090909090909090909090909090909090"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Job workers sleep when idle" Note="As U1's 'Job workers sleep when idle' (scripts/g2/u1_extra_patches.xml): the job system's sleep mode (flag [ctx+0x59], only while loading) made unconditional, 64 spins before sleeping instead of 1000. Worker loop @0xf3c2c0, job add @0xf3b7a0." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00f3c4d4" ExpectedSha256="ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92" Value="9090"/>
+            <Line Type="bytes" Address="0x00f3c4d9" ExpectedSha256="79ff7fbc96a0a6111e3c2706d61deb84c7c8e5a137b776f34a7dc3775f3652de" Value="40000000"/>
+            <Line Type="bytes" Address="0x00f3c57d" ExpectedSha256="17f0f193bb4c8668bb2d95719c6ca9132cf7a69b119cd07129df11224d11b922" Value="9090"/>
+            <Line Type="bytes" Address="0x00f3b873" ExpectedSha256="1c352b55132391212ceb1c09daceb6e7d41b09d429a9893cacb1645104ddd31b" Value="909090909090"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Job workers sleep when idle, 2 spins" Note="&quot;Job workers sleep when idle&quot; with 2 spins before sleeping instead of 64. The guest's pause is a wfe in our FEX (BB_PAUSE), which waits for the kernel's event stream (~100 us) while the thread keeps its core: 64 of them after every job were ~26% of all CPU samples camera up in the palace (the guest sampler: rip 0xf3c518, right after the loop's pause), and the render threads waited for cores. 2 spins are ~200 us, about the PS4's 1000 pauses; pickup of a new job does not suffer (a sleeping worker is woken by AddJobs' broadcast)." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00f3c4d4" ExpectedSha256="ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92" Value="9090"/>
+            <Line Type="bytes" Address="0x00f3c4d9" ExpectedSha256="79ff7fbc96a0a6111e3c2706d61deb84c7c8e5a137b776f34a7dc3775f3652de" Value="02000000"/>
+            <Line Type="bytes" Address="0x00f3c57d" ExpectedSha256="17f0f193bb4c8668bb2d95719c6ca9132cf7a69b119cd07129df11224d11b922" Value="9090"/>
+            <Line Type="bytes" Address="0x00f3b873" ExpectedSha256="1c352b55132391212ceb1c09daceb6e7d41b09d429a9893cacb1645104ddd31b" Value="909090909090"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Navmesh query waits for its job" Note="The asynchronous navmesh query launcher @0x76beb0 (called from the character update @0x61eda0) starts the job @0x779950 (AI topology nav-mesh.cpp, FindNearestPoly; 184 KiB of stack, so a job on a large fiber) and returns without waiting; its counter lives at nav+0x2288 and the job's data in the job system's frame memory (tag 0x45). Tried as a fix for the crash in that job (its object overwritten while it runs, seen in the palace): wait for the job right after launching it, with the wait code of the synchronous launcher @0x76bfc0 (same frame layout; rbx back to the nav object, r14 = the stack guard pointer). REJECTED: the longer character update trips the engine's particle assertions (AssertGameJobsNotRunning, particle-renderer.cpp:719) at gameplay start; kept for reference." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0076bf97" ExpectedSha256="4195321af78383794a4b6bd2f6545fb1b92b532aff0e823692b5118ca8c3671b" Value="4883c3804d89fee9f6000000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Delay navmesh job 50 ms (diagnostic)" Note="Diagnostic only: the navmesh job @0x779950 sleeps 50 ms (sceKernelUsleep) before it starts, in place of its stack guard setup (the guard check then compares 0 with usleep's 0). If the job's data can be reused before the job runs, this makes the crash come quickly. For 5 ms: bf88130000 in place of bf50c30000." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0077995e" ExpectedSha256="1ac733e51b55fec6f390ed257eae8a45c26aea80cf599f73c2ec54ba6c3d9420" Value="4889fbbf50c30000e805cfa600488945e8"/>
+            <Line Type="bytes" Address="0x007799d5" ExpectedSha256="f81614d8098b987e373bbd388881ab4aa3dc0eb5f8252f71e26e7574006975f9" Value="31c090"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Navmesh query counters taken atomically" Note="The navmesh job launcher @0x7799f0 keeps each query's job counter in the global pool 0x1869ee0 (count at 0x186dee0) so that the game frame waits for all of them at its end (@0x7fdf73) before its memory is reused. It reads the count, passes &amp;pool[count] to AddJobs @0xf299e0 (which writes the new counter there) and stores count + 1 after AddJobs returns: two launches at the same time on two workers get the same slot, the first counter is overwritten and the frame does not wait for that job, whose object (tag 0x45 frame memory) can then be reused while the job is pending or running. This reserves the slot first with lock xadd and keeps its address in r12 (free after the query copy is stored, restored by the epilogue) for AddJobs and query+0x2208. A real race, but not the navmesh crash's cause: with it the stressed detector run counted as many overwrites (AK5: 221 against 224); the cause was single-frame memory (&quot;Navmesh job data in double-frame memory&quot;)." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00779c35" ExpectedSha256="946d40baef78da2d5a85c076c2e02efd75e8d829eab4bb80538e329517624424" Value="b801000000f00fc1059e420f01488d1d97020f014c8d24c34c89e248c74424083e000000c7042404000000488d7c2440be010000004531c04c89f94d89f9e868fd7a004d89a608220000660f1f840000000000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Navmesh query results leave the counter to the frame" Note="Goes with &quot;Navmesh query counters taken atomically&quot;. Each query's job counter sits in the pool 0x1869ee0, and the game frame waits for every counter of the pool and frees it (WaitForCounterAndFree @0xf2a040) at its end (@0x7fdf73). The code that takes a query's result (in @0x61c5e0 and @0x6249f0, the synchronous launchers @0x76bfc0 and @0x77a690, and the out-of-line copies @0x76c0e0, @0x76e1d0, @0x7797f0, @0x779830 that nothing seems to call) also waits for the query's counter and frees it, leaving the pool's pointer behind: the frame then frees the same counter again. If the counter was handed out again in between (every AddJobs takes one), that second free zeroes a live counter of other jobs (the free clears the first 32 bytes), and whoever waits for it goes on while its jobs still run. Here the result code only waits (WaitForCounter @0xf29f10); the frame frees each counter once. Without the atomic counters a pool slot lost to a race would leak its counter. Not the navmesh crash's cause either (AFK5: 213 overwrites against 224); kept for reference." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0061da3e" ExpectedSha256="24ccc48fe0adba2a98260bee113d10c9b1f90e986d6904281150e36d87e4c2de" Value="e8cdc49000"/>
+            <Line Type="bytes" Address="0x00624d02" ExpectedSha256="915e69efd8143db2298a5275f75b4baa98988bf54211729f0aeb886f75df943f" Value="e809529000"/>
+            <Line Type="bytes" Address="0x0076c0b1" ExpectedSha256="823dd050f2978a140ef94906bec01aa520a1c2bf43aa2b2c0fd9c9a22bfa7789" Value="e85ade7b00"/>
+            <Line Type="bytes" Address="0x0076c105" ExpectedSha256="449ecaf74cd295358c74d07a33833bfd8b60023249536bd8cb30a30d11abec6a" Value="e806de7b00"/>
+            <Line Type="bytes" Address="0x0076e1f1" ExpectedSha256="5288b54de3a825e9404585bffa667eb7fd703a50d10afe5c320c2001789b8cc9" Value="e81abd7b00"/>
+            <Line Type="bytes" Address="0x00779811" ExpectedSha256="78839ad349bc4903edaa9b458f9fc95778a3b6829e9483c51a92057de28bba3d" Value="e8fa067b00"/>
+            <Line Type="bytes" Address="0x00779851" ExpectedSha256="5ae129af508abb23015e5379cfa9b6f32964e429dbe02a99bc6c7379151d3464" Value="e8ba067b00"/>
+            <Line Type="bytes" Address="0x0077d935" ExpectedSha256="ba11f410a3640648dc856ed48ca0dcce6f6c8d9d21c4d57fd990dce097f86a33" Value="e8d6c57a00"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Navmesh job copies its data first" Note="Against the crash in the navmesh job @0x779950 (its object, 0x3c0 bytes of tag 0x45 memory from the launcher @0x7799f0, overwritten while the job runs): the job copies the object to its own stack at entry and works on the copy. Only the job holds the object's address (the launcher passes it in the job declaration and keeps nothing), and the results go through the pointers inside it (+0x98, +0xa8), so the copy changes nothing else. The frame grows by 0x480 bytes (sub/add rsp), the entry jumps to the unused function @0x779cb0 (the dead twin of the counter wait inlined at @0x7fdf73): rep movsq of 0x78 qwords to the 128-aligned bottom of the frame (below the job's two 16 KiB stack buffers), rbx = the copy, then the stack guard setup that the jump replaced, and back to @0x77996f. Does not help if the object is overwritten before the job starts. The cause itself is fixed by &quot;Navmesh job data in double-frame memory&quot;; this (or the detector, which includes it) is a second line of defence." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00779957" ExpectedSha256="ee76bac4a75da52ea062de4453fdd28b552375b1aa408fb934d3e4f6841363a2" Value="4881ec90d40200"/>
+            <Line Type="bytes" Address="0x0077995e" ExpectedSha256="01547e0e72826881050f328c76bf677c92eb22557a39bd72185446cfadd1b01a" Value="e94d030000"/>
+            <Line Type="bytes" Address="0x007799de" ExpectedSha256="d79c1f461273332e430a9d8f31e76c1d2b410ea4596e393919cbfcca3e9e55df" Value="4881c490d40200"/>
+            <Line Type="bytes" Address="0x00779cb0" ExpectedSha256="ae517ff20a5085655b1060bcef79bafbbc51cb57966db397bd17e083296ee0a2" Value="4889fe488d7c247f4883e7804889fbb978000000f348a54c8b35320fcd00498b06488945e8e995fcffff"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Navmesh job copies its data, then waits 5 ms (diagnostic)" Note="Diagnostic only: &quot;Navmesh job copies its data first&quot; with a 5 ms sceKernelUsleep (PLT @0x11e6870) after the copy. Compare with &quot;Delay navmesh job 50 ms (diagnostic)&quot; at 5 ms, which crashed in ~3 min: if this one runs clean, the object is overwritten after the job has started and the copy is the fix; if it crashes the same way, the object is already overwritten before the job starts." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00779957" ExpectedSha256="ee76bac4a75da52ea062de4453fdd28b552375b1aa408fb934d3e4f6841363a2" Value="4881ec90d40200"/>
+            <Line Type="bytes" Address="0x0077995e" ExpectedSha256="01547e0e72826881050f328c76bf677c92eb22557a39bd72185446cfadd1b01a" Value="e94d030000"/>
+            <Line Type="bytes" Address="0x007799de" ExpectedSha256="d79c1f461273332e430a9d8f31e76c1d2b410ea4596e393919cbfcca3e9e55df" Value="4881c490d40200"/>
+            <Line Type="bytes" Address="0x00779cb0" ExpectedSha256="38b954c7725ab82a618bf7d80d3d8092663a346ce4486311f840973711df1b1a" Value="4889fe488d7c247f4883e7804889fbb978000000f348a5bf88130000e89fcba6004c8b35280fcd00498b06488945e8e98bfcffff"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Navmesh job checks its data (diagnostic)" Note="Diagnostic: &quot;Navmesh job copies its data first&quot; that also tells when the object is overwritten while the job runs. At entry (@0x779cb0) the job copies the object, keeps its address and a hash of its 0x3c0 bytes (rotate-xor of the qwords) past the copy; at the end (the stack guard check @0x7799d5 jumps to the unused function @0x779d20, the out-of-line copy of the query result wait) it hashes the object again and on a change prints &quot;Navmesh job: its object changed while it ran&quot; (puts, PLT @0x11e6860). The job itself only writes to the copy, so a change is a foreign write." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00779957" ExpectedSha256="ee76bac4a75da52ea062de4453fdd28b552375b1aa408fb934d3e4f6841363a2" Value="4881ec90d40200"/>
+            <Line Type="bytes" Address="0x0077995e" ExpectedSha256="01547e0e72826881050f328c76bf677c92eb22557a39bd72185446cfadd1b01a" Value="e94d030000"/>
+            <Line Type="bytes" Address="0x007799d5" ExpectedSha256="52c61527b21d3946037c80b448322adf2187a19bb9b8daabf12776037f3b33f7" Value="e9460300009090"/>
+            <Line Type="bytes" Address="0x007799de" ExpectedSha256="d79c1f461273332e430a9d8f31e76c1d2b410ea4596e393919cbfcca3e9e55df" Value="4881c490d40200"/>
+            <Line Type="bytes" Address="0x00779cb0" ExpectedSha256="d1ffa2d10e9e5d12cbd0e0b1513cd9fc520c35c2ba0637b36360470ce3755992" Value="4889fe488d7c247f4883e7804889fbb978000000f348a5488db640fcffff4889b3c003000031c0b97800000048c1c0074833064883c608ffc975f1488983c80300004c8b35070fcd00498b06488945e8e96afcffff"/>
+            <Line Type="bytes" Address="0x00779d20" ExpectedSha256="fe4da266ac342b5644f451b977b761caccd6f7d337848ae0decd639bdb21f24a" Value="488bb3c003000031c0b97800000048c1c0074833064883c608ffc975f1483b83c8030000740c488d3d11000000e80ecba600498b06483b45e8e97efcffff4e61766d657368206a6f623a20697473206f626a656374206368616e676564207768696c652069742072616e00"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Navmesh job checks its data, then waits 5 ms (diagnostic)" Note="Diagnostic: &quot;Navmesh job checks its data&quot; with a 5 ms sceKernelUsleep after the copy and the first hash, before the job's work: a wider window for the foreign writes it counts (the job itself works on its copy)." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00779957" ExpectedSha256="ee76bac4a75da52ea062de4453fdd28b552375b1aa408fb934d3e4f6841363a2" Value="4881ec90d40200"/>
+            <Line Type="bytes" Address="0x0077995e" ExpectedSha256="01547e0e72826881050f328c76bf677c92eb22557a39bd72185446cfadd1b01a" Value="e94d030000"/>
+            <Line Type="bytes" Address="0x007799d5" ExpectedSha256="52c61527b21d3946037c80b448322adf2187a19bb9b8daabf12776037f3b33f7" Value="e9460300009090"/>
+            <Line Type="bytes" Address="0x007799de" ExpectedSha256="d79c1f461273332e430a9d8f31e76c1d2b410ea4596e393919cbfcca3e9e55df" Value="4881c490d40200"/>
+            <Line Type="bytes" Address="0x00779cb0" ExpectedSha256="e67164d9184cfbec40d071900428164bcc3dce6a9160b7d65074009e11df1227" Value="4889fe488d7c247f4883e7804889fbb978000000f348a5488db640fcffff4889b3c003000031c0b97800000048c1c0074833064883c608ffc975f1488983c8030000bf88130000e874cba6004c8b35fd0ecd00498b06488945e8e960fcffff"/>
+            <Line Type="bytes" Address="0x00779d20" ExpectedSha256="fe4da266ac342b5644f451b977b761caccd6f7d337848ae0decd639bdb21f24a" Value="488bb3c003000031c0b97800000048c1c0074833064883c608ffc975f1483b83c8030000740c488d3d11000000e80ecba600498b06483b45e8e97efcffff4e61766d657368206a6f623a20697473206f626a656374206368616e676564207768696c652069742072616e00"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Navmesh job data in double-frame memory" Note="The navmesh job launcher @0x7799f0 allocates the job's object (0x3c0 bytes) with tag 0x45 (@0xf332a0): single-frame memory, kAllocSingleGameFrame (0x15c6630+0x58, allocator 11) or kAllocSingleRenderFrame (+0x1b0, 54) by the frame kind of the current job (flag 0x80). A job that has not finished when that frame's memory is reset works on reused memory: the crash in this job (its object overwritten while it runs). The query copy the job also uses is double-buffered already (kAllocPhysicsDoubleBuffer, +0x108). Tag 0x0c, kAllocDoubleGameFrame (+0x60), keeps the object for two game frames." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00779a38" ExpectedSha256="4fd33dcde4707d09696a8430402a149b74cc4d9d8ecbfb4037ca44ea024c9fa1" Value="0c000000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Navmesh job data from the game frame memory (diagnostic)" Note="Diagnostic: the launcher @0x7799f0 allocates the job's object with tag 0x45 (@0xf332a0), which takes the allocator at 0x15c6630+0x1b0 when the current worker's job has flag 0x80 (the frame kind that AddJobs passes on to the jobs it adds) and +0x58 otherwise. Tag 0x0b takes +0x58 always." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00779a38" ExpectedSha256="4fd33dcde4707d09696a8430402a149b74cc4d9d8ecbfb4037ca44ea024c9fa1" Value="0b000000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Navmesh job data from the render frame memory (diagnostic)" Note="Diagnostic: as &quot;Navmesh job data from the game frame memory&quot;, the other way: tag 0x36 takes the allocator at 0x15c6630+0x1b0 always." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00779a38" ExpectedSha256="4fd33dcde4707d09696a8430402a149b74cc4d9d8ecbfb4037ca44ea024c9fa1" Value="36000000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Job workers sleep when idle" Note="As for U2." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x011a6504" ExpectedSha256="ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92" Value="9090"/>
+            <Line Type="bytes" Address="0x011a6509" ExpectedSha256="79ff7fbc96a0a6111e3c2706d61deb84c7c8e5a137b776f34a7dc3775f3652de" Value="40000000"/>
+            <Line Type="bytes" Address="0x011a65ad" ExpectedSha256="17f0f193bb4c8668bb2d95719c6ca9132cf7a69b119cd07129df11224d11b922" Value="9090"/>
+            <Line Type="bytes" Address="0x011a58a3" ExpectedSha256="1c352b55132391212ceb1c09daceb6e7d41b09d429a9893cacb1645104ddd31b" Value="909090909090"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Job workers sleep when idle, 2 spins" Note="As U2's &quot;Job workers sleep when idle, 2 spins&quot;. Not usable in U3 yet: with it the particles' draw registration job @0x1388f10 faults within ~2 min of the intro movie (its data, single render frame memory, reused; notes/findings.md, 2026-10-21 night)." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x011a6504" ExpectedSha256="ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92" Value="9090"/>
+            <Line Type="bytes" Address="0x011a6509" ExpectedSha256="79ff7fbc96a0a6111e3c2706d61deb84c7c8e5a137b776f34a7dc3775f3652de" Value="02000000"/>
+            <Line Type="bytes" Address="0x011a65ad" ExpectedSha256="17f0f193bb4c8668bb2d95719c6ca9132cf7a69b119cd07129df11224d11b922" Value="9090"/>
+            <Line Type="bytes" Address="0x011a58a3" ExpectedSha256="1c352b55132391212ceb1c09daceb6e7d41b09d429a9893cacb1645104ddd31b" Value="909090909090"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Job workers wait 1 ms when idle" Note="Goes with &quot;Uncharted 2: Job workers sleep when idle&quot;: the idle wait times out after 1 ms instead of 10 ms (see U1's entry)." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00f3c58a" ExpectedSha256="357a5ee3d2310bbe73599486ad57f2bfe1b8cc812faead6c39cdc498fe4c4e88" Value="bae8030000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Job workers wait 1 ms when idle" Note="As for U2." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x011a65ba" ExpectedSha256="357a5ee3d2310bbe73599486ad57f2bfe1b8cc812faead6c39cdc498fe4c4e88" Value="bae8030000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Job workers never sleep" Note="The idle worker never takes the sleep path (@0x11a6504: je -> jmp), not even while loading, where the game turns the sleep mode on: with BB_PAUSE=yield its 1000 spins pass in ~1 ms and a job got lost while all workers slept (the boot froze at the logo, notes/findings.md 2026-10-21 night)." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x011a6504" ExpectedSha256="ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92" Value="eb39"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Job workers check for work before they sleep" Note="Goes with &quot;Job workers sleep when idle&quot;. An idle worker checks its queues without a lock, then takes the mutex at ctx+0x60 and waits on the condition variable at ctx+0x80; whoever adds jobs publishes them, then signals under that mutex (@0x11a58a9). A job added between the worker's check and its wait is signalled to nobody: it waits for the timeout (10 ms, 1 ms with &quot;wait 1 ms&quot;) or the next signal. The particles' draw registration jobs (particle-draw-reg.cpp: @0x1388f10 from @0x136c9d0) keep their data in single render frame memory and nobody waits for them: started that late, they read data the next frame has reused (U3's intro movie: a fault at 0x20 within ~2 min with the sleep mode). Here the wait (@0x11a65c2) goes through a check of the same queues under the mutex (ctx+0x780+worker*0x80 and both counters of the 8 levels at [ctx+0x4f10]+0x2040/+0x8+worker*8, 0x2078 apart, r12 = worker), in the block @0x11a65d5 that reported an unexpected wait error (that error now traps at once)." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x011a65c2" ExpectedSha256="478c5ce6f3e877f9067d8fef15399e7bae64992e9276bca93d00249d7f78c7ba" Value="e810000000"/>
+            <Line Type="bytes" Address="0x011a65d5" ExpectedSha256="761731adb5bd10eb85e1ba8aed3189070c8fad01f8374fe531e4b89ad557d9f2" Value="eb514889f04c89e148c1e1074883bc082007000000752f488b80b04e00004a8d84e040200000b9080000004c8b004c0b80c8dfffff750f480578200000ffc975eae925695f0031c0c3cccccccccccccccccccc"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Particle draw registration data in double-frame memory" Note="Goes with the sleep mode. DrawRegJob (@0x136c9d0) pushes an allocator for the particles' draw registration jobs (@0x1388f10) it starts and does not wait for: the job data's own (+0x98) or, from the allocator table at 0x1c417b0, +0x1b0 kAllocSingleRenderFrame (@0x136ca1f). Started late (the sleep mode), such a job read data the next render frame had reused (a fault at 0x20 within ~2 min of the intro movie). Here the table's +0x60, kAllocDoubleGameFrame, as U2's navmesh job data (U3 has no double render frame allocator)." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0136ca22" ExpectedSha256="90ef8690a679d25d77655565ce4ad197255f49a3eaa58f9a96fc2aa903fe72a2" Value="6000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Particle draw registration data always in double-frame memory" Note="With &quot;Particle draw registration data in double-frame memory&quot;: DrawRegJob takes the table's allocator in every mode (@0x136ca09 ja -> jmp), not the job object's (+0x98) when [[job+8]] &lt;= 1." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0136ca09" ExpectedSha256="ef9783b96ba694b15f43318dcd3b2e042d83a6b2aae12ba3927cf23095fcc7d4" Value="eb0d"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Idle job workers sleep 50 us between checks" Note="Instead of the sleep mode. An idle worker checks its queues, then spins with a pause (@0x11a653f, @0x11a6546); in our FEX a pause is a wfe that waits up to ~100 us for the event stream but keeps the core, so six idle workers hold six cores the render threads need. Here the pause is sceKernelUsleep(50) (a nanosleep; ~100 us with the timer slack): the same check interval, the core free meanwhile, no condition variable to miss, and a worker that has a job runs it at its own priority. The call is in the block @0x11a6551 that reported a failed lock of the sleepers' mutex (r11 kept in its slot at rbp-0x60, as around the sleep mode's wait)." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x011a653f" ExpectedSha256="dc0f81385d6989d61b43b158ce8a1f70fa7e3e21728690cb979cd0b3d0891079" Value="e90d0000009090"/>
+            <Line Type="bytes" Address="0x011a6546" ExpectedSha256="d7c4265ca9a9047a81e91e52b55960506f0d7409524e46674ecba85f2d7566b1" Value="e9060000009090"/>
+            <Line Type="bytes" Address="0x011a6551" ExpectedSha256="4f3c4b37cbc53620693b0ef9e68aba6042a282ccabdffbe0ebe7c8aa5a5852b9" Value="4c895da0bf32000000e8a1645f004c8b5da0e938010000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 2: Idle job workers sleep 50 us between checks" Note="As &quot;Uncharted 3: Idle job workers sleep 50 us between checks&quot;, instead of the sleep mode: the idle worker's pauses (@0xf3c50f, @0xf3c516) call sceKernelUsleep(50) (PLT @0x11e6870) in the block @0xf3c521 that reported a failed lock of the sleepers' mutex." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big2-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00f3c50f" ExpectedSha256="dc0f81385d6989d61b43b158ce8a1f70fa7e3e21728690cb979cd0b3d0891079" Value="e90d0000009090"/>
+            <Line Type="bytes" Address="0x00f3c516" ExpectedSha256="d7c4265ca9a9047a81e91e52b55960506f0d7409524e46674ecba85f2d7566b1" Value="e9060000009090"/>
+            <Line Type="bytes" Address="0x00f3c521" ExpectedSha256="2edf8ce5cfd0050e1c7f9a3a41048561a335c68f98585cb8e8becdf8d0ac44a5" Value="4c895da0bf32000000e841a32a004c8b5da0e938010000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Particle counter sets report pending jobs (diagnostic)" Note="Diagnostic for the late particle jobs. The particle module sets its stage counters with an exchange (SetCounter inlined: xchg into +0x20, then @0x11969c0 wakes the waiters) at 18 places; the old value is the number of jobs of that stage still to finish. At the 11 places whose exchange goes through rax (@0x136a24f, @0x136c140, @0x136c171, @0x136cc52, @0x136cc9a, @0x136d41c - DrawRegJob's stage counter -, @0x136dc9b, @0x136e673, @0x136ead7, @0x136eb0e, @0x136eb41) the reload of that old value from its spill slot calls the block @0x11a6ae2 instead (the assert block of a failed job lock, which now traps at once), which keeps rax and rdi and, when the old value is not 0, writes &quot;P &lt;return address&gt; &lt;old value&gt;&quot; (snprintf @0x179cab0 into a stack buffer, then write(1) @0x179c8c0: printf's stdout buffer would hold rare lines back; the return address is the reload's + 5): a counter set while jobs of the previous use were still pending." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x011a6ae0" ExpectedSha256="74128749221321b31d7911baac2f7c6118b0ca698e16374b1f2f1f0211d0ac66" Value="eb514885c0743d5750554889e54883ec404883e4f04989c0488b4d18488d1522000000be300000004889e731c0e89e5f5f0089c24889e6bf01000000e89f5d5f00c9585fc35020256c7820256c640a00cccccc"/>
+            <Line Type="bytes" Address="0x0136a25b" ExpectedSha256="01ec6aa05a83ea998b0480e2a99c884c479e258ce0adacf80ac4680dfb5cae9a" Value="e882c8e3ff0f1f00"/>
+            <Line Type="bytes" Address="0x0136c14b" ExpectedSha256="1003cc682e813370d1ecfd394459973f3028c1761ab0466f074021bf1abafea3" Value="e892a9e3ff6690"/>
+            <Line Type="bytes" Address="0x0136c17c" ExpectedSha256="1003cc682e813370d1ecfd394459973f3028c1761ab0466f074021bf1abafea3" Value="e861a9e3ff6690"/>
+            <Line Type="bytes" Address="0x0136cc5e" ExpectedSha256="5d1ec78d209703137408c192190b642f057e28a76e491dd71fc8f6d343ec8a70" Value="e87f9ee3ff0f1f00"/>
+            <Line Type="bytes" Address="0x0136cca6" ExpectedSha256="5d1ec78d209703137408c192190b642f057e28a76e491dd71fc8f6d343ec8a70" Value="e8379ee3ff0f1f00"/>
+            <Line Type="bytes" Address="0x0136d428" ExpectedSha256="5d1ec78d209703137408c192190b642f057e28a76e491dd71fc8f6d343ec8a70" Value="e8b596e3ff0f1f00"/>
+            <Line Type="bytes" Address="0x0136dca7" ExpectedSha256="4bc02a6ab3bc3edcc6d26980c7b6ea71e1f3dcf66127a29b4b244204693edd01" Value="e8368ee3ff0f1f00"/>
+            <Line Type="bytes" Address="0x0136e67e" ExpectedSha256="1003cc682e813370d1ecfd394459973f3028c1761ab0466f074021bf1abafea3" Value="e85f84e3ff6690"/>
+            <Line Type="bytes" Address="0x0136eae2" ExpectedSha256="820a6690d41cf7d4a67547596b806abb44c42b7184976921877531c36cb33738" Value="e8fb7fe3ff6690"/>
+            <Line Type="bytes" Address="0x0136eb19" ExpectedSha256="820a6690d41cf7d4a67547596b806abb44c42b7184976921877531c36cb33738" Value="e8c47fe3ff6690"/>
+            <Line Type="bytes" Address="0x0136eb4c" ExpectedSha256="820a6690d41cf7d4a67547596b806abb44c42b7184976921877531c36cb33738" Value="e8917fe3ff6690"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Uncharted 3: Particle counter sets report pending jobs, 7 more places (diagnostic)" Note="With &quot;Particle counter sets report pending jobs&quot;: the 7 places whose exchange does not go through rax, through trampolines in the assert block of an unexpected wait error @0x11a65d5 (now trapping at once) that put the old value into rax and jump to the report block: the resets to 0 without a wake @0x136a671, @0x136a699, @0x136a6c1 (rdx) and @0x136a6e7 (rcx), @0x136dcca (rbx), @0x136eb6f (r14), and the stage counter setter @0x1369400 (job, index, value: xchg @0x1369419; its trampoline also does the &quot;mov rdi, rbx&quot; it replaces and keeps rdx, the new value; it reports with the return address 0x11a6604)." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="big3-ps4_Shipping.elf" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x011a65d5" ExpectedSha256="761731adb5bd10eb85e1ba8aed3189070c8fad01f8374fe531e4b89ad557d9f2" Value="eb514889d0e9030500004889c8e9fb0400004889d8e9f30400004c89f0e9eb04000052488b45e04889dfe8de0400005ac3cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"/>
+            <Line Type="bytes" Address="0x0136a67d" ExpectedSha256="01ec6aa05a83ea998b0480e2a99c884c479e258ce0adacf80ac4680dfb5cae9a" Value="e855bfe3ff0f1f00"/>
+            <Line Type="bytes" Address="0x0136a6a5" ExpectedSha256="01ec6aa05a83ea998b0480e2a99c884c479e258ce0adacf80ac4680dfb5cae9a" Value="e82dbfe3ff0f1f00"/>
+            <Line Type="bytes" Address="0x0136a6cd" ExpectedSha256="01ec6aa05a83ea998b0480e2a99c884c479e258ce0adacf80ac4680dfb5cae9a" Value="e805bfe3ff0f1f00"/>
+            <Line Type="bytes" Address="0x0136a6f3" ExpectedSha256="01ec6aa05a83ea998b0480e2a99c884c479e258ce0adacf80ac4680dfb5cae9a" Value="e8e7bee3ff0f1f00"/>
+            <Line Type="bytes" Address="0x0136dcd6" ExpectedSha256="4bc02a6ab3bc3edcc6d26980c7b6ea71e1f3dcf66127a29b4b244204693edd01" Value="e80c89e3ff0f1f00"/>
+            <Line Type="bytes" Address="0x0136eb7a" ExpectedSha256="820a6690d41cf7d4a67547596b806abb44c42b7184976921877531c36cb33738" Value="e8707ae3ff6690"/>
+            <Line Type="bytes" Address="0x01369421" ExpectedSha256="f56011e3adcf1fbbf03487929cb960aa20e778d97d77d6d55bef653ed5c597a5" Value="e8d1d1e3ff6690"/>
+        </PatchList>
+    </Metadata>
+</Patch>

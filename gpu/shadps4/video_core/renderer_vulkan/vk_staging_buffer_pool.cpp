@@ -25,8 +25,21 @@ namespace {
 // ~2 ms per 16 MiB block. Streaming bursts a few seconds apart re-created the blocks trimmed
 // in between and copies into them ran at 0.3 GB/s (stutter). Blocks now live 30 s idle, the
 // upload ring keeps BB_STAGING_KEEP_MB (512) and is populated at startup.
+#ifdef __ANDROID__
+// g2-arm64: a phone shares its RAM with the GPU. In U2's palace the pool held 722 MiB (rings 370,
+// large buffers 352) while the system had ~200 MB left. Rings take the first block with room (they
+// settle on as few blocks as the load needs and the rest go idle), keep 64 MiB unless
+// BB_STAGING_KEEP_MB says otherwise, and idle memory goes after ~20 s.
+constexpr u64 RING_IDLE_FRAMES = 600;
+constexpr u64 LARGE_IDLE_FRAMES = 600;
+constexpr u64 DEFAULT_KEEP_MB = 64;
+constexpr bool FIRST_FIT_RING = true;
+#else
 constexpr u64 RING_IDLE_FRAMES = 3000;
 constexpr u64 LARGE_IDLE_FRAMES = 3000;
+constexpr u64 DEFAULT_KEEP_MB = 512;
+constexpr bool FIRST_FIT_RING = false;
+#endif
 constexpr u64 PREWARM_BLOCKS = 8;
 constexpr u64 LARGE_MIN_GRANULARITY = 64_KB;
 constexpr u64 BLOCK_SIZE = 16_MB;
@@ -41,7 +54,7 @@ u64 RoundAllocationSize(u64 size) {
 StagingBufferPool::StagingBufferPool(const Instance& instance_, Scheduler& scheduler_)
     : instance{instance_}, scheduler{scheduler_} {
     const char* env = std::getenv("BB_STAGING_KEEP_MB");
-    keep_blocks = (env ? std::strtoull(env, nullptr, 10) : 512) * 1_MB / BLOCK_SIZE;
+    keep_blocks = (env ? std::strtoull(env, nullptr, 10) : DEFAULT_KEEP_MB) * 1_MB / BLOCK_SIZE;
     Ring& ring = rings[u32(MemoryType::HostUncached)];
     for (u64 i = 0; i < PREWARM_BLOCKS; ++i) {
         auto& block = ring.blocks.emplace_back(Block{
@@ -70,8 +83,9 @@ StagingBufferRef StagingBufferPool::RequestFromRing(Ring& ring, u64 size, u64 al
                                                     MemoryType type) {
     Block* best{};
     u64 best_offset{};
+    const size_t start = FIRST_FIT_RING ? 0 : ring.current;
     for (size_t i = 0; i < ring.blocks.size(); ++i) {
-        const size_t index = (ring.current + i) % ring.blocks.size();
+        const size_t index = (start + i) % ring.blocks.size();
         Block* block = &ring.blocks[index];
         if (const auto offset = block->buffer->Reserve(size, alignment, false)) {
             ring.current = index;

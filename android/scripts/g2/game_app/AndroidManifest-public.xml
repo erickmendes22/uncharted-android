@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The public build (build.sh PUBLIC=1): the launcher first (the game folder, preparing the
+     loader's files on the device, settings), then GameActivity. The package name is set at
+     build time (APP_ID); the class names stay dev.unchartedg2.game.*. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.unchartedg2.game" android:versionCode="1" android:versionName="0.1">
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
+    <application android:label="uncharted-android" android:hasCode="true" android:extractNativeLibs="true"
+        android:hardwareAccelerated="true" android:requestLegacyExternalStorage="true"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+        <!-- singleTask: one launcher, which finishes when it starts the game; the icon then makes
+             a new one, and that brings a running game back to the front (Launcher.resumeGame). -->
+        <activity android:name="dev.unchartedg2.game.Launcher" android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- Started by the launcher (and by scripts through adb). An affinity of its own: with the
+             launcher's (the package name) Android hid the game's task from Recents and from
+             getAppTasks as soon as a new launcher task appeared. -->
+        <activity android:name="dev.unchartedg2.game.GameActivity" android:exported="true"
+            android:taskAffinity="dev.unchartedandroid.game"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:screenOrientation="sensorLandscape" android:launchMode="singleInstance"
+            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />
+        <!-- Restarts the game (sceSystemServiceLoadExec, the port's "apply and restart") once
+             the old game process has ended: a process of its own, a black screen meanwhile. -->
+        <activity android:name="dev.unchartedg2.game.GameActivity$Restart" android:exported="false"
+            android:process=":restart" android:screenOrientation="sensorLandscape"
+            android:excludeFromRecents="true" android:noHistory="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+    </application>
+</manifest>

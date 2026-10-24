@@ -6,11 +6,16 @@
 #include <string.h>
 #include <inttypes.h>
 #include <time.h>
-#include <cpuid.h>
 #include "runtime.h"
+#include "guest_cpu.h"
 #include "gpu/bbgpu.h"
-#if !defined(__x86_64__) || !defined(__GNUC__)
-#error This prototype requires x86-64 GCC or Clang (including MinGW).
+#if defined(__x86_64__)
+#include <cpuid.h>
+#elif !defined(__aarch64__)
+#error This loader requires an x86-64 host (native guest code) or ARM64 (FEXCore).
+#endif
+#if !defined(__GNUC__)
+#error This loader requires GCC or Clang (including MinGW).
 #endif
 #ifdef _WIN32
 #include <windows.h>
@@ -25,8 +30,25 @@
 #include <execinfo.h>
 #include <sys/syscall.h>
 #include <sys/uio.h>
+#include <errno.h>
+#include <sys/prctl.h>
+#endif
+#ifdef BB_SDL_MAIN
+/* g2-arm64: the APK's SDLActivity calls SDL_main (this file's main) in libmain.so. */
+#include <SDL3/SDL_main.h>
+#include <SDL3/SDL_system.h>
+#include <jni.h>
 #endif
 
+#if !defined(_WIN32) && defined(__aarch64__)
+#define UC_PC(uc) ((uintptr_t)(uc)->uc_mcontext.pc)
+#define UC_FP(uc) ((uintptr_t)(uc)->uc_mcontext.regs[29])
+#define UC_ARG0(uc) ((uint64_t)(uc)->uc_mcontext.regs[0])
+#elif !defined(_WIN32)
+#define UC_PC(uc) ((uintptr_t)(uc)->uc_mcontext.gregs[REG_RIP])
+#define UC_FP(uc) ((uintptr_t)(uc)->uc_mcontext.gregs[REG_RBP])
+#define UC_ARG0(uc) ((uint64_t)(uc)->uc_mcontext.gregs[REG_RDI])
+#endif
 typedef struct { uint64_t address, size, flags; } Segment;
 typedef struct { uint64_t target, kind, value, addend; } Reloc;
 static char (*names)[128];
@@ -135,7 +157,7 @@ static ABI __attribute__((noreturn)) void unresolved(uint32_t id, uintptr_t argu
     fflush(NULL);
     _exit(20); /* no destructors: GPU, audio and guest threads are still running */
 }
-#ifndef _WIN32
+#if !defined(_WIN32) && defined(__x86_64__)
 /* enter_on_stack(entry, arg0, arg1, stack_top): call entry(arg0,arg1) on a new stack. */
 void enter_on_stack(void *entry, void *arg0, void *arg1, void *top);
 __asm__(".text\n.globl enter_on_stack\nenter_on_stack:\n"
@@ -150,6 +172,9 @@ static ABI void guest_exit(void) { puts("Runtime: process finalizer callback rea
  * while module 0 initialized), except LZCNT, which older Intel CPUs run as BSR (other results).
  * Exit code 24 with a message instead; BB_SKIP_CPU_CHECK=1 starts anyway. */
 static void check_cpu(void) {
+#if !defined(__x86_64__)
+    /* guest code runs on FEXCore */
+#else
     if (getenv("BB_SKIP_CPU_CHECK")) return;
     unsigned a=0, b=0, c=0, d=0, basic=0, leaf7=0, extended=0;
     if (__get_cpuid(1,&a,&b,&c,&d)) basic=c;
@@ -197,6 +222,7 @@ static void check_cpu(void) {
     MessageBoxA(NULL,text,"Uncharted",MB_OK|MB_ICONERROR|MB_SETFOREGROUND);
 #endif
     exit(24);
+#endif
 }
 #ifdef _WIN32
 static void describe_address(char *out, size_t size, uintptr_t address) {
@@ -360,6 +386,8 @@ static uint64_t patch_tcb_loads(const Segment *segments, uint64_t count) {
 #endif
 #ifndef _WIN32
 static void fault(int sig, siginfo_t *info, void *context) {
+    /* The guest CPU backend first (FEXCore: faults in translated code). */
+    if (guest_cpu_signal(sig, info, context)) return;
     /* GPU page tracking (write-protected guest pages) is resolved first. */
     if (gpu_enabled && sig == SIGSEGV && bbgpu_handle_fault(context, info->si_addr)) return;
     /* A speculative guest memory read (runtime_memory.c) failed: resume its recovery point. */
@@ -374,7 +402,7 @@ static void fault(int sig, siginfo_t *info, void *context) {
     }
     /* The process is terminating: dladdr/snprintf are acceptable here. */
     ucontext_t *uc = context;
-    uintptr_t rip = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
+    uintptr_t rip = UC_PC(uc);
     char line[512];
     Dl_info where;
     if (rip - (uintptr_t)image < 0x10000000)
@@ -386,6 +414,77 @@ static void fault(int sig, siginfo_t *info, void *context) {
     else
         snprintf(line, sizeof(line), "Fault (signal %d) at RIP %p, address %p\n", sig, (void *)rip, info->si_addr);
     { ssize_t written_=write(2, line, strlen(line)); (void)written_; }
+    /* g2-arm64: the guest state (FEX: the translated block's guest RIP) and the mappings around
+     * the PC and the faulting address (JIT code has no module). */
+    { char name[40]="  thread "; prctl(PR_GET_NAME,(unsigned long)(name+9),0,0,0); size_t l=strlen(name); name[l]=10;
+      ssize_t w_=write(2,name,l+1); (void)w_; }
+    { char guest[256]; int n=guest_cpu_describe_thread(guest,sizeof(guest));
+      if (n>0) { ssize_t w_=write(2,guest,(size_t)n); (void)w_; }
+      /* g2-arm64: every guest register, memory at rbx, the guest stack and the current fiber. */
+      { char more[1536]; int m=guest_cpu_describe_registers(more,sizeof(more));
+        if (m>0) { ssize_t w_=write(2,more,(size_t)m); (void)w_; }
+        m=guest_cpu_describe_stack(more,sizeof(more));
+        if (m>0) { ssize_t w_=write(2,more,(size_t)m); (void)w_; }
+        m=runtime_fiber_describe(more,sizeof(more),guest_cpu_guest_rsp());
+        if (m>0) { ssize_t w_=write(2,more,(size_t)m); (void)w_; } }
+      /* The guest code bytes at that rip (an x86 dump identifies generated code). */
+      unsigned long long grip=0; const char *r=strstr(guest,"rip=");
+      if (n>0 && r && sscanf(r+4,"%llx",&grip)==1 && grip) {
+          unsigned char code[24];
+          struct iovec local={code,sizeof(code)}, remote={(void *)(uintptr_t)grip,sizeof(code)};
+          if (process_vm_readv(getpid(),&local,1,&remote,1,0)==(ssize_t)sizeof(code)) {
+              char hex[100]; int p=snprintf(hex,sizeof(hex),"  guest code:");
+              for (int i=0;i<24 && p<(int)sizeof(hex)-4;++i) p+=snprintf(hex+p,sizeof(hex)-p," %02x",code[i]);
+              hex[p++]='\n'; ssize_t w_=write(2,hex,(size_t)p); (void)w_;
+          }
+      } }
+#if defined(__aarch64__)
+    /* Host registers (FEX keeps the guest GPRs in fixed host registers while JIT code runs). */
+    for (int r=0;r<31;r+=4) {
+        char regs[160]; int p=0;
+        for (int k=r;k<r+4 && k<31;++k)
+            p+=snprintf(regs+p,sizeof(regs)-p," x%-2d=%016llx",k,(unsigned long long)uc->uc_mcontext.regs[k]);
+        regs[p++]='\n'; ssize_t w_=write(2,regs,(size_t)p); (void)w_;
+    }
+#endif
+    FILE *maps=fopen("/proc/self/maps","r");
+    if (maps) {
+        char m[512], prev[512]="";
+        const uintptr_t addr=(uintptr_t)info->si_addr;
+        /* g2-arm64: mappings (vm.max_map_count) by kind: guest memory (64-256 GiB), FEX's code
+         * buffers, scudo, KGSL, ART, memfd, other named anonymous, unnamed, files. */
+        static const char *const kind_names[]={"guest","FEX","scudo","kgsl","dalvik","memfd","[anon:...]","unnamed","files"};
+        unsigned count=0, kinds[9]={0};
+        while (fgets(m,sizeof(m),maps)) {
+            unsigned long lo, hi;
+            ++count;
+            { const char *path=m; int field=0;
+              while (*path && field<5) { while (*path && *path!=' ') ++path; while (*path==' ') ++path; ++field; }
+              const unsigned long start=strtoul(m,NULL,16);
+              int k;
+              if (start>=0x1000000000UL && start<0x4000000000UL) k=0;
+              else if (strstr(path,"FEXMem")) k=1;
+              else if (strstr(path,"scudo")) k=2;
+              else if (strstr(path,"kgsl")) k=3;
+              else if (strstr(path,"dalvik")) k=4;
+              else if (strstr(path,"memfd")) k=5;
+              else if (*path=='[') k=6;
+              else if (!*path || *path=='\n') k=7;
+              else k=8;
+              ++kinds[k]; }
+            if (sscanf(m,"%lx-%lx",&lo,&hi)!=2) continue;
+            if ((rip>=lo && rip<hi) || (addr>=lo && addr<hi)) { ssize_t w_=write(2,"  map ",6); w_=write(2,m,strlen(m)); (void)w_; }
+            if (addr<lo && prev[0] && addr>=strtoul(prev,NULL,16)) {
+                ssize_t w_=write(2,"  map below ",12); w_=write(2,prev,strlen(prev)); w_=write(2,"  map above ",12); w_=write(2,m,strlen(m)); (void)w_;
+            }
+            snprintf(prev,sizeof(prev),"%s",m);
+        }
+        fclose(maps);
+        { char c[64]; int n=snprintf(c,sizeof(c),"  mappings: %u\n",count); ssize_t w_=write(2,c,(size_t)n); (void)w_; }
+        { char c[256]; int n=snprintf(c,sizeof(c),"  mappings by kind:");
+          for (int k=0;k<9;++k) n+=snprintf(c+n,sizeof(c)-n," %s %u",kind_names[k],kinds[k]);
+          c[n++]='\n'; ssize_t w_=write(2,c,(size_t)n); (void)w_; }
+    }
     if (gpu_enabled) bbgpu_dump_guest_writes(context);
     /* Host call chain (frames with unwind info; guest frames end it). */
     void *frames[32];
@@ -411,12 +510,20 @@ static void write_hex(char *out, uint64_t v) {
 }
 static void dump_frames(ucontext_t *uc) {
     char line[] = "  tid=0000000000000000 rip=0000000000000000 image-relative=0000000000000000 host-relative=0000000000000000\n";
-    uintptr_t rip=(uintptr_t)uc->uc_mcontext.gregs[REG_RIP], rbp=(uintptr_t)uc->uc_mcontext.gregs[REG_RBP];
+    uintptr_t rip=UC_PC(uc), rbp=UC_FP(uc);
     uint64_t tid=(uint64_t)gettid();
     /* First argument register: the lock address when a thread waits on a futex. */
     char arg[]="  tid=0000000000000000 rdi=0000000000000000\n";
-    write_hex(arg+6,tid); write_hex(arg+27,(uint64_t)uc->uc_mcontext.gregs[REG_RDI]);
+    write_hex(arg+6,tid); write_hex(arg+27,UC_ARG0(uc));
     { ssize_t written_=write(2,arg,sizeof(arg)-1); (void)written_; }
+    { char name[24]="  name="; prctl(PR_GET_NAME,(unsigned long)(name+7),0,0,0); size_t l=strlen(name); name[l]=10;
+      ssize_t w_=write(2,name,l+1); (void)w_; }
+    { char guest[256]; int n=guest_cpu_describe_thread(guest,sizeof(guest)); if (n>0) { ssize_t w_=write(2,guest,(size_t)n); (void)w_; }
+      /* g2-arm64: a thread in a host function (a wait): its guest registers at the call, which
+       * hold what it waits on (a counter and its target in a job system's wait loop). */
+      if (n>0 && strstr(guest,"in host function")) { char regs[1536]; int m=guest_cpu_describe_registers(regs,sizeof(regs));
+        if (m>0) { ssize_t w_=write(2,regs,(size_t)m); (void)w_; } } }
+    { char stack[512]; int n=guest_cpu_describe_stack(stack,sizeof(stack)); if (n>0) { ssize_t w_=write(2,stack,(size_t)n); (void)w_; } }
     for (int depth=0; depth<24; ++depth) {
         write_hex(line+6,tid); write_hex(line+27,rip); write_hex(line+59,rip-(uintptr_t)image); write_hex(line+90,rip-exe_base);
         { ssize_t written_=write(2,line,sizeof(line)-1); (void)written_; }
@@ -425,14 +532,34 @@ static void dump_frames(ucontext_t *uc) {
         if (!rbp || process_vm_readv(getpid(),&local,1,&remote,1,0)!=(ssize_t)sizeof(frame)) break;
         if (frame[0]<=rbp) break;
         rbp=frame[0]; rip=frame[1];
+#if defined(__aarch64__)
+        /* g2-arm64: return addresses carry a PAC signature in the top bits; XPACLRI (hint
+         * space, a no-op without PAC) strips it from x30. */
+        { register uintptr_t lr __asm__("x30") = rip; __asm__ volatile("hint #7" : "+r"(lr)); rip = lr; }
+#endif
     }
 }
+/* g2-arm64: the executable mappings, to turn dumped addresses into module offsets
+ * (Android: the renderer is libbbgpu.so, not the main binary). */
+static void dump_exec_maps(void) {
+    int fd=open("/proc/self/maps",O_RDONLY);
+    if (fd<0) return;
+    char buf[4096], line[512];
+    size_t len=0;
+    ssize_t n;
+    while ((n=read(fd,buf,sizeof(buf)))>0)
+        for (ssize_t i=0;i<n;++i) {
+            if (len<sizeof(line)-1) line[len++]=buf[i];
+            if (buf[i]!='\n') continue;
+            line[len]=0;
+            if (strstr(line," r-xp ")) { ssize_t w_=write(2,"  map ",6); w_=write(2,line,len); (void)w_; }
+            len=0;
+        }
+    close(fd);
+}
 static void thread_dump(int sig, siginfo_t *info, void *context) { (void)sig; (void)info; dump_frames(context); }
-static void watchdog(int sig, siginfo_t *info, void *context) {
-    (void)info;
-    const char head[]="STOP: watchdog timeout; thread stacks:\n";
-    { ssize_t written_=write(2,head,sizeof(head)-1); (void)written_; }
-    dump_frames(context);
+/* Every other thread dumps its own frames (SIGUSR2, thread_dump), one at a time. */
+static void dump_other_threads(void) {
     int dir=open("/proc/self/task",O_RDONLY|O_DIRECTORY);
     char buffer[4096];
     long n;
@@ -444,8 +571,69 @@ static void watchdog(int sig, siginfo_t *info, void *context) {
             if (tid>0 && tid!=self) { syscall(SYS_tgkill,getpid(),tid,SIGUSR2); usleep(20000); }
             at+=d->reclen;
         }
+    if (dir>=0) close(dir);
     usleep(100000);
+}
+static void watchdog(int sig, siginfo_t *info, void *context) {
+    (void)info;
+    const char head[]="STOP: watchdog timeout; thread stacks:\n";
+    { ssize_t written_=write(2,head,sizeof(head)-1); (void)written_; }
+    dump_exec_maps();
+    dump_frames(context);
+    dump_other_threads();
     _exit(128 + sig);
+}
+/* g2-arm64: BB_DUMP_REQUEST=<file>: creating the file (adb shell touch) while the game runs
+ * dumps every thread like the watchdog (host frames, guest state) and the game goes on; the
+ * file is removed. For hangs on a device without root, where debuggerd cannot attach. */
+static void *dump_on_request(void *arg) {
+    const char *path=(const char *)arg;
+    for (;;) {
+        sleep(2);
+        if (access(path,F_OK)) continue;
+        unlink(path);
+        const char head[]="DUMP: thread stacks on request:\n";
+        { ssize_t written_=write(2,head,sizeof(head)-1); (void)written_; }
+        dump_exec_maps();
+        dump_other_threads();
+        const char tail[]="DUMP: end\n";
+        { ssize_t written_=write(2,tail,sizeof(tail)-1); (void)written_; }
+    }
+    return NULL;
+}
+/* g2-arm64: BB_PEEK_FILE=<file>: guest memory on request while the game runs (a hang on a
+ * device without root or a debugger). <file> holds lines "<address> <length>" (hex, a length
+ * up to 1 MiB); the reply is <file>.out, renamed into place when complete: per line a header
+ * (address u64, length u32, status u32: 0 or an errno) and, when read, the bytes. The request
+ * is removed; write it elsewhere and move it to <file> so that it is read whole. */
+static void *peek_on_request(void *arg) {
+    const char *path=(const char *)arg;
+    char out[512], part[512];
+    snprintf(out,sizeof(out),"%s.out",path);
+    snprintf(part,sizeof(part),"%s.part",path);
+    static unsigned char data[1<<20];
+    for (;;) {
+        usleep(200000);
+        FILE *request=fopen(path,"r");
+        if (!request) continue;
+        FILE *reply=fopen(part,"wb");
+        unsigned long long address, length;
+        while (reply && fscanf(request,"%llx %llx",&address,&length)==2) {
+            if (length>sizeof(data)) length=sizeof(data);
+            /* process_vm_readv: an unmapped range is an error, not a fault. */
+            struct iovec local={data,(size_t)length}, remote={(void *)(uintptr_t)address,(size_t)length};
+            ssize_t got=process_vm_readv(getpid(),&local,1,&remote,1,0);
+            uint32_t status=got==(ssize_t)length ? 0 : got<0 ? (uint32_t)errno : (uint32_t)EFAULT;
+            uint64_t head_address=address;
+            uint32_t head[2]={(uint32_t)length,status};
+            fwrite(&head_address,8,1,reply); fwrite(head,4,2,reply);
+            if (!status) fwrite(data,1,(size_t)length,reply);
+        }
+        fclose(request);
+        unlink(path);
+        if (reply) { fclose(reply); rename(part,out); }
+    }
+    return NULL;
 }
 #endif
 /* param.sfo lookup: string or integer value of key, 0 when absent. */
@@ -782,6 +970,59 @@ static void patch_eop_tick_wait(uint64_t image_size) {
     }
     if (!patched) printf("Frame pacing: EOP tick check not found\n");
 }
+/* g2-arm64: GetRenderFrameParams (ndlib/frame-params.cpp) halts when asked for a frame newer than
+ * the last one the game registered ("frame number out of range. last: 1, asked: 2"). The flip
+ * handler asks for the frame it was just told about; on PS4 the game always registered it first.
+ * When the game thread is slow (guest code under a JIT compiling cold code) the flip event wins
+ * and the game stopped at its first frame. The range check (cmp/sub r64, r64; jl rel8/rel32 into
+ * the halt block, up to 0x60 bytes before the message's lea, often in a cold section far away) now
+ * jumps back to the load of `last` (mov r64, [rip+disp32], up to 40 bytes before the compare) and
+ * waits for it instead. U1 1.02: 15 inlined copies, every load reads the same global. */
+static void patch_frame_params_wait(uint64_t image_size) {
+    static const char message[]="GetRenderFrameParams called with a frame number out of range";
+    unsigned char *text=NULL;
+    for (uint64_t i=0;i+sizeof(message)<=image_size;++i)
+        if (image[i]=='G' && !memcmp(image+i,message,sizeof(message)-1)) { text=image+i; break; }
+    if (!text) return;
+    uint64_t *refs=NULL; size_t nrefs=0, cap=0;
+    for (uint64_t at=128;at+7<=image_size;++at) {
+        /* lea r64, [rip+rel32] -> the message */
+        if ((image[at]&0xfb)!=0x48 || image[at+1]!=0x8d || (image[at+2]&0xc7)!=0x05) continue;
+        int32_t rel; memcpy(&rel,image+at+3,4);
+        if (image+at+7+rel!=text) continue;
+        if (nrefs==cap && !(refs=realloc(refs,(cap=cap?cap*2:32)*sizeof(*refs)))) return;
+        refs[nrefs++]=at;
+    }
+    int patched=0;
+    for (uint64_t p=48;p+6<=image_size;++p) {
+        /* jl rel8 / jl rel32 right after cmp|sub r64, r64 (REX.W 39/29/3b/2b, register form) */
+        size_t length;
+        int64_t target;
+        if (image[p]==0x7c) { length=2; target=(int64_t)p+2+(int8_t)image[p+1]; }
+        else if (image[p]==0x0f && image[p+1]==0x8c) { int32_t r; memcpy(&r,image+p+2,4); length=6; target=(int64_t)p+6+r; }
+        else continue;
+        const unsigned char *c=image+p-3;
+        if ((c[0]&0xf8)!=0x48 || (c[1]!=0x29 && c[1]!=0x39 && c[1]!=0x2b && c[1]!=0x3b) || (c[2]>>6)!=3) continue;
+        int into_halt=0;
+        for (size_t r=0;r<nrefs && !into_halt;++r) into_halt=target<=(int64_t)refs[r] && target>=(int64_t)refs[r]-0x60;
+        if (!into_halt) continue;
+        unsigned char *load=NULL;
+        for (unsigned char *m=image+p-3-7; m>=image+p-3-40; --m)
+            if ((m[0]&0xfb)==0x48 && m[1]==0x8b && (m[2]&0xc7)==0x05) { load=m; break; }
+        if (!load) continue;
+        const int64_t back=(int64_t)(load-(image+p+length));
+        if (length==2) {
+            if (back<-128) continue;
+            image[p+1]=(unsigned char)(int8_t)back;
+        } else {
+            const int32_t r=(int32_t)back;
+            memcpy(image+p+2,&r,4);
+        }
+        ++patched;
+    }
+    free(refs);
+    printf("Frame pacing: %d GetRenderFrameParams range checks (%zu messages) wait for the game\n",patched,nrefs);
+}
 /* Restarts the game through run.sh (the settings menu: a new render resolution is a patch
  * applied at start). Descriptors are closed first so the old GPU device and its memory are
  * released before the new process opens its own. */
@@ -804,6 +1045,25 @@ void runtime_restart(void) {
     CloseHandle(process.hThread); CloseHandle(process.hProcess);
     /* The new launch waits for this process's GPU device to go away (run.py --after). */
     TerminateProcess(GetCurrentProcess(),0);
+#elif defined(BB_SDL_MAIN)
+    /* g2-arm64: the Android app restarts itself: GameActivity.restartApp() starts a helper
+     * activity in a process of its own, which starts the game again once this process is gone
+     * (its GPU device and memory with it). GameActivity then boots what BB_LOADEXEC_FILE asks
+     * for (sceSystemServiceLoadExec), or files/args.txt. */
+    puts("Runtime: restarting the app");
+    fflush(NULL);
+    JNIEnv *env=(JNIEnv *)SDL_GetAndroidJNIEnv();
+    jobject activity=(jobject)SDL_GetAndroidActivity();
+    jmethodID restart=NULL;
+    if (env && activity) {
+        jclass cls=(*env)->GetObjectClass(env,activity);
+        restart=cls ? (*env)->GetMethodID(env,cls,"restartApp","()V") : NULL;
+        if (restart) (*env)->CallVoidMethod(env,activity,restart);
+        if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionDescribe(env); (*env)->ExceptionClear(env); restart=NULL; }
+    }
+    if (!restart) fputs("runtime_restart: GameActivity.restartApp failed: start the game again by hand\n",stderr);
+    fflush(NULL);
+    _exit(0);
 #else
     puts("Runtime: restarting through run.sh");
     syscall(SYS_close_range, 3u, ~0u, 0u);
@@ -814,12 +1074,27 @@ void runtime_restart(void) {
 }
 
 int main(int argc, char **argv) {
+#ifndef _WIN32
+    /* --log <file> (g2-arm64: an Android app has no console): stdout and stderr go there. */
+    for (int i = 2; i + 1 < argc; ++i)
+        if (!strcmp(argv[i], "--log")) {
+            if (!freopen(argv[i+1], "w", stdout)) return 1;
+            dup2(fileno(stdout), 2);
+            for (int j = i; j + 2 <= argc; ++j) argv[j] = argv[j+2];
+            argc -= 2;
+            break;
+        }
+#endif
     setvbuf(stdout, NULL, _IONBF, 0);
 #ifndef _WIN32
     /* Keep host heap objects handed to the guest (thread handles, TLS) in the
        non-PIE brk heap, i.e. below 1 TiB: the guest packs pointers into 40 bits. */
+#ifdef __GLIBC__
     mallopt(M_ARENA_MAX,1);
     mallopt(M_MMAP_THRESHOLD,32*1024*1024);
+#endif
+    /* (ARM64 hosts have a 39/48-bit address space: host pointers fit in 40 bits.) */
+    if (guest_cpu_init()) fail("guest CPU backend initialization failed");
 #endif
     if (argc == 2 && !strcmp(argv[1], "--vulkan-only")) return vulkan_smoke();
     check_cpu();
@@ -898,6 +1173,16 @@ int main(int argc, char **argv) {
     struct sigaction alarm_action = {0}; alarm_action.sa_sigaction = watchdog; alarm_action.sa_flags = SA_SIGINFO;
     sigemptyset(&alarm_action.sa_mask); sigaction(SIGALRM, &alarm_action, NULL);
     alarm(timeout_seconds); /* 0 disables the watchdog */
+    if (getenv("BB_DUMP_REQUEST") && *getenv("BB_DUMP_REQUEST")) {
+        pthread_t dump_thread;
+        if (pthread_create(&dump_thread,NULL,dump_on_request,(void *)getenv("BB_DUMP_REQUEST"))==0)
+            pthread_detach(dump_thread);
+    }
+    if (getenv("BB_PEEK_FILE") && *getenv("BB_PEEK_FILE")) {
+        pthread_t peek_thread;
+        if (pthread_create(&peek_thread,NULL,peek_on_request,(void *)getenv("BB_PEEK_FILE"))==0)
+            pthread_detach(peek_thread);
+    }
 #endif
     FILE *f = fopen(argv[1], "rb");
     if (!f) fail("cannot open boot file; run prepare.py first");
@@ -1036,7 +1321,7 @@ int main(int argc, char **argv) {
         unsigned char *t = traps + i * 32;
         /* SysV: mov edi, index; movabs rax, handler; jmp rax. No fake return values. */
         uint32_t index = (uint32_t)i;
-        uintptr_t handler = (uintptr_t)unresolved;
+        uintptr_t handler = guest_host_function((const void *)unresolved, "unresolved import", GUEST_ABI_SYSV);
         t[0] = 0x48; t[1] = 0x89; t[2] = 0xfe; /* mov rsi,rdi: preserve arg0 */
         t[3] = 0xbf; memcpy(t + 4, &index, 4);
         t[8] = 0x48; t[9] = 0xb8; memcpy(t + 10, &handler, 8);
@@ -1048,7 +1333,8 @@ int main(int argc, char **argv) {
                         : (uintptr_t)image + relocs[i].value;
         if (relocs[i].kind) {
             uintptr_t resolved = runtime_resolve(names[relocs[i].value], relocs[i].kind == 2);
-            if (resolved) value = resolved + relocs[i].addend;
+            if (resolved && relocs[i].kind == 1) value = guest_host_function((const void *)resolved, runtime_import_name(names[relocs[i].value]), GUEST_ABI_SYSV);
+            else if (resolved) value = resolved + relocs[i].addend;
             else if (native_libc && bindings[relocs[i].value]) {
                 uint64_t address=bindings[relocs[i].value];
                 if (binding_kinds[relocs[i].value]!=relocs[i].kind || !mapped(segments,ns,address,relocs[i].addend+1)) fail("native export kind/range mismatch");
@@ -1064,6 +1350,7 @@ int main(int argc, char **argv) {
         for (uint64_t s=0;s<ns;++s) if (segments[s].address+segments[s].size>image_end) image_end=segments[s].address+segments[s].size;
         install_game_callbacks(segments, ns, image_end);
         patch_eop_tick_wait(image_end);
+        patch_frame_params_wait(image_end);
     }
 #ifdef _WIN32
     printf("Guest TCB loads redirected to the TEB TLS slot: %" PRIu64 "\n", patch_tcb_loads(segments, ns));
@@ -1095,8 +1382,7 @@ int main(int argc, char **argv) {
         /* Dependencies start in link order (libc first), as the PS4 dynamic linker does. */
         for (uint64_t m=0;m<module_count;++m) {
             printf("Starting linked module %" PRIu64 " at image offset 0x%" PRIx64 "; native bindings=%" PRIu64 "\n",m,modules[m].init,nb);
-            typedef int (ABI *ModuleInit)(uint64_t,void *,void *);
-            int result=((ModuleInit)(image+modules[m].init))(0,NULL,NULL);
+            int result=(int)GUEST_CALL(image+modules[m].init,0,0,0);
             printf("Module %" PRIu64 " initializer returned %d\n",m,result);
             if (result) fail("module initializer failed");
         }
@@ -1121,15 +1407,16 @@ int main(int argc, char **argv) {
         if (n) { params.argc=n; params.argv[n]=NULL; }
         printf("Guest argv: %s (+%" PRIu64 " arguments)\n",params.argv[0],params.argc-1);
     }
+    const uint64_t exit_callback=guest_host_function((const void *)guest_exit,"guest_exit",GUEST_ABI_SYSV);
 #ifdef _WIN32
-    typedef void (ABI *Entry)(void *, void (ABI *)(void));
-    ((Entry)(image + entry))(&params, guest_exit);
+    GUEST_CALL(image + entry, (uint64_t)(uintptr_t)&params, exit_callback);
 #else
     /* The guest main thread runs on a stack below 1 TiB like PS4 stacks. */
     enum { MAIN_STACK=8*1024*1024 };
     unsigned char *stack=runtime_low_map(MAIN_STACK,PROT_READ|PROT_WRITE);
     if (!stack) fail("cannot allocate guest main stack");
-    enter_on_stack(image+entry,&params,(void *)guest_exit,stack+MAIN_STACK-64);
+    guest_call_on_stack((uintptr_t)(image+entry),(const uint64_t[]){(uint64_t)(uintptr_t)&params,exit_callback},2,
+                        stack+MAIN_STACK-64);
 #endif
     fail("entry unexpectedly returned");
 }

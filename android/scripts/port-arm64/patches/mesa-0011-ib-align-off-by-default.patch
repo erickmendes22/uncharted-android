@@ -1,0 +1,30 @@
+From 01ebf4ae9dfc8132c1ad6b90ca23c319e7d3fc98 Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip: packet alignment off by default again (it only moved
+ the A735 CP faults)
+
+---
+ src/freedreno/vulkan/tu_cs.cc | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_cs.cc b/src/freedreno/vulkan/tu_cs.cc
+index 54817090bfe..74a6b5868c7 100644
+--- a/src/freedreno/vulkan/tu_cs.cc
++++ b/src/freedreno/vulkan/tu_cs.cc
+@@ -183,10 +183,10 @@ tu_ib_align(void)
+ {
+    static int align = -1;
+    if (align < 0) {
+-      /* On by default (1 KiB) on the G2 (A735): its CP mis-reads split entries, which made
+-       * the device lost. TU_IB_ALIGN=0 turns it off. */
++      /* Off by default: on the G2 (A735) the padding only moved the CP faults elsewhere
++       * (2026-10-20). TU_IB_ALIGN=1024 turns it on for experiments. */
+       const char *env = getenv("TU_IB_ALIGN");
+-      const unsigned v = env ? strtoul(env, NULL, 0) : 1024;
++      const unsigned v = env ? strtoul(env, NULL, 0) : 0;
+       align = (v >= 64 && v <= 4096 && !(v & (v - 1))) ? (int) v : 0;
+       if (align)
+          fprintf(stderr, "tu: draw state, register bunch and load state packets kept within "
+-- 
+2.43.0
+

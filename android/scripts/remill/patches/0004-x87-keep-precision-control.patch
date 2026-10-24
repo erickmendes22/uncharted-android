@@ -1,0 +1,22 @@
+diff --git a/lib/Arch/X86/Semantics/X87.cpp b/lib/Arch/X86/Semantics/X87.cpp
+index c124160..620afdc 100644
+--- a/lib/Arch/X86/Semantics/X87.cpp
++++ b/lib/Arch/X86/Semantics/X87.cpp
+@@ -1327,7 +1327,8 @@ DEF_SEM(FNSTSW, D dst) {
+ 
+ DEF_SEM(FNSTCW, M16W dst) {
+   auto &cw = state.x87.fxsave.cwd;
+-  cw.pc = kPrecisionSingle;
++  // Keep the precision control the program set (was forced to kPrecisionSingle: fninit; fnstcw
++  // gave 0x007f instead of 0x037f).
+ 
+   cw.rc = (FPURoundingControl) __remill_fpu_get_rounding();
+   Write(dst, cw.flat);
+@@ -1337,7 +1338,6 @@ DEF_SEM(FNSTCW, M16W dst) {
+ DEF_SEM(FLDCW, M16 cwd) {
+   auto &cw = state.x87.fxsave.cwd;
+   cw.flat = Read(cwd);
+-  cw.pc = kPrecisionSingle;
+   __remill_fpu_set_rounding(cw.rc);
+   return memory;
+ }

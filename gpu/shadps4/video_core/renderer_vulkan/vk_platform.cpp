@@ -13,6 +13,7 @@
 #define VK_USE_PLATFORM_XLIB_KHR
 #endif
 
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
@@ -30,8 +31,41 @@
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
+#ifdef BB_ADRENOTOOLS
+#include <dlfcn.h>
+#include <string>
+#include <adrenotools/driver.h>
+#endif
 
 namespace Vulkan {
+
+#ifndef _WIN32
+void PrintHostBacktrace(const char* prefix); // vk_semaphore.cpp
+#endif
+
+#ifdef BB_ADRENOTOOLS
+// g2-arm64: BB_VK_DRIVER=<soname> (e.g. libvulkan_freedreno.so, Turnip): that driver, from the
+// APK's native library directory (BB_NATIVE_LIB_DIR, set by GameActivity; the libadrenotools
+// hook libraries are there too), replaces the system one. The system Vulkan loader is loaded
+// into a separate linker namespace whose driver lookups libadrenotools redirects.
+static PFN_vkGetInstanceProcAddr CustomDriverProcAddr() {
+    const char* driver = std::getenv("BB_VK_DRIVER");
+    const char* lib_dir = std::getenv("BB_NATIVE_LIB_DIR");
+    if (!driver || !driver[0] || !lib_dir) {
+        return nullptr;
+    }
+    const std::string dir = std::string(lib_dir) + "/";
+    void* handle = adrenotools_open_libvulkan(RTLD_NOW, ADRENOTOOLS_DRIVER_CUSTOM, nullptr,
+                                              dir.c_str(), dir.c_str(), driver, nullptr, nullptr);
+    if (!handle) {
+        std::printf("Vulkan: custom driver %s from %s failed: %s\n", driver, dir.c_str(),
+                    dlerror());
+        return nullptr;
+    }
+    std::printf("Vulkan: custom driver %s loaded\n", driver);
+    return reinterpret_cast<PFN_vkGetInstanceProcAddr>(dlsym(handle, "vkGetInstanceProcAddr"));
+}
+#endif
 
 static const char* const VALIDATION_LAYER_NAME = "VK_LAYER_KHRONOS_validation";
 static const char* const CRASH_DIAGNOSTIC_LAYER_NAME = "VK_LAYER_LUNARG_crash_diagnostic";
@@ -59,12 +93,21 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsCallback(
     LOG_GENERIC(Common::Log::Class::Render_Vulkan, level, "{}: {}",
                 callback_data->pMessageIdName ? callback_data->pMessageIdName : "<null>",
                 callback_data->pMessage ? callback_data->pMessage : "<null>");
+#ifndef _WIN32
+    // g2-arm64 diagnosis: where the first validation errors are recorded (with
+    // BB_VK_RECORD_THREAD=0 and BB_DRAW_PIPE=0 that is the code that issued the command).
+    static std::atomic<int> traced{0};
+    if (severity == vk::DebugUtilsMessageSeverityFlagBitsEXT::eError && traced++ < 8) {
+        PrintHostBacktrace("Validation error at");
+    }
+#endif
 
     return VK_FALSE;
 }
 
 vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::WindowSDL& emu_window) {
-    const auto& window_info = emu_window.GetWindowInfo();
+    // g2-arm64: the current native window (Android replaces it after the app was paused).
+    const auto window_info = emu_window.CurrentWindowInfo();
     vk::SurfaceKHR surface{};
 
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
@@ -104,6 +147,16 @@ vk::SurfaceKHR CreateSurface(vk::Instance instance, const Frontend::WindowSDL& e
         if (instance.createWaylandSurfaceKHR(&wayland_ci, nullptr, &surface) !=
             vk::Result::eSuccess) {
             LOG_ERROR(Render_Vulkan, "Failed to initialize Wayland surface");
+            UNREACHABLE();
+        }
+    }
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+    if (window_info.type == Frontend::WindowSystemType::Android) {
+        const vk::AndroidSurfaceCreateInfoKHR android_ci = {
+            .window = static_cast<ANativeWindow*>(window_info.render_surface),
+        };
+        if (instance.createAndroidSurfaceKHR(&android_ci, nullptr, &surface) != vk::Result::eSuccess) {
+            LOG_CRITICAL(Render_Vulkan, "Failed to initialize Android surface");
             UNREACHABLE();
         }
     }
@@ -185,6 +238,10 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
         break;
     case Frontend::WindowSystemType::Wayland:
         extensions.push_back(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
+        break;
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+    case Frontend::WindowSystemType::Android:
+        extensions.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
         break;
 #elif defined(VK_USE_PLATFORM_METAL_EXT)
     case Frontend::WindowSystemType::Metal:
@@ -274,9 +331,15 @@ vk::UniqueInstance CreateInstance(Frontend::WindowSystemType window_type, bool e
     setenv("VK_DRIVER_FILES", icd_path.c_str(), true);
 #endif
 
-    static vk::detail::DynamicLoader dl;
-    VULKAN_HPP_DEFAULT_DISPATCHER.init(
-        dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr"));
+    PFN_vkGetInstanceProcAddr get_instance_proc_addr = nullptr;
+#ifdef BB_ADRENOTOOLS
+    get_instance_proc_addr = CustomDriverProcAddr();
+#endif
+    if (!get_instance_proc_addr) {
+        static vk::detail::DynamicLoader dl;
+        get_instance_proc_addr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+    }
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(get_instance_proc_addr);
 
     const auto [available_version_result, available_version] =
         VULKAN_HPP_DEFAULT_DISPATCHER.vkEnumerateInstanceVersion

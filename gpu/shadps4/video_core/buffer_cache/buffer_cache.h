@@ -40,7 +40,12 @@ class MemoryTracker;
 class PageManager;
 
 class BufferCache {
-    static constexpr u64 ADDRESS_SPACE_BITS = 40;
+    // g2-arm64: 38, not 40. The BDA page table holds 8 bytes for every block of this space and is
+    // all device memory: 40 bits with 16 KiB blocks (Turnip's sparse alignment is the 4 KiB page)
+    // were 512 MiB of a phone's RAM. The port maps guest memory first fit from 64 GiB
+    // (runtime_memory.c USER_MIN); U2 reaches ~84 GiB. 256 GiB -> a 128 MiB table; GetArena stops
+    // on anything above. Shaders' lookups past the table read 0 (robustBufferAccess2): unmapped.
+    static constexpr u64 ADDRESS_SPACE_BITS = 38;
     // bbport: arena pages are 4 GiB unless the driver's buffer size limit is lower (AMD's
     // Windows driver: 2 GiB); an arena spans up to two pages, so they shrink to half the limit.
     static constexpr u64 MAX_ARENA_PAGE_BITS = 32;
@@ -217,6 +222,14 @@ private:
     u64 num_arena_pages{u64{1} << (ADDRESS_SPACE_BITS - MAX_ARENA_PAGE_BITS)};
     std::deque<Buffer> arenas;
     std::vector<ArenaBinds> pending_binds;
+
+public:
+    /// g2-arm64: sparse binds waiting for the next submission (Scheduler::SetQueueWorkCheck).
+    [[nodiscard]] bool HasPendingArenaBinds() const noexcept {
+        return !pending_binds.empty();
+    }
+
+private:
     Vulkan::Semaphore memory_semaphore;
 
     struct Backing : public Interval {

@@ -13,6 +13,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <time.h>
+#include <stdatomic.h>
 #include <SDL3/SDL.h>
 
 #define PORTS 25
@@ -42,6 +43,7 @@ typedef struct {
     int stats;
     uint64_t stat_start_ns, stat_last_ns, stat_max_gap_ns; /* BB_AUDIO_STATS */
     unsigned stat_starved, stat_buffers; int stat_min_queued;
+    int generation; unsigned drops; /* g2-arm64: the foreground seen last; stale queues dropped */
 } Port;
 typedef struct { uint16_t output; uint8_t channel, reserved; int16_t volume; uint16_t reroute; uint64_t flag, reserved64[2]; } PortState;
 _Static_assert(sizeof(PortState)==32,"AudioOut port state layout");
@@ -50,6 +52,16 @@ static pthread_mutex_t table_lock=PTHREAD_MUTEX_INITIALIZER;
 static Port ports[PORTS];
 static int initialized, sdl_ready=-1;
 static size_t buffers_out, ports_opened;
+/* g2-arm64: Android's app lifecycle (gpu/shim/window.cpp). In the background SDL pauses the
+   device while sceAudioOutOutput keeps the game's clock: the queue grew by every second the CPU
+   stayed awake (26 s after the sleep button) and played that late afterwards, the cadence
+   corrections drain 1/33 of a backlog per second. Nothing is queued in the background; the first
+   output after it drops what is still queued. */
+static atomic_int app_background, foreground_generation;
+void runtime_audio_background(int background) {
+    atomic_store(&app_background,background);
+    if (!background) atomic_fetch_add(&foreground_generation,1);
+}
 
 static uint64_t now_ns(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t); return (uint64_t)t.tv_sec*1000000000u+(uint64_t)t.tv_nsec; }
 static void sleep_until(uint64_t deadline) {
@@ -113,6 +125,7 @@ static ABI int32_t audio_open(int32_t user, int32_t type, int32_t index, uint32_
     memset(p,0,sizeof(*p));
     pthread_mutex_init(&p->lock,NULL);
     p->used=1; p->type=type; p->channels=channels[format]; p->is_float=format>=3 && format!=6;
+    p->generation=atomic_load(&foreground_generation);
     p->sample_bytes=p->is_float ? 4 : 2; p->frames=(int)length; p->std_layout=format>=6;
     for (int c=0;c<8;++c) p->volume[c]=VOLUME_0DB;
     if (sdl_audio()) {
@@ -123,9 +136,11 @@ static ABI int32_t audio_open(int32_t user, int32_t type, int32_t index, uint32_
         p->fold_stereo = p->channels==8 &&
             SDL_GetAudioDeviceFormat(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&device,NULL) && device.channels<8;
         SDL_AudioSpec spec={p->is_float ? SDL_AUDIO_F32 : SDL_AUDIO_S16, p->fold_stereo ? 2 : p->channels, 48000};
+        int raised=runtime_thread_system_priority_begin(); /* g2-arm64: the device's threads start here */
         p->stream=SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&spec,NULL,NULL);
         if (p->stream) SDL_ResumeAudioStreamDevice(p->stream);
         else fprintf(stderr,"Runtime: SDL audio stream failed (%s); port %d uses the timer sink\n",SDL_GetError(),id);
+        runtime_thread_system_priority_end(raised);
     }
     p->stats=getenv("BB_AUDIO_STATS")!=NULL;
     const char *dump=getenv("BB_AUDIO_DUMP");
@@ -221,12 +236,24 @@ static int32_t output_port(int32_t handle, const void *data, int pace) {
             else sleep_until(p->next_deadline_ns);
             p->next_deadline_ns+=period;
         }
-        if (p->stream) {
+        if (p->stream && !atomic_load(&app_background)) {
             /* The device drains the queue in quanta (21 ms on PipeWire), so the level
                is a sawtooth: its minimum over ~32 buffers is what gets controlled. */
+            static const unsigned char silence[2048*8*4];
             int qb=(int)queue_bytes, low=2*qb, queued=SDL_GetAudioStreamQueued(p->stream);
+            /* g2-arm64: back from the background, or 250 ms over the target (the device stopped
+               taking audio: a device switch): what is queued is stale, drop it. */
+            int generation=atomic_load(&foreground_generation), frame=qb/p->frames;
+            int resumed=p->generation!=generation, stalled=queued>low+12000*frame;
+            if (resumed || stalled) {
+                if (resumed || !(p->drops++ & 63))
+                    printf("Audio: port %d: %s, %d ms of queued audio dropped\n",(int)(p-ports),
+                           resumed ? "back from the background" : "the device stopped taking audio",queued/frame/48);
+                p->generation=generation;
+                SDL_ClearAudioStream(p->stream);
+                queued=0; p->window_count=0; p->adjust_ns=0;
+            }
             if (queued<qb) {
-                static const unsigned char silence[2048*8*4];
                 SDL_PutAudioStreamData(p->stream,silence,low-queued<qb ? low-queued : qb);
                 queued=low;
             }

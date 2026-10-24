@@ -78,11 +78,16 @@ struct Liverpool {
         u64 data;
         u32 num_bytes;
         u64 position;
+        u64 seq; ///< g2-arm64: written once FenceWritten(seq) (0: once the pipe reached it)
     };
     std::deque<PendingFence> pending_fences;
-    void NotePendingFences(const auto& event);
+    void NotePendingFences(const auto& event, u64 seq = 0);
     bool PendingFenceValue(VAddr address, u32& value);
-    void NotePendingWrite(const struct PM4CmdWriteData& write_data, u32 num_bytes);
+    void NotePendingWrite(const struct PM4CmdWriteData& write_data, u32 num_bytes, u64 seq = 0);
+    /// g2-arm64: a compute queue's ReleaseMem handed to the recording thread.
+    void NotePendingRelease(const struct PM4CmdReleaseMem& release, u64 seq);
+    /// g2-arm64: whether a handed-over fence has been written to guest memory yet.
+    [[nodiscard]] bool PendingFenceDone(const PendingFence& fence) const;
     /// bbport: running checksum of graphics-register packets (see ApplyGraphicsRegisterPacket).
     u64 gfx_reg_checksum{};
     /// Top-level graphics submissions, numbered for the draw preparation workers.
@@ -101,12 +106,19 @@ public:
     void SubmitAsc(u32 gnm_vqid, std::span<const u32> acb);
 
     void SubmitDone() noexcept {
+        NoteGuestSubmitDone();
         std::scoped_lock lk{submit_mutex};
         mapped_queues[GfxQueueId].ccb_buffer_offset = 0;
         mapped_queues[GfxQueueId].dcb_buffer_offset = 0;
         submit_done = true;
         submit_cv.notify_one();
     }
+
+    /// g2-arm64 diagnosis (BB_IDLE_STATS=1): the end of a guest frame (sceGnmSubmitDone) to
+    /// the GPU idle signal the guest's next submission waits for, by stage, every 5 s.
+    static void NoteGuestSubmitDone() noexcept;
+    /// The guest's next submission waited this long for that signal (gnmdriver WaitGpuIdle).
+    static void NoteGuestIdleWait(u64 ns) noexcept;
 
     void WaitGpuIdle() noexcept {
         std::unique_lock lk{submit_mutex};

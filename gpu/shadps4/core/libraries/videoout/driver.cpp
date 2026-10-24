@@ -204,6 +204,9 @@ int VideoOutDriver::RegisterBuffers(VideoOutPort* port, s32 startIndex, void* co
                   static_cast<u32>(attribute->tiling_mode));
         return ORBIS_VIDEO_OUT_ERROR_INVALID_TILING_MODE;
     }
+    // g2-arm64: the game's display size (its resolution patch): the scene search and the
+    // in-game panel use it.
+    BbNoteGameDisplaySize(attribute->width, attribute->height);
 
     LOG_INFO(Lib_VideoOut,
              "startIndex = {}, bufferNum = {}, pixelFormat = {}, aspectRatio = {}, "
@@ -676,12 +679,10 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
 
     // bbport: frame limit (see EmulatorSettings::GetFrameLimit). A request waits in the queue
     // until its slot; slots advance by one period (no drift) but never lag behind by more.
-    const u32 frame_limit = EmulatorSettings.GetFrameLimit();
-    const auto frame_period = frame_limit ? std::chrono::nanoseconds(1000000000 / frame_limit)
-                                          : std::chrono::nanoseconds(0);
+    // g2-arm64: the limit is a live setting (the in-game panel), read on every tick below.
     auto next_flip = std::chrono::steady_clock::now();
     std::printf("VideoOut: vblank %u Hz, frame limit %u FPS\n",
-                EmulatorSettings.GetVblankFrequency(), frame_limit);
+                EmulatorSettings.GetVblankFrequency(), EmulatorSettings.GetFrameLimit());
 
     const auto receive_request = [this] -> Request {
         std::scoped_lock lk{mutex};
@@ -693,9 +694,6 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
         return {};
     };
 
-    // bbport: with a frame limit (uncapped presets) a queued flip is presented as soon as it
-    // arrives and its slot allows, between vblanks, instead of on the next vblank tick.
-    const bool immediate_flips = frame_limit != 0;
 
     // bbport: prerecorded movies (Uncharted's cutscenes) show one video frame per vblank of
     // a 60 Hz display and played too fast at 120 Hz. While a movie is being decoded the guest
@@ -707,6 +705,12 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
     while (!token.stop_requested()) {
         timer.Start();
         const auto tick_deadline = std::chrono::steady_clock::now() + vblank_period;
+        const u32 frame_limit = EmulatorSettings.GetFrameLimit();
+        const auto frame_period = frame_limit ? std::chrono::nanoseconds(1000000000 / frame_limit)
+                                              : std::chrono::nanoseconds(0);
+        // bbport: with a frame limit (uncapped presets) a queued flip is presented as soon as it
+        // arrives and its slot allows, between vblanks, instead of on the next vblank tick.
+        const bool immediate_flips = frame_limit != 0;
 
         if (DebugState.IsGuestThreadsPaused()) {
             DrawLastFrame();

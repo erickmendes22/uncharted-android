@@ -158,6 +158,7 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
     // bbport: frames are composed in RGBA8 (what frame generation reads and writes) and
     // blitted into the swapchain's format.
     pp_pass.Create(device, FrameGenerator::ColorFormat);
+    rotate_pass.Create(device, swapchain.GetSurfaceFormat().format); // g2-arm64
     BbOverlay::Init(instance, swapchain.GetSurfaceFormat().format, num_images);
 
     frame_generator = std::make_unique<FrameGenerator>(instance, draw_scheduler);
@@ -710,6 +711,12 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
         free_frame();
         return;
     }
+    // g2-arm64: the app in the background (the screen off) or between Android windows: skip
+    // presenting until there is a surface again (the game goes on).
+    if (!swapchain.SurfaceReady()) {
+        free_frame();
+        return;
+    }
 
     // Recreate the swapchain if the window was resized.
     if (window.GetWidth() != swapchain.GetWidth() || window.GetHeight() != swapchain.GetHeight()) {
@@ -778,6 +785,9 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
 
 bool Presenter::PresentImage(Frame* frame, vk::Image image, bool last) {
     if (!swapchain.AcquireNextImage()) {
+        if (swapchain.AcquireTimedOut() || !swapchain.SurfaceReady()) {
+            return false; // g2-arm64: no buffer or no surface now: skip this frame
+        }
         swapchain.Recreate(window.GetWidth(), window.GetHeight());
         if (!swapchain.AcquireNextImage()) {
             // User resizes the window too fast and GPU can't keep up. Skip this frame.
@@ -807,7 +817,110 @@ bool Presenter::PresentImage(Frame* frame, vk::Image image, bool last) {
         });
     }
 
-    {
+    if (const u32 turns = swapchain.QuarterTurns(); turns != 0 && rotate_pass.Ready()) {
+        // g2-arm64: Android pre-rotation (vk_swapchain.cpp): the frame is drawn turned into the
+        // image in the panel's orientation, black around it; the overlay's draw data is turned
+        // the same way. The compositor then shows the image as it is.
+        const vk::Extent2D extent = swapchain.GetExtent();
+        const vk::Extent2D logical = swapchain.LogicalExtent();
+        SetExpectedGameSize(s32(logical.width), s32(logical.height));
+        vk::ImageView input_view = frame->image_view;
+        for (const auto& generated : frame->generated) {
+            if (generated.image && generated.image == image) {
+                input_view = generated.view;
+            }
+        }
+        const vk::ImageSubresourceRange range{
+            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .levelCount = 1,
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        };
+        const std::array pre_barriers{
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eNone,
+                .dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
+                .oldLayout = vk::ImageLayout::eUndefined,
+                .newLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = swapchain_image,
+                .subresourceRange = range,
+            },
+            vk::ImageMemoryBarrier{
+                .srcAccessMask =
+                    vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eShaderWrite,
+                .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+                .oldLayout = vk::ImageLayout::eGeneral,
+                .newLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = image,
+                .subresourceRange = range,
+            },
+        };
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                               vk::PipelineStageFlagBits::eFragmentShader |
+                                   vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                               {}, {}, {}, pre_barriers);
+        // The frame's rectangle in the frame's orientation, then turned like the image.
+        const auto fit = MakeImageBlitFit(frame->width, frame->height, logical.width, logical.height);
+        const s32 x0 = fit.dstOffsets[0].x, y0 = fit.dstOffsets[0].y;
+        const s32 x1 = fit.dstOffsets[1].x, y1 = fit.dstOffsets[1].y;
+        const s32 w = s32(logical.width), h = s32(logical.height);
+        s32 rx0, ry0, rx1, ry1;
+        if (turns == 1) {
+            rx0 = h - y1, rx1 = h - y0, ry0 = x0, ry1 = x1;
+        } else if (turns == 2) {
+            rx0 = w - x1, rx1 = w - x0, ry0 = h - y1, ry1 = h - y0;
+        } else {
+            rx0 = y0, rx1 = y1, ry0 = w - x1, ry1 = w - x0;
+        }
+        rotate_pass.Render(cmdbuf, input_view, swapchain.ImageView(), extent,
+                           vk::Rect2D{{rx0, ry0}, {u32(rx1 - rx0), u32(ry1 - ry0)}}, turns);
+        BbOverlay::NotePresent();
+        if (BbOverlay::Visible()) {
+            const vk::ImageMemoryBarrier frame_drawn{
+                .srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
+                .dstAccessMask =
+                    vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite,
+                .oldLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .newLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = swapchain_image,
+                .subresourceRange = range,
+            };
+            cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                   vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                                   vk::DependencyFlagBits::eByRegion, {}, {}, frame_drawn);
+            BbOverlay::Render(cmdbuf, swapchain.ImageView(), extent, turns);
+        }
+        const std::array post_barriers{
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
+                .dstAccessMask = vk::AccessFlagBits::eNone,
+                .oldLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .newLayout = vk::ImageLayout::ePresentSrcKHR,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = swapchain_image,
+                .subresourceRange = range,
+            },
+            vk::ImageMemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eShaderRead,
+                .dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
+                .oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+                .newLayout = vk::ImageLayout::eGeneral,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = image,
+                .subresourceRange = range,
+            },
+        };
+        cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                                   vk::PipelineStageFlagBits::eFragmentShader,
+                               vk::PipelineStageFlagBits::eAllCommands, {}, {}, {}, post_barriers);
+    } else {
         const vk::Extent2D extent = swapchain.GetExtent();
         SetExpectedGameSize(s32(extent.width), s32(extent.height));
         const vk::ImageSubresourceRange color_range{

@@ -1,0 +1,524 @@
+From 313b43eb2d7b217fbea1829db54f08ba43f71995 Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip/kgsl: recover from an invalidated KGSL context
+ (TU_KGSL_RECOVER)
+
+After more than 3 GPU faults within 2 s KGSL invalidates the context and
+every later submission fails with EDEADLK, which Turnip reported as a
+lost device. The A735 CP (Retroid Pocket G2) faults in such bursts now and
+then. The queue now moves to a new KGSL context and resubmits there: only
+the work KGSL dropped is lost. Timestamps of the old context count as
+signaled (waits, semaphore merges, sync file export); a guilty reset
+status moves the queue on its next submission. TU_KGSL_RECOVER=0 keeps
+the lost device.
+
+Also fixes kgsl_syncobj_merge, which merged the -1 fd of a timestamp
+syncobj when it met a sync file or a timestamp of another queue.
+
+TU_KGSL_FAULT_TEST=<s>[i] injects a fault burst <s> seconds after the
+first submission (separate IBs of zeros, or with i before the IBs of the
+next four submissions) to exercise the recovery.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/freedreno/vulkan/tu_knl_kgsl.cc | 292 ++++++++++++++++++++++++----
+ src/freedreno/vulkan/tu_queue.cc    |   2 +
+ src/freedreno/vulkan/tu_queue.h     |   7 +
+ 3 files changed, 263 insertions(+), 38 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_knl_kgsl.cc b/src/freedreno/vulkan/tu_knl_kgsl.cc
+index f316e04bcf0..852403ddc71 100644
+--- a/src/freedreno/vulkan/tu_knl_kgsl.cc
++++ b/src/freedreno/vulkan/tu_knl_kgsl.cc
+@@ -82,6 +82,12 @@ kgsl_submitqueue_close(struct tu_device *dev, struct tu_queue *queue)
+    };
+ 
+    safe_ioctl(dev->physical_device->local_fd, IOCTL_KGSL_DRAWCTXT_DESTROY, &req);
++
++   for (uint32_t i = 0; i < queue->kgsl_retired_count; i++) {
++      req.drawctxt_id = queue->kgsl_retired[i];
++      safe_ioctl(dev->physical_device->local_fd, IOCTL_KGSL_DRAWCTXT_DESTROY, &req);
++   }
++   queue->kgsl_retired_count = 0;
+ }
+ 
+ static void kgsl_bo_finish(struct tu_device *dev, struct tu_bo *bo);
+@@ -709,11 +715,47 @@ struct kgsl_syncobj
+    enum kgsl_syncobj_state state;
+ 
+    struct tu_queue *queue;
++   uint32_t context_id; /* KGSL context of the timestamp (the queue may have moved on) */
+    uint32_t timestamp;
+ 
+    int fd;
+ };
+ 
++/* uncharted-android: KGSL context recovery (TU_KGSL_RECOVER, on by default). After more than 3
++ * GPU faults within 2 s KGSL invalidates the context ("gpu fault threshold exceeded") and every
++ * later submission to it fails, which Vulkan can only report as a lost device. The A735 CP
++ * (Retroid Pocket G2) sometimes misreads command streams in such bursts, so the queue moves to a
++ * new KGSL context instead: the work KGSL dropped is lost (a bad frame) and the game goes on.
++ * Timestamps of the old context count as signaled. TU_KGSL_RECOVER=0 keeps the lost device.
++ */
++static bool
++kgsl_recover_enabled(void)
++{
++   static int v = -1;
++   if (v < 0) {
++      const char *env = getenv("TU_KGSL_RECOVER");
++      v = !(env && env[0] == '0');
++   }
++   return v;
++}
++
++static bool
++kgsl_ctx_retired(const struct tu_queue *queue, uint32_t context_id)
++{
++   uint32_t n = p_atomic_read(&queue->kgsl_retired_count);
++   for (uint32_t i = 0; i < n; i++) {
++      if (queue->kgsl_retired[i] == context_id)
++         return true;
++   }
++   return false;
++}
++
++static inline bool
++kgsl_syncobj_ts_retired(const struct kgsl_syncobj *s)
++{
++   return s->state == KGSL_SYNCOBJ_STATE_TS && kgsl_ctx_retired(s->queue, s->context_id);
++}
++
+ static void
+ kgsl_syncobj_init(struct kgsl_syncobj *s, bool signaled)
+ {
+@@ -755,13 +797,13 @@ kgsl_syncobj_dup(struct kgsl_syncobj *s)
+ }
+ 
+ static int
+-timestamp_to_fd(struct tu_queue *queue, uint32_t timestamp)
++timestamp_to_fd(struct tu_queue *queue, uint32_t context_id, uint32_t timestamp)
+ {
+    int fd;
+    struct kgsl_timestamp_event event = {
+       .type = KGSL_TIMESTAMP_EVENT_FENCE,
+       .timestamp = timestamp,
+-      .context_id = queue->msm_queue_id,
++      .context_id = context_id,
+       .priv = &fd,
+       .len = sizeof(fd),
+    };
+@@ -777,7 +819,9 @@ static int
+ kgsl_syncobj_ts_to_fd(const struct kgsl_syncobj *syncobj)
+ {
+    assert(syncobj->state == KGSL_SYNCOBJ_STATE_TS);
+-   return timestamp_to_fd(syncobj->queue, syncobj->timestamp);
++   if (kgsl_syncobj_ts_retired(syncobj))
++      return -1; /* signaled */
++   return timestamp_to_fd(syncobj->queue, syncobj->context_id, syncobj->timestamp);
+ }
+ 
+ /* return true if timestamp a is greater (more recent) then b
+@@ -861,6 +905,11 @@ wait_timestamp_safe(int fd,
+ 
+          wait.timeout = timeout_ms;
+       } else if (ret == -1) {
++         /* uncharted-android: an invalidated context (EDEADLK) retires nothing any more and
++          * KGSL dropped its queued work: its timestamps count as signaled.
++          */
++         if (errno == EDEADLK)
++            return VK_SUCCESS;
+          assert(errno == ETIMEDOUT);
+          return VK_TIMEOUT;
+       } else {
+@@ -924,7 +973,9 @@ kgsl_syncobj_wait(struct tu_device *device,
+       return VK_TIMEOUT;
+ 
+    case KGSL_SYNCOBJ_STATE_TS: {
+-      return wait_timestamp_safe(device->fd, s->queue->msm_queue_id,
++      if (kgsl_syncobj_ts_retired(s))
++         return VK_SUCCESS;
++      return wait_timestamp_safe(device->fd, s->context_id,
+                                  s->timestamp, abs_timeout_ns);
+    }
+ 
+@@ -962,6 +1013,10 @@ kgsl_syncobj_wait_any(struct tu_device* device, struct kgsl_syncobj **syncobjs,
+    /* Simple case, we already have a signal one */
+    kgsl_syncobj_foreach_state(syncobjs, KGSL_SYNCOBJ_STATE_SIGNALED)
+       return VK_SUCCESS;
++   kgsl_syncobj_foreach_state(syncobjs, KGSL_SYNCOBJ_STATE_TS) {
++      if (kgsl_syncobj_ts_retired(sync))
++         return VK_SUCCESS;
++   }
+ 
+    kgsl_syncobj_foreach_state(syncobjs, KGSL_SYNCOBJ_STATE_FD)
+       num_fds++;
+@@ -970,12 +1025,14 @@ kgsl_syncobj_wait_any(struct tu_device* device, struct kgsl_syncobj **syncobjs,
+     * have to convert them into FDs
+     */
+    bool convert_ts_to_fd = false;
++   uint32_t context_id = 0;
+    kgsl_syncobj_foreach_state(syncobjs, KGSL_SYNCOBJ_STATE_TS) {
+-      if (queue != NULL && sync->queue != queue) {
++      if (queue != NULL && (sync->queue != queue || sync->context_id != context_id)) {
+          convert_ts_to_fd = true;
+          break;
+       }
+       queue = sync->queue;
++      context_id = sync->context_id;
+    }
+ 
+    /* If we have no FD nor TS syncobjs then we can return immediately */
+@@ -993,7 +1050,7 @@ kgsl_syncobj_wait_any(struct tu_device* device, struct kgsl_syncobj **syncobjs,
+    if (convert_ts_to_fd) {
+       kgsl_syncobj_foreach_state(syncobjs, KGSL_SYNCOBJ_STATE_TS) {
+          struct pollfd *poll_fd = (struct pollfd *) u_vector_add(&poll_fds);
+-         poll_fd->fd = timestamp_to_fd(sync->queue, sync->timestamp);
++         poll_fd->fd = timestamp_to_fd(sync->queue, sync->context_id, sync->timestamp);
+          poll_fd->events = POLLIN;
+       }
+    } else {
+@@ -1008,7 +1065,7 @@ kgsl_syncobj_wait_any(struct tu_device* device, struct kgsl_syncobj **syncobjs,
+ 
+       if (num_fds) {
+          struct pollfd *poll_fd = (struct pollfd *) u_vector_add(&poll_fds);
+-         poll_fd->fd = timestamp_to_fd(queue, lowest_timestamp);
++         poll_fd->fd = timestamp_to_fd(queue, context_id, lowest_timestamp);
+          poll_fd->events = POLLIN;
+       }
+    }
+@@ -1022,7 +1079,7 @@ kgsl_syncobj_wait_any(struct tu_device* device, struct kgsl_syncobj **syncobjs,
+    }
+ 
+    if (u_vector_length(&poll_fds) == 0) {
+-      result = wait_timestamp_safe(device->fd, queue->msm_queue_id,
++      result = wait_timestamp_safe(device->fd, context_id,
+                                    lowest_timestamp, MIN2(abs_timeout_ns, INT64_MAX));
+    } else {
+       int ret, i;
+@@ -1118,8 +1175,28 @@ sync_merge_close(const char *name, int fd1, int fd2, bool close_fd2)
+    return fd;
+ }
+ 
++/* uncharted-android: adds sync file fd (owned; < 0 = signaled) to ret, which is SIGNALED or FD. */
++static void
++kgsl_syncobj_merge_fd(struct kgsl_syncobj *ret, int fd)
++{
++   if (fd < 0)
++      return;
++
++   if (ret->state == KGSL_SYNCOBJ_STATE_FD) {
++      ret->fd = sync_merge_close("tu_sync", ret->fd, fd, true);
++      assert(ret->fd >= 0);
++   } else {
++      ret->state = KGSL_SYNCOBJ_STATE_FD;
++      ret->fd = fd;
++   }
++}
++
+ /* Merges multiple kgsl_syncobjs into a single one which is only signalled
+  * after all submitted syncobjs are signalled
++ *
++ * uncharted-android: timestamps of contexts the queue left count as signaled, timestamps of
++ * different contexts are compared per context, and a timestamp merged with a sync file is
++ * turned into one itself (upstream merged the -1 fd of a timestamp syncobj).
+  */
+ static struct kgsl_syncobj
+ kgsl_syncobj_merge(const struct kgsl_syncobj **syncobjs, uint32_t count)
+@@ -1142,38 +1219,30 @@ kgsl_syncobj_merge(const struct kgsl_syncobj **syncobjs, uint32_t count)
+          return ret;
+ 
+       case KGSL_SYNCOBJ_STATE_TS:
+-         if (ret.state == KGSL_SYNCOBJ_STATE_TS) {
+-            if (ret.queue == sync->queue) {
+-               ret.timestamp = max_ts(ret.timestamp, sync->timestamp);
+-            } else {
+-               ret.state = KGSL_SYNCOBJ_STATE_FD;
+-               int sync_fd = kgsl_syncobj_ts_to_fd(sync);
+-               ret.fd = sync_merge_close("tu_sync", ret.fd, sync_fd, true);
+-               assert(ret.fd >= 0);
+-            }
+-         } else if (ret.state == KGSL_SYNCOBJ_STATE_FD) {
+-            int sync_fd = kgsl_syncobj_ts_to_fd(sync);
+-            ret.fd = sync_merge_close("tu_sync", ret.fd, sync_fd, true);
+-            assert(ret.fd >= 0);
+-         } else {
++         if (kgsl_syncobj_ts_retired(sync))
++            break;
++         if (ret.state == KGSL_SYNCOBJ_STATE_SIGNALED) {
+             ret = *sync;
++         } else if (ret.state == KGSL_SYNCOBJ_STATE_TS && ret.queue == sync->queue &&
++                    ret.context_id == sync->context_id) {
++            ret.timestamp = max_ts(ret.timestamp, sync->timestamp);
++         } else {
++            if (ret.state == KGSL_SYNCOBJ_STATE_TS) {
++               int ret_fd = kgsl_syncobj_ts_to_fd(&ret);
++               kgsl_syncobj_init(&ret, true);
++               kgsl_syncobj_merge_fd(&ret, ret_fd);
++            }
++            kgsl_syncobj_merge_fd(&ret, kgsl_syncobj_ts_to_fd(sync));
+          }
+          break;
+ 
+       case KGSL_SYNCOBJ_STATE_FD:
+-         if (ret.state == KGSL_SYNCOBJ_STATE_FD) {
+-            ret.fd = sync_merge_close("tu_sync", ret.fd, sync->fd, false);
+-            assert(ret.fd >= 0);
+-         } else if (ret.state == KGSL_SYNCOBJ_STATE_TS) {
+-            ret.state = KGSL_SYNCOBJ_STATE_FD;
+-            int sync_fd = kgsl_syncobj_ts_to_fd(sync);
+-            ret.fd = sync_merge_close("tu_sync", ret.fd, sync_fd, true);
+-            assert(ret.fd >= 0);
+-         } else {
+-            ret = *sync;
+-            ret.fd = os_dupfd_cloexec(ret.fd);
+-            assert(ret.fd >= 0);
++         if (ret.state == KGSL_SYNCOBJ_STATE_TS) {
++            int ret_fd = kgsl_syncobj_ts_to_fd(&ret);
++            kgsl_syncobj_init(&ret, true);
++            kgsl_syncobj_merge_fd(&ret, ret_fd);
+          }
++         kgsl_syncobj_merge_fd(&ret, os_dupfd_cloexec(sync->fd));
+          break;
+ 
+       default:
+@@ -1442,6 +1511,107 @@ kgsl_bind_finalize(struct tu_kgsl_queue_submit *submit)
+    }
+ }
+ 
++/* uncharted-android: moves the queue to a new KGSL context (see kgsl_recover_enabled). Called
++ * with submit_mutex held.
++ */
++static VkResult
++kgsl_queue_recover(struct tu_queue *queue, const char *why)
++{
++   struct tu_device *dev = queue->device;
++   uint32_t old_id = queue->msm_queue_id;
++   int old_fence = queue->fence;
++
++   p_atomic_set(&queue->kgsl_ctx_bad, 0);
++   if (!kgsl_recover_enabled() ||
++       queue->kgsl_retired_count >= ARRAY_SIZE(queue->kgsl_retired))
++      return VK_ERROR_DEVICE_LOST;
++
++   if (kgsl_submitqueue_new(dev, queue)) {
++      mesa_loge("tu/kgsl: no new context after losing context %u: %s", old_id,
++                strerror(errno));
++      return VK_ERROR_DEVICE_LOST;
++   }
++
++   /* Queue order: what is still queued on the old context runs first (an invalidated context
++    * returns at once).
++    */
++   if (old_fence >= 0)
++      wait_timestamp_safe(dev->fd, old_id, old_fence, os_time_get_nano() + 2000000000ull);
++
++   queue->kgsl_retired[queue->kgsl_retired_count] = old_id;
++   p_atomic_set(&queue->kgsl_retired_count, queue->kgsl_retired_count + 1);
++   queue->fence = -1;
++
++   fprintf(stderr, "tu/kgsl: %s on context %u (KGSL gives up a context after more than 3 GPU "
++           "faults in 2 s); the queue goes on in new context %u (recovery %u)\n",
++           why, old_id, queue->msm_queue_id, queue->kgsl_retired_count);
++   return VK_SUCCESS;
++}
++
++/* uncharted-android test: TU_KGSL_FAULT_TEST=<s>: <s> seconds after the first submission, five
++ * submissions of an IB of zeros (the CP takes a zero header as a bad opcode, like the A735
++ * faults) make KGSL give up the context, which exercises kgsl_queue_recover.
++ * TU_KGSL_FAULT_TEST=<s>i: the IB of zeros goes before the IBs of the next four submissions
++ * instead, so KGSL skips their work and drops what is queued behind, like a real burst.
++ */
++static struct kgsl_command_object kgsl_fault_test_ib;
++static int kgsl_fault_test_inline; /* submissions still to get the IB of zeros */
++
++static void
++kgsl_fault_test(struct tu_queue *queue)
++{
++   static int64_t at = -1;
++   if (likely(at == 0))
++      return;
++   if (at < 0) {
++      const char *env = getenv("TU_KGSL_FAULT_TEST");
++      at = env ? os_time_get_nano() + (int64_t) strtoul(env, NULL, 0) * 1000000000ll : 0;
++      if (at)
++         fprintf(stderr, "tu/kgsl: GPU fault test in %s s (TU_KGSL_FAULT_TEST)\n", env);
++      return;
++   }
++   if (os_time_get_nano() < at)
++      return;
++   at = 0;
++
++   struct tu_device *dev = queue->device;
++   struct tu_bo *bo;
++   if (tu_bo_init_new(dev, NULL, &bo, 4096, TU_BO_ALLOC_NO_FLAGS, "fault test") != VK_SUCCESS ||
++       tu_bo_map(dev, bo, NULL) != VK_SUCCESS) {
++      fprintf(stderr, "tu/kgsl: GPU fault test: no BO\n");
++      return;
++   }
++   memset(bo->map, 0, 4096);
++   kgsl_fault_test_ib = (struct kgsl_command_object) {
++      .gpuaddr = bo->iova,
++      .size = 64,
++      .flags = KGSL_CMDLIST_IB,
++      .id = bo->gem_handle,
++   };
++   if (strchr(getenv("TU_KGSL_FAULT_TEST"), 'i')) {
++      kgsl_fault_test_inline = 4;
++      return;
++   }
++
++   for (int i = 0; i < 5; i++) {
++      struct kgsl_gpu_command req = {
++         .flags = KGSL_CMDBATCH_SUBMIT_IB_LIST,
++         .cmdlist = (uintptr_t) &kgsl_fault_test_ib,
++         .cmdsize = sizeof(kgsl_fault_test_ib),
++         .numcmds = 1,
++         .context_id = queue->msm_queue_id,
++      };
++      int ret = safe_ioctl(dev->physical_device->local_fd, IOCTL_KGSL_GPU_COMMAND, &req);
++      fprintf(stderr, "tu/kgsl: GPU fault test: submission %d on context %u: %s (ts %u)\n", i,
++              queue->msm_queue_id, ret ? strerror(errno) : "queued", req.timestamp);
++      if (ret)
++         break;
++      wait_timestamp_safe(dev->fd, queue->msm_queue_id, req.timestamp,
++                          os_time_get_nano() + 2000000000ull);
++   }
++   /* The BO stays: one page, once. */
++}
++
+ static VkResult
+ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
+                   struct vk_sync_wait *waits, uint32_t wait_count,
+@@ -1474,6 +1644,7 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
+          last_submit_sync = (struct kgsl_syncobj) {
+             .state = KGSL_SYNCOBJ_STATE_TS,
+             .queue = queue,
++            .context_id = queue->msm_queue_id,
+             .timestamp = queue->fence,
+          };
+       else
+@@ -1576,7 +1747,7 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
+       break;
+ 
+    case KGSL_SYNCOBJ_STATE_TS:
+-      ts.context_id = wait_sync.queue->msm_queue_id;
++      ts.context_id = wait_sync.context_id;
+       ts.timestamp = wait_sync.timestamp;
+ 
+       has_sync = true;
+@@ -1603,12 +1774,32 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
+    uint64_t gpu_offset = 0;
+ 
+    if (submit->bind_cmds.size == 0) {
++      if (unlikely(p_atomic_read(&queue->kgsl_ctx_bad)) &&
++          kgsl_queue_recover(queue, "guilty reset status") == VK_SUCCESS &&
++          has_sync && sync.type == KGSL_CMD_SYNCPOINT_TYPE_TIMESTAMP &&
++          kgsl_ctx_retired(queue, ts.context_id))
++         has_sync = false;
++      kgsl_fault_test(queue);
++
++      struct kgsl_command_object *cmds =
++         (struct kgsl_command_object *) submit->commands.data;
++      uint32_t num_cmds =
++         util_dynarray_num_elements(&submit->commands, struct kgsl_command_object);
++      struct kgsl_command_object *test_cmds = NULL;
++      if (unlikely(kgsl_fault_test_inline > 0)) {
++         test_cmds = (struct kgsl_command_object *) malloc(sizeof(*cmds) * (num_cmds + 1));
++         test_cmds[0] = kgsl_fault_test_ib;
++         memcpy(test_cmds + 1, cmds, sizeof(*cmds) * num_cmds);
++         kgsl_fault_test_inline--;
++         fprintf(stderr, "tu/kgsl: GPU fault test: zeros before the %u IBs of a submission on "
++                 "context %u\n", num_cmds, queue->msm_queue_id);
++      }
++
+       struct kgsl_gpu_command req = {
+          .flags = KGSL_CMDBATCH_SUBMIT_IB_LIST,
+-         .cmdlist = (uintptr_t) submit->commands.data,
++         .cmdlist = (uintptr_t) (test_cmds ? test_cmds : cmds),
+          .cmdsize = sizeof(struct kgsl_command_object),
+-         .numcmds = util_dynarray_num_elements(&submit->commands,
+-                                               struct kgsl_command_object),
++         .numcmds = num_cmds + (test_cmds ? 1 : 0),
+          .synclist = (uintptr_t) &sync,
+          .syncsize = sizeof(sync),
+          .numsyncs = has_sync != 0 ? 1 : 0,
+@@ -1625,6 +1816,25 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
+       ret = safe_ioctl(queue->device->physical_device->local_fd,
+                        IOCTL_KGSL_GPU_COMMAND, &req);
+ 
++      /* uncharted-android: KGSL invalidated the context after a burst of GPU faults: move to a
++       * new one and submit there (see kgsl_recover_enabled).
++       */
++      if (ret && errno == EDEADLK &&
++          kgsl_queue_recover(queue, "submission refused") == VK_SUCCESS) {
++         if (has_sync && sync.type == KGSL_CMD_SYNCPOINT_TYPE_TIMESTAMP &&
++             kgsl_ctx_retired(queue, ts.context_id))
++            req.numsyncs = 0;
++         /* the fault test's zeros stay behind */
++         req.cmdlist = (uintptr_t) cmds;
++         req.numcmds = num_cmds;
++         kgsl_fault_test_inline = 0;
++         req.context_id = queue->msm_queue_id;
++         req.timestamp = 0;
++         ret = safe_ioctl(queue->device->physical_device->local_fd,
++                          IOCTL_KGSL_GPU_COMMAND, &req);
++      }
++      free(test_cmds);
++
+       timestamp = req.timestamp;
+    } else {
+       /* kgsl doesn't support multiple bind commands at once */
+@@ -1725,6 +1935,7 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
+       kgsl_syncobj_reset(signal_sync);
+       signal_sync->state = KGSL_SYNCOBJ_STATE_TS;
+       signal_sync->queue = queue;
++      signal_sync->context_id = queue->msm_queue_id;
+       signal_sync->timestamp = timestamp;
+    }
+ 
+@@ -1796,6 +2007,11 @@ kgsl_device_check_status(struct tu_device *device)
+ 
+          if (value != KGSL_CTX_STAT_NO_ERROR &&
+             value != KGSL_CTX_STAT_INNOCENT_CONTEXT_RESET_EXT) {
++            /* uncharted-android: the next submission moves the queue to a new context. */
++            if (kgsl_recover_enabled()) {
++               p_atomic_set(&device->queues[i][q].kgsl_ctx_bad, 1);
++               continue;
++            }
+             return vk_device_set_lost(&device->vk, "GPU faulted or hung");
+          }
+       }
+diff --git a/src/freedreno/vulkan/tu_queue.cc b/src/freedreno/vulkan/tu_queue.cc
+index 3e6cd0afdff..5d772b7c083 100644
+--- a/src/freedreno/vulkan/tu_queue.cc
++++ b/src/freedreno/vulkan/tu_queue.cc
+@@ -629,6 +629,8 @@ tu_queue_init(struct tu_device *device,
+    queue->fence = -1;
+    queue->priority = -1;
+    queue->msm_queue_id = 0;
++   queue->kgsl_retired_count = 0;
++   queue->kgsl_ctx_bad = 0;
+ 
+    if (shared_queue) {
+       /* Emulated queue: submissions are redirected to the real queue by
+diff --git a/src/freedreno/vulkan/tu_queue.h b/src/freedreno/vulkan/tu_queue.h
+index 48f2ea9821e..1d9789819c0 100644
+--- a/src/freedreno/vulkan/tu_queue.h
++++ b/src/freedreno/vulkan/tu_queue.h
+@@ -36,6 +36,13 @@ struct tu_queue
+    unsigned render_pass_idx;
+ 
+    int fence;           /* timestamp/fence of the last queue submission */
++
++   /* uncharted-android (KGSL): contexts this queue left after KGSL invalidated them (their
++    * timestamps count as signaled), destroyed with the queue; kgsl_ctx_bad: check_status saw a
++    * guilty reset, the next submission moves to a new context. */
++   uint32_t kgsl_retired[64];
++   uint32_t kgsl_retired_count;
++   uint32_t kgsl_ctx_bad;
+ };
+ VK_DEFINE_HANDLE_CASTS(tu_queue, vk.base, VkQueue, VK_OBJECT_TYPE_QUEUE)
+ 
+-- 
+2.43.0
+

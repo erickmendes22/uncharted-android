@@ -66,6 +66,7 @@ _Static_assert(sizeof(ControllerInfo)==28,"OrbisPadControllerInformation layout"
 static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
 static int initialized, opened, sdl_ready;
 static SDL_Gamepad *gamepad;
+static int gamepad_present; /* g2-arm64: gamepad != NULL, read by the overlay's thread */
 static size_t reads;
 static uint8_t connected_count;
 
@@ -95,6 +96,7 @@ static SDL_Gamepad *current_gamepad(void) {
         }
         SDL_free(ids);
     }
+    __atomic_store_n(&gamepad_present,gamepad!=NULL,__ATOMIC_RELAXED); /* g2-arm64: runtime_gamepad_connected */
     return gamepad;
 }
 /* Degrees of camera turn per mouse pixel at sensitivity 1 (0.08 felt "very slow", issue #18; the
@@ -628,6 +630,41 @@ static void sample_host(PadData *d) {
  * touchpad defaults to a left-side click; lx= ly= rx= ry= (0..255) override
  * the sticks. An empty file releases everything. */
 static struct { uint32_t buttons; int stick[4]; int touch_side; float mouse[2]; } injected={0,{-1,-1,-1,-1},-1,{0,0}};
+/* g2-arm64: the overlay's touch gamepad (runtime.h), written by the render thread every frame
+ * it is drawn, read by the pad sampler; a stick is -1 while no finger drives it. */
+static pthread_mutex_t touch_lock=PTHREAD_MUTEX_INITIALIZER;
+static struct { uint32_t buttons; int stick[4]; uint8_t l2, r2; } touch_pad={0,{-1,-1,-1,-1},0,0};
+void runtime_touch_pad(uint32_t buttons, const int sticks[4], uint8_t l2, uint8_t r2) {
+    pthread_mutex_lock(&touch_lock);
+    const int changed=touch_pad.buttons!=buttons || touch_pad.l2!=l2 || touch_pad.r2!=r2 ||
+        (sticks && (touch_pad.stick[0]!=sticks[0] || touch_pad.stick[1]!=sticks[1] ||
+                    touch_pad.stick[2]!=sticks[2] || touch_pad.stick[3]!=sticks[3]));
+    touch_pad.buttons=buttons;
+    for (int i=0;i<4;++i) touch_pad.stick[i]=sticks ? sticks[i] : -1;
+    touch_pad.l2=l2; touch_pad.r2=r2;
+    pthread_mutex_unlock(&touch_lock);
+    /* BB_TOUCH_PAD_LOG=1: the state on every change (tests of the on-screen gamepad) */
+    static int log=-1;
+    if (log<0) { const char *e=getenv("BB_TOUCH_PAD_LOG"); log=e && e[0]=='1'; }
+    if (log && changed)
+        printf("Touch pad: buttons %#x sticks %d %d %d %d l2 %u r2 %u\n",(unsigned)buttons,
+               touch_pad.stick[0],touch_pad.stick[1],touch_pad.stick[2],touch_pad.stick[3],l2,r2);
+}
+int runtime_gamepad_connected(void) {
+    /* the pad thread's view; before the game's first pad read (logos, loading) SDL's own list,
+     * so the touch gamepad's Auto does not flash on a device with built-in controls */
+    if (__atomic_load_n(&gamepad_present,__ATOMIC_RELAXED)) return 1;
+    return SDL_WasInit(SDL_INIT_GAMEPAD) && SDL_HasGamepad();
+}
+static void merge_touch_pad(PadData *d, uint8_t *axes[4]) {
+    pthread_mutex_lock(&touch_lock);
+    d->buttons|=touch_pad.buttons;
+    for (int i=0;i<4;++i) if (touch_pad.stick[i]>=0) *axes[i]=(uint8_t)touch_pad.stick[i];
+    if (touch_pad.l2>d->l2) d->l2=touch_pad.l2;
+    if (touch_pad.r2>d->r2) d->r2=touch_pad.r2;
+    if ((touch_pad.buttons & BTN_TOUCHPAD) && !d->touch_count) touch_click(d,0);
+    pthread_mutex_unlock(&touch_lock);
+}
 static int replay_armed;      /* 1 while a BB_PAD_REPLAY recording plays, 2 once it ended */
 static uint64_t replay_start; /* 0: (re)start at the next sample */
 static void read_inject(void) {
@@ -773,6 +810,8 @@ static void sample(PadData *d) {
     if (injected.buttons & BTN_R2) d->r2=255;
     uint8_t *axes[4]={&d->left_x,&d->left_y,&d->right_x,&d->right_y};
     for (int i=0;i<4;++i) if (injected.stick[i]>=0) *axes[i]=(uint8_t)injected.stick[i];
+    merge_touch_pad(d,axes); /* g2-arm64: the overlay's touch gamepad */
+    aim_held=(d->buttons & BTN_L2)!=0;
     /* U2, U3 (no joypad callback): the right stick held a little while the mouse turns the follow
      * camera's direction (follow_push, see follow_camera), unless the stick is in use */
     const uint64_t now=now_us();

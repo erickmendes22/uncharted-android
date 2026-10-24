@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- uncharted_pc on the Retroid Pocket G2: SDLActivity + libmain.so (the loader, guest code on
+     FEXCore). No user interface: arguments come from files/args.txt (scripts/g2/game_app). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.unchartedg2.game" android:versionCode="1" android:versionName="0.1">
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
+    <application android:label="Uncharted G2" android:hasCode="true" android:extractNativeLibs="true"
+        android:hardwareAccelerated="true" android:requestLegacyExternalStorage="true"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <!-- simpleperf from adb shell (profiling hot threads), without debuggable's costs. -->
+        <profileable android:shell="true" />
+        <activity android:name="dev.unchartedg2.game.GameActivity" android:exported="true"
+            android:screenOrientation="sensorLandscape" android:launchMode="singleInstance"
+            android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- The public app's launcher (Launcher.java): here only when files/args.txt is missing,
+             or started by hand; it writes env*.txt and args*.txt from its settings. -->
+        <activity android:name="dev.unchartedg2.game.Launcher" android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+        <!-- Restarts the game (sceSystemServiceLoadExec, the port's "apply and restart") once
+             the old game process has ended: a process of its own, a black screen meanwhile. -->
+        <activity android:name="dev.unchartedg2.game.GameActivity$Restart" android:exported="false"
+            android:process=":restart" android:screenOrientation="sensorLandscape"
+            android:excludeFromRecents="true" android:noHistory="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+    </application>
+</manifest>

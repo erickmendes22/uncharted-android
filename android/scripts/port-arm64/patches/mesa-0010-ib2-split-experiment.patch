@@ -1,0 +1,85 @@
+From 78ae11e74ad2c6036dd6436140f2912fc07f476f Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip: TU_IB2_SPLIT=<dwords> splits long draw IB2s at draw
+ boundaries (A735 experiment)
+
+---
+ src/freedreno/vulkan/tu_cmd_buffer.cc |  4 ++++
+ src/freedreno/vulkan/tu_cs.cc         | 24 ++++++++++++++++++++++++
+ src/freedreno/vulkan/tu_cs.h          | 10 ++++++++++
+ 3 files changed, 38 insertions(+)
+
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
+index 3956eac9315..e966921617f 100644
+--- a/src/freedreno/vulkan/tu_cmd_buffer.cc
++++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
+@@ -8430,6 +8430,10 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
+    const struct tu_program_state *program = &cmd->state.program;
+    struct tu_render_pass_state *rp = &cmd->state.rp;
+ 
++   if (unlikely(tu_ib2_split_dwords()) && cs == &cmd->draw_cs &&
++       tu_cs_get_size(cs) >= tu_ib2_split_dwords())
++      tu_cs_split_entry(cs);
++
+    trace_start_draw(
+       &cmd->rp_trace, &cmd->draw_cs, cmd, draw_count,
+       cmd->state.program.stage_blake3[MESA_SHADER_VERTEX],
+diff --git a/src/freedreno/vulkan/tu_cs.cc b/src/freedreno/vulkan/tu_cs.cc
+index 89246aa6c64..54817090bfe 100644
+--- a/src/freedreno/vulkan/tu_cs.cc
++++ b/src/freedreno/vulkan/tu_cs.cc
+@@ -365,6 +365,30 @@ tu_cs_add_entry(struct tu_cs *cs)
+    cs->start = cs->cur;
+ }
+ 
++uint32_t
++tu_ib2_split_dwords(void)
++{
++   static int v = -1;
++   if (v < 0) {
++      const char *env = getenv("TU_IB2_SPLIT");
++      v = env ? (int) strtoul(env, NULL, 0) : 0;
++      if (v)
++         fprintf(stderr, "tu: draw IBs split every %d dwords (TU_IB2_SPLIT)\n", v);
++   }
++   return v;
++}
++
++void
++tu_cs_split_entry(struct tu_cs *cs)
++{
++   if (cs->mode != TU_CS_MODE_GROW || cs->cond_stack_depth || tu_cs_is_empty(cs) ||
++       unlikely(cs->status != VK_SUCCESS))
++      return;
++   if (tu_cs_reserve_entry(cs) != VK_SUCCESS)
++      return;
++   tu_cs_add_entry(cs);
++}
++
+ /**
+  * same behavior as tu_cs_emit_call but without the indirect
+  */
+diff --git a/src/freedreno/vulkan/tu_cs.h b/src/freedreno/vulkan/tu_cs.h
+index e8b84c60c2f..45848be5fd9 100644
+--- a/src/freedreno/vulkan/tu_cs.h
++++ b/src/freedreno/vulkan/tu_cs.h
+@@ -229,6 +229,16 @@ tu_cs_avoid_page_cross(struct tu_cs *cs, uint32_t dwords);
+ void
+ tu_cs_pad_packet(struct tu_cs *cs, uint32_t dwords);
+ 
++/* uncharted-android experiment: TU_IB2_SPLIT=<dwords>: before a draw, a draw IB2 (draw_cs entry)
++ * that has grown past this size is closed and a new one started, so the CP fetches render pass
++ * draws in short IB2s instead of one long one (A735: the CP sometimes reads zeros when it refills
++ * the middle of a long sysmem draw IB2). Only outside conditional regions. */
++uint32_t
++tu_ib2_split_dwords(void);
++
++void
++tu_cs_split_entry(struct tu_cs *cs);
++
+ static inline struct tu_draw_state
+ tu_cs_draw_state(struct tu_cs *sub_cs, struct tu_cs *cs, uint32_t size)
+ {
+-- 
+2.43.0
+

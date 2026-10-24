@@ -1,0 +1,65 @@
+From b724d1d68a853714f161b78cf36fd48f62a798c6 Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip: packet alignment on by default (1 KiB),
+ CP_LOAD_STATE6* too (A735: BV mis-reads a split CP_LOAD_STATE6_FRAG)
+
+---
+ src/freedreno/vulkan/tu_cs.cc |  8 +++++---
+ src/freedreno/vulkan/tu_cs.h  | 12 +++++++-----
+ 2 files changed, 12 insertions(+), 8 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_cs.cc b/src/freedreno/vulkan/tu_cs.cc
+index 528fcf3542e..37a40dc1762 100644
+--- a/src/freedreno/vulkan/tu_cs.cc
++++ b/src/freedreno/vulkan/tu_cs.cc
+@@ -183,12 +183,14 @@ tu_ib_align(void)
+ {
+    static int align = -1;
+    if (align < 0) {
++      /* On by default (1 KiB) on the G2 (A735): its CP mis-reads split entries, which made
++       * the device lost. TU_IB_ALIGN=0 turns it off. */
+       const char *env = getenv("TU_IB_ALIGN");
+-      const unsigned v = env ? strtoul(env, NULL, 0) : 0;
++      const unsigned v = env ? strtoul(env, NULL, 0) : 1024;
+       align = (v >= 64 && v <= 4096 && !(v & (v - 1))) ? (int) v : 0;
+       if (align)
+-         fprintf(stderr, "tu: draw state and register bunch packets kept within %d-byte blocks "
+-                         "(TU_IB_ALIGN)\n", align);
++         fprintf(stderr, "tu: draw state, register bunch and load state packets kept within "
++                         "%d-byte blocks (TU_IB_ALIGN)\n", align);
+    }
+    return align;
+ }
+diff --git a/src/freedreno/vulkan/tu_cs.h b/src/freedreno/vulkan/tu_cs.h
+index 76885d1cb4a..e8b84c60c2f 100644
+--- a/src/freedreno/vulkan/tu_cs.h
++++ b/src/freedreno/vulkan/tu_cs.h
+@@ -221,10 +221,11 @@ tu_ds_no_cross_allowance(uint32_t dwords);
+ VkResult
+ tu_cs_avoid_page_cross(struct tu_cs *cs, uint32_t dwords);
+ 
+-/* uncharted-android: TU_IB_ALIGN=<bytes> (power of two, e.g. 2048): CP_SET_DRAW_STATE and
+- * CP_(NON_)CONTEXT_REG_BUNCH packets in growable streams (IB1/IB2) do not cross a multiple of it;
+- * CP_NOP fills up to the boundary. A735 firmware sometimes mis-reads an entry of these packets
+- * that is split across a 2 KiB fetch boundary (the CP faults on that very entry). */
++/* uncharted-android: TU_IB_ALIGN=<bytes> (power of two, default 1024, 0 = off):
++ * CP_SET_DRAW_STATE, CP_(NON_)CONTEXT_REG_BUNCH and CP_LOAD_STATE6* packets in growable streams
++ * (IB1/IB2) do not cross a multiple of it; CP_NOP fills up to the boundary. The A735 CP sometimes
++ * mis-reads an entry of these packets split across a fetch block (2 KiB for BR: a zero draw state
++ * address, a "protected" register bunch write; 1 KiB for BV: CP_LOAD_STATE6_FRAG). */
+ void
+ tu_cs_pad_packet(struct tu_cs *cs, uint32_t dwords);
+ 
+@@ -404,7 +405,8 @@ tu_cs_emit_pkt7(struct tu_cs *cs, uint8_t opcode, uint16_t cnt)
+    tu_cs_emit_sync_breadcrumb(cs, opcode, cnt + 1);
+ #endif
+ 
+-   if (opcode == CP_SET_DRAW_STATE)
++   if (opcode == CP_SET_DRAW_STATE || opcode == CP_LOAD_STATE6_GEOM ||
++       opcode == CP_LOAD_STATE6_FRAG || opcode == CP_LOAD_STATE6)
+       tu_cs_pad_packet(cs, cnt + 1);
+    tu_cs_reserve(cs, cnt + 1);
+    tu_cs_emit(cs, pm4_pkt7_hdr(opcode, cnt));
+-- 
+2.43.0
+

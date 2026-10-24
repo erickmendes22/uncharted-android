@@ -1,0 +1,54 @@
+From 4c154fa80d89d81c5a9d9574a8671ed781b79840 Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip: split draw IB2s every 256 dwords by default (A735
+ fault workaround)
+
+TU_IB2_SPLIT=0 turns it off. On the G2 the fault site in the long shadow pass
+IB2 went away; the CP still faults rarely elsewhere.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/freedreno/vulkan/tu_cs.cc | 6 ++++--
+ src/freedreno/vulkan/tu_cs.h  | 8 ++++----
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_cs.cc b/src/freedreno/vulkan/tu_cs.cc
+index 74a6b5868c7..eb6f897bab4 100644
+--- a/src/freedreno/vulkan/tu_cs.cc
++++ b/src/freedreno/vulkan/tu_cs.cc
+@@ -370,9 +370,11 @@ tu_ib2_split_dwords(void)
+ {
+    static int v = -1;
+    if (v < 0) {
++      /* On by default: with 256 the long-IB2 fault site on the G2 went away (8 sessions, one
++       * fault burst elsewhere, the same FPS; 2026-10-20). TU_IB2_SPLIT=0 turns it off. */
+       const char *env = getenv("TU_IB2_SPLIT");
+-      v = env ? (int) strtoul(env, NULL, 0) : 0;
+-      if (v)
++      v = env ? (int) strtoul(env, NULL, 0) : 256;
++      if (env && v)
+          fprintf(stderr, "tu: draw IBs split every %d dwords (TU_IB2_SPLIT)\n", v);
+    }
+    return v;
+diff --git a/src/freedreno/vulkan/tu_cs.h b/src/freedreno/vulkan/tu_cs.h
+index 45848be5fd9..5e2723fc731 100644
+--- a/src/freedreno/vulkan/tu_cs.h
++++ b/src/freedreno/vulkan/tu_cs.h
+@@ -229,10 +229,10 @@ tu_cs_avoid_page_cross(struct tu_cs *cs, uint32_t dwords);
+ void
+ tu_cs_pad_packet(struct tu_cs *cs, uint32_t dwords);
+ 
+-/* uncharted-android experiment: TU_IB2_SPLIT=<dwords>: before a draw, a draw IB2 (draw_cs entry)
+- * that has grown past this size is closed and a new one started, so the CP fetches render pass
+- * draws in short IB2s instead of one long one (A735: the CP sometimes reads zeros when it refills
+- * the middle of a long sysmem draw IB2). Only outside conditional regions. */
++/* uncharted-android: TU_IB2_SPLIT=<dwords> (default 256, 0 = off): before a draw, a draw IB2
++ * (draw_cs entry) that has grown past this size is closed and a new one started, so the CP fetches
++ * render pass draws in short IB2s instead of one long one (A735: the CP sometimes reads zeros when
++ * it refills the middle of a long sysmem draw IB2). Only outside conditional regions. */
+ uint32_t
+ tu_ib2_split_dwords(void);
+ 
+-- 
+2.43.0
+

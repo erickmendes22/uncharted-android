@@ -108,6 +108,9 @@ void MemoryManager::InvalidateMemory(VAddr address, u64 size) {
 u64 MemoryManager::ClampRangeSize(VAddr virtual_addr, u64 size) {
     return runtime_memory_clamp(virtual_addr, size);
 }
+bool MemoryManager::IsHostMapped(VAddr virtual_addr, u64 size) {
+    return runtime_memory_is_mapped(virtual_addr, size) != 0;
+}
 static void CopySparseSerial(VAddr source, u8* dest, u64 size) {
     while (size) {
         uintptr_t start = 0, end = 0;

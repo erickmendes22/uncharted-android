@@ -397,6 +397,8 @@ public:
 
     [[nodiscard]] Value ImageQueryLod(const Value& handle, const Value& coords,
                                       TextureInstInfo info);
+    /// g2-arm64: the entry of a T# table binding the next image instruction of it reads.
+    void ImageTableIndex(const U32& handle, const U32& index);
     [[nodiscard]] Value ImageGather(const Value& handle, const Value& coords, const Value& offset,
                                     TextureInstInfo info);
     [[nodiscard]] Value ImageGatherDref(const Value& handle, const Value& coords,

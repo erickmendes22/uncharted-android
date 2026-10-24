@@ -5,6 +5,7 @@
 #include "core/libraries/videoout/driver.h"
 #include <xxhash.h>
 #include "video_core/renderer_vulkan/ui_composition.h"
+#include "bbport_owner_wait.h"
 #include "bbport_toggles.h"
 #include "video_core/renderer_vulkan/vk_frame_capture.h"
 #include "common/debug.h"
@@ -19,7 +20,14 @@
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
+#include "bbport_settings.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
+#include <vector>
+#include <algorithm>
+#include <dlfcn.h>
+#include <mutex>
+#include <unordered_map>
+#include "bbport_tsc.h"
 #include "video_core/renderer_vulkan/vk_gpu_profiler.h"
 #include "bbport_threads.h"
 #include "video_core/renderer_vulkan/vk_runtime.h"
@@ -53,8 +61,12 @@ u32 ConstCheckHash() {
 
 extern bool (*g_draw_pipe_busy)();
 extern bool g_gpu_checkpoints;
+extern bool g_gpu_checkpoints_nv;
+extern bool g_gpu_sync;
+extern bool g_gpu_marker;
 extern VkQueue g_crash_queue;
 extern void (*g_gpu_checkpoint_report)();
+extern u64 (*g_checkpoint_seq)();
 } // namespace Vulkan
 namespace VideoCore {
 void EnableFaultHistory();
@@ -96,7 +108,65 @@ const void* NoteCheckpoint(const char* kind, u64 hash0, u64 hash1, u32 a, u32 b,
     record = {seq, kind, {hash0, hash1}, {a, b, c}, args};
     record.num_buffers = num_checkpoint_buffers;
     std::copy_n(checkpoint_buffers, num_checkpoint_buffers, record.buffers);
+    if (!g_gpu_checkpoints_nv) {
+        return nullptr; // sync mode: no setCheckpointNV marker
+    }
     return reinterpret_cast<const void*>(static_cast<uintptr_t>(seq));
+}
+
+// g2-arm64: BB_GPU_CHECKPOINTS=sync — the command just recorded is submitted and waited for, so
+// a device loss happens in the wait for it and the report names it (and the work before it
+// since the previous draw or dispatch: copies, clears, uploads).
+// BB_GPU_CHECKPOINTS=marker — instead, the GPU writes the number of each draw or dispatch it
+// has completed (with everything before it) to host memory; the render pass ends around it.
+std::atomic<u64> synced_seq{0};
+std::unique_ptr<VideoCore::Buffer> marker_buffer;
+} // namespace
+
+// g2-arm64: the marker buffer for other GPU work (null unless BB_GPU_CHECKPOINTS=marker):
+// word 0 holds the last draw or dispatch completed, word 1 the last tiling dispatch.
+vk::Buffer GpuMarkerBuffer() {
+    return marker_buffer ? marker_buffer->Handle() : vk::Buffer{};
+}
+u64 LatestCheckpoint() {
+    return checkpoint_seq.load(std::memory_order_relaxed);
+}
+
+namespace {
+void SyncCheckpoint(Scheduler& scheduler) {
+    if (g_gpu_marker) {
+        const u32 seq = static_cast<u32>(checkpoint_seq.load(std::memory_order_relaxed));
+        const vk::Buffer buffer = marker_buffer->Handle();
+        scheduler.EndRendering();
+        scheduler.Record([buffer, seq](vk::CommandBuffer cmdbuf) {
+            const vk::MemoryBarrier2 barrier = {
+                .srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+                .srcAccessMask = vk::AccessFlagBits2::eMemoryWrite,
+                .dstStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+                .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            };
+            cmdbuf.pipelineBarrier2(vk::DependencyInfo{.memoryBarrierCount = 1,
+                                                       .pMemoryBarriers = &barrier});
+            cmdbuf.fillBuffer(buffer, 0, sizeof(u32), seq);
+        });
+    }
+    // BB_GPU_SYNC_FROM=N (with BB_GPU_CHECKPOINTS=marker): waits only from checkpoint N on.
+    static const u64 sync_from = [] {
+        const char* env = std::getenv("BB_GPU_SYNC_FROM");
+        return env ? std::strtoull(env, nullptr, 10) : 0;
+    }();
+    const u64 seq = checkpoint_seq.load(std::memory_order_relaxed);
+    if (!g_gpu_sync && !(sync_from && seq >= sync_from)) {
+        return;
+    }
+    scheduler.Finish();
+    if (sync_from) {
+        std::printf("GPU sync: #%llu done\n", static_cast<unsigned long long>(seq));
+    }
+    synced_seq.store(seq, std::memory_order_relaxed);
+    if (seq % 500 == 0) {
+        std::printf("GPU sync: #%llu done\n", static_cast<unsigned long long>(seq));
+    }
 }
 
 void PrintCheckpoint(u64 seq) {
@@ -130,6 +200,40 @@ void PrintCheckpoint(u64 seq) {
 }
 
 void ReportCheckpoints() {
+    if (g_gpu_marker) {
+        marker_buffer->Invalidate(0, 2 * sizeof(u32));
+        u32 done, tiling;
+        std::memcpy(&done, marker_buffer->mapped_data.data(), sizeof(done));
+        std::memcpy(&tiling, marker_buffer->mapped_data.data() + 4, sizeof(tiling));
+        const u64 latest = checkpoint_seq.load();
+        std::printf("GPU crash: marker checkpoints: the GPU completed #%u, latest recorded #%llu; "
+                    "tiling dispatches completed through %u\n",
+                    done, static_cast<unsigned long long>(latest), tiling);
+        for (u64 s = done > 2 ? done - 2 : 1; s <= latest && s <= u64{done} + 12; ++s) {
+            PrintCheckpoint(s);
+        }
+        return;
+    }
+    if (g_gpu_sync) {
+        const u64 synced = synced_seq.load(), latest = checkpoint_seq.load();
+        std::printf("GPU crash: sync checkpoints: completed through #%llu, latest recorded #%llu\n",
+                    static_cast<unsigned long long>(synced),
+                    static_cast<unsigned long long>(latest));
+        for (u64 s = synced > 2 ? synced - 2 : 1; s <= latest && s <= synced + 8; ++s) {
+            PrintCheckpoint(s);
+        }
+        return;
+    }
+    if (!g_gpu_checkpoints_nv) {
+        // ring: the submissions in the stall report name the latest checkpoint each holds.
+        const u64 latest = checkpoint_seq.load();
+        std::printf("GPU crash: ring checkpoints, latest recorded #%llu:\n",
+                    static_cast<unsigned long long>(latest));
+        for (u64 s = latest > 150 ? latest - 149 : 1; s <= latest; ++s) {
+            PrintCheckpoint(s);
+        }
+        return;
+    }
     const auto get = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetQueueCheckpointDataNV;
     if (!g_crash_queue || !get) {
         return;
@@ -190,39 +294,55 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
     if (g_gpu_checkpoints) {
         checkpoint_ring = std::make_unique<CheckpointRecord[]>(CheckpointRingSize);
         g_gpu_checkpoint_report = &ReportCheckpoints;
+        g_checkpoint_seq = [] { return checkpoint_seq.load(std::memory_order_relaxed); };
+        if (g_gpu_marker) {
+            marker_buffer = std::make_unique<VideoCore::Buffer>(
+                instance, 0, 256, VideoCore::MemoryType::HostCached, "GPU checkpoint marker");
+            std::memset(marker_buffer->mapped_data.data(), 0, 2 * sizeof(u32));
+            marker_buffer->Flush(0, 2 * sizeof(u32));
+        }
         VideoCore::EnableFaultHistory();
     }
     if (DrawPipeWanted()) {
         constant_ring = std::make_unique<ConstantRing>(instance, scheduler);
         draw_pipe = std::make_unique<DrawPipe>(&RunDrawPacket, this);
+        InitSkinBatch();
     }
     // bbport: this thread joins the texture binding helper before it changes image state.
     runtime.SetImageAccessHook(&JoinBindHelper, this);
     scheduler.SetSubmitCallback([this](Vulkan::SubmitInfo& info) {
+        FlushSkinBatchForSubmit(); // g2-arm64
         runtime.FlushBarriers();
         buffer_cache.SubmitPendingArenaBinds(info);
     });
+    scheduler.SetQueueWorkCheck([this] { return buffer_cache.HasPendingArenaBinds(); });
     static Rasterizer* busy_check;
     busy_check = this;
     g_draw_pipe_busy = [] { return busy_check->OnStageA() && !busy_check->DrawPipeIdle(); };
+    // g2-arm64: the thread owning the caches (bbport_owner_wait.h): stage B inside a packet, or
+    // stage A with the draw pipe empty.
+    BbOwnerWait::owns_caches = [] {
+        return DrawPipe::OnStageB() || (busy_check->OnStageA() && busy_check->DrawPipeIdle());
+    };
 }
 
 Rasterizer::~Rasterizer() = default;
 
 inline const AmdGpu::Regs& Rasterizer::Regs() const {
-    return stage_regs ? *stage_regs : liverpool->regs;
+    return DrawPipe::OnStageB() && stage_regs ? *stage_regs : liverpool->regs;
 }
 
 inline AmdGpu::CbDbExtent Rasterizer::CbExtent(u32 index) const {
-    return stage_regs ? pipe_cb_extent[index] : liverpool->last_cb_extent[index];
+    return DrawPipe::OnStageB() && stage_regs ? pipe_cb_extent[index]
+                                              : liverpool->last_cb_extent[index];
 }
 
 inline const AmdGpu::ComputeProgram& Rasterizer::CsRegs() const {
-    return stage_cs ? *stage_cs : liverpool->GetCsRegs();
+    return DrawPipe::OnStageB() && stage_cs ? *stage_cs : liverpool->GetCsRegs();
 }
 
 inline AmdGpu::CbDbExtent Rasterizer::DbExtent() const {
-    return stage_regs ? pipe_db_extent : liverpool->last_db_extent;
+    return DrawPipe::OnStageB() && stage_regs ? pipe_db_extent : liverpool->last_db_extent;
 }
 
 namespace {
@@ -404,13 +524,18 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
         // is depth-only (U1's prepass) or draws RGBA16F color (U2's first scene pass) holds the
         // scene depth.
         const auto& depth = texture_cache.GetImage(db_desc.first);
+        // g2-arm64: the display size is the game's own (its resolution patch: 1280x720 on the
+        // G2), not 1920x1080 - below 1080p the search never found the scene and the upscaler
+        // stayed off (the FPS counter's "FSR 3.1" was only the setting).
+        const u32 display_w = u32(BbSettings::Get().game_display_width.load());
+        const u32 display_h = u32(BbSettings::Get().game_display_height.load());
         bool scene_pass = !cb_descs[0].first;
         if (cb_descs[0].first) {
             const auto& color = texture_cache.GetImage(cb_descs[0].first);
             scene_pass = color.info.pixel_format == vk::Format::eR16G16B16A16Sfloat &&
-                         color.info.size.width == 1920 && color.info.size.height == 1080;
+                         color.info.size.width == display_w && color.info.size.height == display_h;
         }
-        if (scene_pass && depth.info.size.width == 1920 && depth.info.size.height == 1080 &&
+        if (scene_pass && depth.info.size.width == display_w && depth.info.size.height == display_h &&
             (depth.info.pixel_format == vk::Format::eD32SfloatS8Uint ||
              depth.info.pixel_format == vk::Format::eD32Sfloat)) {
             camera_motion->OnGBufferPass(db_desc.first);
@@ -491,6 +616,7 @@ struct TaskPacket {
     PacketKind kind;
     u32 size;
     Rasterizer::OrderedTask task;
+    bool passes_skin_batch; // g2-arm64
 };
 struct DrawPacket {
     PacketKind kind;
@@ -527,6 +653,9 @@ u32 VerifyInterval() {
 } // namespace
 
 bool Rasterizer::DrawPipeWanted() {
+    if (g_gpu_sync) {
+        return false; // SyncCheckpoint waits on the thread that records the draw
+    }
     const char* env = std::getenv("BB_DRAW_PIPE");
     if (env && env[0]) {
         return env[0] == '1';
@@ -534,6 +663,14 @@ bool Rasterizer::DrawPipeWanted() {
     // Stage B spins while draws flow. Measured ahead with 16 threads (+19%) and with 4 cores /
     // 8 threads (taskset, Steam Deck-like: +18%).
     return BbThreads::Available() >= 8;
+}
+
+u64 Rasterizer::PendingSubmissions() {
+    Semaphore* semaphore = scheduler.GetWorkSemaphore();
+    semaphore->Refresh();
+    const u64 next = semaphore->CurrentTick(); // the tick the next submission will signal
+    const u64 done = semaphore->KnownGpuTick();
+    return next > done + 1 ? next - 1 - done : 0;
 }
 
 bool Rasterizer::UseDrawPipe() const {
@@ -633,6 +770,106 @@ bool Rasterizer::PendingWriteOverlaps(VAddr address, u64 size) {
     return false;
 }
 
+// g2-arm64: bytes stage A copies per packet (BB_FRAME_STATS; stage A only).
+namespace {
+struct StageACopies {
+    u64 packets, regs, user_data, ring_flat, ring_stream, reused, reused_bytes;
+} g_stage_a_copies{};
+
+// g2-arm64: BB_STREAM_DEDUPE=1 — a stream-path buffer whose bytes (hashed) match a copy made
+// in the ring's current epoch binds that copy instead of copying again: U1 copies ~10 MB per
+// frame this way, ~97% of it the same bytes as the address's previous copy (stage A only).
+struct StreamDedupe {
+    struct Entry {
+        VAddr address;
+        u64 hash;
+        u64 position; ///< ring position of the copy
+        u64 offset;   ///< ring offset of the copy
+        u64 size;
+    };
+    std::array<Entry, 8192> table{};
+    bool epochs = false; ///< the ring keeps epochs
+
+    Entry& Slot(VAddr address, u64 size) {
+        const u64 key = (address ^ (size << 40)) * 0x9E3779B97F4A7C15ull;
+        return table[key >> (64 - 13)];
+    }
+};
+StreamDedupe g_stream_dedupe;
+
+// g2-arm64: on by default (BB_STREAM_DEDUPE=0 turns it off). U2's palace copied 1.37 GB/s of
+// streamed buffers into the ring, 80% of them bytes already in it: with the dedupe 0.27 GB/s
+// copied and the GPU 3 points less busy at the 30 FPS checkpoint (90-92% -> 83-88%, the
+// memory traffic); the same FPS within an interleaved A/B with cool-downs. The check against
+// guest memory (BB_STREAM_DEDUPE_CHECK=1) found 0 differences in 12.6 million reuses in U1.
+bool StreamDedupeEnabled() {
+    static const bool enabled = [] {
+        const char* env = std::getenv("BB_STREAM_DEDUPE");
+        return !(env && env[0] == '0');
+    }();
+    return enabled;
+}
+
+// BB_STREAM_STATS=1: stream-path copies that repeat an address already copied in the same frame
+// (BbStats::gpu_frames), with the same bytes or not, and those equal to the address's previous
+// copy whatever its frame (stage A only).
+void NoteStreamCopy(VAddr address, const u8* copy, u64 size) {
+    struct Last {
+        u64 frame, hash, size;
+    };
+    static std::unordered_map<VAddr, Last> last;
+    static u64 copies, bytes, frame_address, frame_address_bytes, frame_data, frame_data_bytes,
+        any_data, any_data_bytes, first_frame;
+    static std::array<u64, 5> sizes{};
+    static auto window = std::chrono::steady_clock::now();
+    const u64 frame = BbStats::gpu_frames.load(std::memory_order_relaxed);
+    const u64 hash = XXH3_64bits(copy, size);
+    ++copies;
+    bytes += size;
+    ++sizes[size <= 256 ? 0 : size <= 1024 ? 1 : size <= 4096 ? 2 : size <= 8192 ? 3 : 4];
+    const auto [it, inserted] = last.try_emplace(address, Last{frame, hash, size});
+    if (!inserted) {
+        const bool same_data = it->second.hash == hash && it->second.size == size;
+        if (it->second.frame == frame && it->second.size == size) {
+            ++frame_address;
+            frame_address_bytes += size;
+            if (same_data) {
+                ++frame_data;
+                frame_data_bytes += size;
+            }
+        }
+        if (same_data) {
+            ++any_data;
+            any_data_bytes += size;
+        }
+        it->second = {frame, hash, size};
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (now - window < std::chrono::seconds(5)) {
+        return;
+    }
+    const double frames = std::max(1.0, double(frame - first_frame));
+    const auto per = [frames](u64 value) { return double(value) / frames; };
+    const auto mb = [frames](u64 value) { return double(value) / frames / 1048576.0; };
+    std::printf("Stream copies per frame: %.0f (%.2f MB); same address earlier in the frame %.0f "
+                "(%.2f MB), with the same bytes %.0f (%.2f MB); same bytes as the address's last "
+                "copy %.0f (%.2f MB); sizes <=256 %.0f, <=1K %.0f, <=4K %.0f, <=8K %.0f, <=16K "
+                "%.0f; %zu addresses\n",
+                per(copies), mb(bytes), per(frame_address), mb(frame_address_bytes),
+                per(frame_data), mb(frame_data_bytes), per(any_data), mb(any_data_bytes),
+                per(sizes[0]), per(sizes[1]), per(sizes[2]), per(sizes[3]), per(sizes[4]),
+                last.size());
+    copies = bytes = frame_address = frame_address_bytes = frame_data = frame_data_bytes =
+        any_data = any_data_bytes = 0;
+    sizes = {};
+    first_frame = frame;
+    window = now;
+    if (last.size() > (1u << 16)) {
+        last.clear();
+    }
+}
+} // namespace
+
 void Rasterizer::CollectRingBindings(const Shader::Info& stage, const PreparedDraw* prepared,
                            boost::container::static_vector<RingBinding, Shader::NUM_BUFFERS>& out) {
     const PreparedStage* prepared_stage = nullptr;
@@ -649,6 +886,39 @@ void Rasterizer::CollectRingBindings(const Shader::Info& stage, const PreparedDr
     const u64 alignment = std::max<u64>(instance.StorageMinAlignment(),
                                         instance.UniformMinAlignment());
     const auto copy = [&](u32 index, const void* source, VAddr address, u64 size) {
+        StreamDedupe::Entry* entry = nullptr;
+        u64 hash = 0;
+        if (!source && StreamDedupeEnabled() && memory->IsHostMapped(address, size)) {
+            hash = XXH3_64bits(reinterpret_cast<const void*>(address), size);
+            entry = &g_stream_dedupe.Slot(address, size);
+            if (entry->address == address && entry->size == size && entry->hash == hash &&
+                entry->position >= constant_ring->EpochStart()) {
+                ++g_stage_a_copies.reused;
+                g_stage_a_copies.reused_bytes += size;
+                // BB_STREAM_DEDUPE_CHECK=1: the copy bound again still holds those bytes.
+                static const bool check = std::getenv("BB_STREAM_DEDUPE_CHECK") != nullptr;
+                if (check) {
+                    static u64 checked = 0, differ = 0;
+                    ++checked;
+                    if (std::memcmp(constant_ring->Data(entry->offset),
+                                    reinterpret_cast<const void*>(address), size) != 0 &&
+                        differ++ < 16) {
+                        std::printf("Stream dedupe check: copy of %#llx (%llu bytes) at ring "
+                                    "offset %#llx differs from guest memory\n",
+                                    static_cast<unsigned long long>(address),
+                                    static_cast<unsigned long long>(size),
+                                    static_cast<unsigned long long>(entry->offset));
+                    }
+                    if ((checked & 0xfffff) == 0) {
+                        std::printf("Stream dedupe check: %llu reuses checked, %llu differ\n",
+                                    static_cast<unsigned long long>(checked),
+                                    static_cast<unsigned long long>(differ));
+                    }
+                }
+                out.push_back({index, static_cast<u32>(size), entry->offset, address});
+                return;
+            }
+        }
         const auto offset = constant_ring->Allocate(size, alignment);
         if (!offset) {
             return;
@@ -656,8 +926,19 @@ void Rasterizer::CollectRingBindings(const Shader::Info& stage, const PreparedDr
         u8* dst = constant_ring->Data(*offset);
         if (source) {
             std::memcpy(dst, source, size);
+            g_stage_a_copies.ring_flat += size;
         } else {
-            memory->CopySparseMemory(address, dst, size);
+            if (entry) {
+                std::memcpy(dst, reinterpret_cast<const void*>(address), size); // mapped
+                *entry = {address, hash, constant_ring->LastAllocation(), *offset, size};
+            } else {
+                memory->CopySparseMemory(address, dst, size);
+            }
+            g_stage_a_copies.ring_stream += size;
+            static const bool stream_stats = std::getenv("BB_STREAM_STATS") != nullptr;
+            if (stream_stats) {
+                NoteStreamCopy(address, dst, size);
+            }
         }
         constant_ring->Flush(*offset, size);
         out.push_back({index, static_cast<u32>(size), *offset, address});
@@ -705,20 +986,16 @@ void Rasterizer::PostDraw(const Pipeline* pipeline, const PreparedDraw* used_pre
     }
     std::array<u16, AmdGpu::RegDirty::NumBlocks> blocks;
     u32 num_blocks = 0;
-#ifdef __GLIBCXX__
-    for (size_t block = dirty.blocks._Find_first(); block < dirty.blocks.size();
-         block = dirty.blocks._Find_next(block)) {
-        blocks[num_blocks++] = static_cast<u16>(block);
-    }
-#else
-    if (dirty.blocks.any()) {
-        for (size_t block = 0; block < dirty.blocks.size(); ++block) {
+    static const bool bit_scan = std::getenv("BB_REGS_BITSCAN") != nullptr; // A/B: as before
+    if (bit_scan) {
+        for (u32 block = 0; block < dirty.blocks.size(); ++block) {
             if (dirty.blocks.test(block)) {
                 blocks[num_blocks++] = static_cast<u16>(block);
             }
         }
+    } else {
+        dirty.blocks.ForEach([&](u32 block) { blocks[num_blocks++] = static_cast<u16>(block); });
     }
-#endif
     const auto stages =
         pipeline ? pipeline->GetStages() : std::span<const Shader::Info* const>{};
     // Constants: copied here into the ring, the recording thread only binds them.
@@ -728,6 +1005,13 @@ void Rasterizer::PostDraw(const Pipeline* pipeline, const PreparedDraw* used_pre
     u32 num_stages = 0;
     u32 size = sizeof(DrawPacket) + AlignPacket(num_blocks * sizeof(u16)) +
                num_blocks * AmdGpu::RegDirty::BlockWords * sizeof(u32);
+    if (constant_ring && StreamDedupeEnabled()) {
+        if (!g_stream_dedupe.epochs) {
+            constant_ring->EnableEpochs();
+            g_stream_dedupe.epochs = true;
+        }
+        constant_ring->NextEpochIfFull();
+    }
     for (const auto* stage : stages) {
         if (stage) {
             auto& ring = rings[num_stages];
@@ -834,6 +1118,14 @@ void Rasterizer::PostDraw(const Pipeline* pipeline, const PreparedDraw* used_pre
     }
     dirty.Clear();
     draw_pipe->Commit(static_cast<u32>(out - start));
+    g_stage_a_copies.packets += static_cast<u64>(out - start);
+    g_stage_a_copies.regs += num_blocks * AmdGpu::RegDirty::BlockWords * sizeof(u32);
+    for (const auto* stage : stages) {
+        if (stage) {
+            g_stage_a_copies.user_data +=
+                (stage->user_data.size() + stage->flattened_ud_buf.size()) * sizeof(u32);
+        }
+    }
     PrintPipeStats();
 }
 
@@ -849,7 +1141,8 @@ void Rasterizer::RetireSubmission() {
     }
 }
 
-bool Rasterizer::RunInOrder(OrderedTask task, const void* data, u32 size, u64 toggle) {
+bool Rasterizer::RunInOrder(OrderedTask task, const void* data, u32 size, u64 toggle,
+                            bool passes_skin_batch) {
     if (!UseDrawPipe() || BbToggle::Disabled(toggle)) {
         DrainDrawPipe(DrawPipe::ReasonRasterizer);
         task(*this, static_cast<const u8*>(data));
@@ -857,16 +1150,131 @@ bool Rasterizer::RunInOrder(OrderedTask task, const void* data, u32 size, u64 to
     }
     const u32 total = sizeof(TaskPacket) + AlignPacket(size);
     u8* out = draw_pipe->Begin(total);
-    *reinterpret_cast<TaskPacket*>(out) = {PacketKind::Task, size, task};
+    *reinterpret_cast<TaskPacket*>(out) = {PacketKind::Task, size, task, passes_skin_batch};
     std::memcpy(out + sizeof(TaskPacket), data, size);
     draw_pipe->Commit(total);
     return true;
 }
 
+namespace {
+// g2-arm64 diagnosis: BB_SLOW_PACKETS=1 prints every 5 s the draw pipe packets that took the
+// recording thread over 200 us, by task function or pipeline (U1: the ~57 packets left when
+// stage A ends a frame take ~155 us each, the end-of-frame drain ~9 ms).
+struct SlowPackets {
+    struct Entry {
+        u64 count = 0, ticks = 0, max_ticks = 0;
+        u32 kind = 0;
+        const void* what = nullptr;
+    };
+    std::mutex mutex;
+    std::unordered_map<u64, Entry> entries;
+    u64 all_count = 0, all_ticks = 0, window_start = 0;
+};
+
+SlowPackets& GetSlowPackets() {
+    static SlowPackets slow;
+    return slow;
+}
+
+bool SlowPacketsOn() {
+    static const bool on = std::getenv("BB_SLOW_PACKETS") != nullptr;
+    return on;
+}
+
+u64 TicksPerUs() {
+    static const u64 ticks = [] {
+        const u64 t0 = bb_rdtsc();
+        const auto c0 = std::chrono::steady_clock::now();
+        while (std::chrono::steady_clock::now() - c0 < std::chrono::milliseconds(2)) {
+        }
+        return std::max<u64>((bb_rdtsc() - t0) / 2000, 1);
+    }();
+    return ticks;
+}
+
+void NoteSlowPacket(u32 kind, const void* what, u64 ticks) {
+    auto& slow = GetSlowPackets();
+    std::scoped_lock lk{slow.mutex};
+    ++slow.all_count;
+    slow.all_ticks += ticks;
+    const u64 per_us = TicksPerUs();
+    if (ticks >= 200 * per_us) {
+        auto& entry = slow.entries[reinterpret_cast<u64>(what) ^ (u64(kind) << 56)];
+        ++entry.count;
+        entry.ticks += ticks;
+        entry.max_ticks = std::max(entry.max_ticks, ticks);
+        entry.kind = kind;
+        entry.what = what;
+    }
+    const u64 now = bb_rdtsc();
+    if (slow.window_start == 0) {
+        slow.window_start = now;
+        return;
+    }
+    if (now - slow.window_start < 5'000'000 * per_us) {
+        return;
+    }
+    const double secs = double(now - slow.window_start) / per_us / 1e6;
+    std::vector<std::pair<u64, SlowPackets::Entry>> top(slow.entries.begin(), slow.entries.end());
+    std::ranges::sort(top, [](const auto& a, const auto& b) { return a.second.ticks > b.second.ticks; });
+    std::printf("Slow packets over %.1f s: %.0f packets/s, %.1f ms/s on the recording thread; "
+                "over 200 us:\n",
+                secs, slow.all_count / secs, slow.all_ticks / 1e3 / per_us / secs);
+    static constexpr const char* kinds[] = {"draw", "task", "dispatch", "special", "indirect",
+                                            "indirect dispatch"};
+    for (size_t i = 0; i < top.size() && i < 10; ++i) {
+        const auto& e = top[i].second;
+        std::string what;
+        if (e.kind == 1) { // a task: its function, as an offset for llvm-symbolizer
+            Dl_info info{};
+            const u64 base = dladdr(e.what, &info) && info.dli_fbase
+                                 ? reinterpret_cast<u64>(info.dli_fbase)
+                                 : 0;
+            what = fmt::format("task +{:#x}", reinterpret_cast<u64>(e.what) - base);
+        } else if (e.what) {
+            const auto* pipeline = static_cast<const Pipeline*>(e.what);
+            for (const auto* stage : pipeline->GetStages()) {
+                if (stage) {
+                    what += fmt::format(" {:016x}", stage->pgm_hash);
+                }
+            }
+        }
+        std::printf("  %-17s %6.1f/s %7.0f us each (max %6.0f) %6.1f ms/s %s\n",
+                    kinds[std::min<u32>(e.kind, 5)], e.count / secs,
+                    double(e.ticks) / per_us / e.count, double(e.max_ticks) / per_us,
+                    e.ticks / 1e3 / per_us / secs, what.c_str());
+    }
+    slow.entries.clear();
+    slow.all_count = slow.all_ticks = 0;
+    slow.window_start = now;
+}
+
+struct SlowPacketTimer {
+    u32 kind;
+    const void* what;
+    u64 start;
+    ~SlowPacketTimer() {
+        if (start) {
+            NoteSlowPacket(kind, what, bb_rdtsc() - start);
+        }
+    }
+};
+} // namespace
+
 void Rasterizer::RunDrawPacket(void* context, const u8* data, u32 size) {
     auto& self = *static_cast<Rasterizer*>(context);
+    const auto packet_kind = *reinterpret_cast<const PacketKind*>(data);
+    const SlowPacketTimer slow_timer{
+        u32(packet_kind),
+        packet_kind == PacketKind::Task
+            ? reinterpret_cast<const void*>(reinterpret_cast<const TaskPacket*>(data)->task)
+            : static_cast<const void*>(reinterpret_cast<const DrawPacket*>(data)->pipeline),
+        SlowPacketsOn() ? bb_rdtsc() : 0};
     if (*reinterpret_cast<const PacketKind*>(data) == PacketKind::Task) {
         const auto& task = *reinterpret_cast<const TaskPacket*>(data);
+        if (!task.passes_skin_batch) {
+            self.FlushSkinBatch(0, reinterpret_cast<u64>(task.task)); // g2-arm64: batch first
+        }
         task.task(self, data + sizeof(TaskPacket));
         return;
     }
@@ -884,6 +1292,7 @@ void Rasterizer::RunDrawPacket(void* context, const u8* data, u32 size) {
         in += AmdGpu::RegDirty::BlockWords * sizeof(u32);
     }
     ASSERT(packet.num_stages <= Shader::Info::MaxUdSnapshots);
+    Shader::Info::ud_snapshot_thread.SetCurrent();
     for (u32 i = 0; i < packet.num_stages; ++i) {
         const auto& stage = *reinterpret_cast<const PacketStage*>(in);
         in += sizeof(PacketStage);
@@ -928,7 +1337,7 @@ void Rasterizer::RunDrawPacket(void* context, const u8* data, u32 size) {
                 continue;
             }
             runtime_fault_recover = &recover;
-            srt.walker_func(snapshot.user_data, flat.data());
+            Shader::RunSrtWalker(srt.walker_func, snapshot.user_data, flat.data());
             runtime_fault_recover = nullptr;
             if (std::memcmp(flat.data(), snapshot.flat, snapshot.flat_size * sizeof(u32)) != 0) {
                 u32 first = 0, count = 0;
@@ -965,7 +1374,11 @@ void Rasterizer::RunDrawPacket(void* context, const u8* data, u32 size) {
         }
     }
     ASSERT(static_cast<u32>(in - data) == size);
-    stage_regs = &regs;
+    if (!cs || indirect) {
+        // g2-arm64: direct dispatches decide in DispatchRecord.
+        self.FlushSkinBatch(0, packet.kind == PacketKind::Special ? 1 : 2);
+    }
+    self.stage_regs = &regs;
     self.pipe_cb_extent = packet.cb_extent;
     self.pipe_db_extent = packet.db_extent;
     if (packet.kind == PacketKind::Special) {
@@ -974,14 +1387,14 @@ void Rasterizer::RunDrawPacket(void* context, const u8* data, u32 size) {
         self.scheduler.PopPendingOperations();
         self.FilterDraw();
     } else if (cs) {
-        stage_cs = cs;
+        self.stage_cs = cs;
         const auto* pipeline = static_cast<const ComputePipeline*>(packet.pipeline);
         if (indirect) {
             self.DispatchIndirectRecord(pipeline, indirect->args, indirect->stride);
         } else {
             self.DispatchRecord(pipeline);
         }
-        stage_cs = nullptr;
+        self.stage_cs = nullptr;
     } else if (indirect) {
         self.DrawIndirectRecord(static_cast<const GraphicsPipeline*>(packet.pipeline),
                                 packet.is_indexed, *indirect);
@@ -1002,20 +1415,22 @@ void Rasterizer::PrintPipeStats() {
         return;
     }
     static auto window = std::chrono::steady_clock::now();
-    static u64 last_packets = 0, last_drains = 0, last_drain_cycles = 0, last_busy = 0;
-    static u64 last_tsc = __rdtsc();
+    static u64 last_packets = 0, last_drains = 0, last_drain_cycles = 0, last_busy = 0,
+               last_drain_sleeps = 0;
+    static u64 last_tsc = bb_rdtsc();
     const auto now = std::chrono::steady_clock::now();
     const double seconds = std::chrono::duration<double>(now - window).count();
     if (seconds < 5.0) {
         return;
     }
-    const u64 tsc = __rdtsc();
+    const u64 tsc = bb_rdtsc();
     const double cycles = double(tsc - last_tsc);
     const u64 busy = draw_pipe->busy_cycles.load(std::memory_order_relaxed);
-    std::printf("Draw pipe: %.0f draws/s pipelined, %.0f drains/s that waited, stage A waited "
-                "%.1f%%, stage B busy %.1f%%\n",
+    std::printf("Draw pipe: %.0f draws/s pipelined, %.0f drains/s that waited (%.0f/s slept), "
+                "stage A waited %.1f%%, stage B busy %.1f%%\n",
                 (draw_pipe->packets - last_packets) / seconds,
                 (draw_pipe->drains - last_drains) / seconds,
+                (draw_pipe->drain_sleeps - last_drain_sleeps) / seconds,
                 100.0 * (draw_pipe->drain_cycles - last_drain_cycles) / cycles,
                 100.0 * (busy - last_busy) / cycles);
     std::printf("  drains by reason/s:");
@@ -1034,6 +1449,19 @@ void Rasterizer::PrintPipeStats() {
             }
         }
     }
+    const auto mbs = [seconds](u64& bytes) {
+        const double value = double(bytes) / seconds / 1048576.0;
+        bytes = 0;
+        return value;
+    };
+    std::printf("\n  stage A copies MB/s: packets %.1f (registers %.1f, user data and flat buffers "
+                "%.1f), constant ring flat buffers %.1f, stream buffers %.1f; reused stream "
+                "copies %.0f/s (%.1f MB/s)",
+                mbs(g_stage_a_copies.packets), mbs(g_stage_a_copies.regs),
+                mbs(g_stage_a_copies.user_data), mbs(g_stage_a_copies.ring_flat),
+                mbs(g_stage_a_copies.ring_stream), double(g_stage_a_copies.reused) / seconds,
+                mbs(g_stage_a_copies.reused_bytes));
+    g_stage_a_copies.reused = 0;
     std::printf("\n  stage A waits over 0.5%%:");
     for (const auto& [function, lines] : drain_sites) {
         for (const auto& [line, waited] : lines) {
@@ -1050,6 +1478,7 @@ void Rasterizer::PrintPipeStats() {
     last_packets = draw_pipe->packets;
     last_drains = draw_pipe->drains;
     last_drain_cycles = draw_pipe->drain_cycles;
+    last_drain_sleeps = draw_pipe->drain_sleeps;
     last_busy = busy;
 }
 
@@ -1206,7 +1635,7 @@ void Rasterizer::CheckConstants() {
         std::memcpy(flat.data(), snapshot.user_data.data(),
                     std::min(flat.size(), snapshot.user_data.size()) * sizeof(u32));
         if (snapshot.walker) {
-            snapshot.walker(snapshot.user_data.data(), flat.data());
+            Shader::RunSrtWalker(snapshot.walker, snapshot.user_data.data(), flat.data());
         }
         std::string changes;
         for (size_t i = 0; i < flat.size(); ++i) {
@@ -1330,7 +1759,7 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     if (!bound) {
         return;
     }
-    const auto state = BeginRendering(pipeline);
+    auto state = BeginRendering(pipeline); // g2-arm64: BB_CLEAR_PS may change it
 
     if (!inputs_resolved) {
         ResolveVertexBuffers(pipeline, draw_prepared);
@@ -1570,6 +1999,148 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     }
     UpdateDynamicState(pipeline, is_indexed);
     MarkPass(pipeline, state);
+    // g2-arm64 experiment: BB_CLEAR_PS=<hash>: the render pass of that pixel shader's draws
+    // clears its first color attachment instead of loading it.
+    static const u32 clear_ps = [] {
+        const char* env = std::getenv("BB_CLEAR_PS");
+        return env ? u32(std::strtoul(env, nullptr, 16)) : 0u;
+    }();
+    if (clear_ps && state.num_color_attachments > 0) {
+        const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+        if (ps && u32(ps->pgm_hash) == clear_ps) {
+            state.color_attachments[0].is_clear = 1;
+            state.color_attachments[0].clear_value = {};
+        }
+    }
+    // g2-arm64 experiment: BB_REDIRECT_PS=<hash>: that pixel shader's draws render into a
+    // scratch 1920x1080 RGBA8 image of their own instead of their first color target.
+    static const u32 redirect_ps = [] {
+        const char* env = std::getenv("BB_REDIRECT_PS");
+        return env ? u32(std::strtoul(env, nullptr, 16)) : 0u;
+    }();
+    if (redirect_ps && state.num_color_attachments > 0) {
+        const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+        if (ps && u32(ps->pgm_hash) == redirect_ps) {
+            static VideoCore::UniqueImage scratch{instance.GetDevice(), instance.GetAllocator()};
+            static vk::UniqueImageView scratch_view;
+            if (!scratch_view) {
+                scratch.Create(vk::ImageCreateInfo{
+                    .imageType = vk::ImageType::e2D,
+                    .format = vk::Format::eR8G8B8A8Unorm,
+                    .extent = {1920, 1080, 1},
+                    .mipLevels = 1,
+                    .arrayLayers = 1,
+                    .samples = vk::SampleCountFlagBits::e1,
+                    .tiling = vk::ImageTiling::eOptimal,
+                    .usage = vk::ImageUsageFlagBits::eColorAttachment |
+                             vk::ImageUsageFlagBits::eTransferDst,
+                    .initialLayout = vk::ImageLayout::eUndefined,
+                });
+                scratch_view = Check(instance.GetDevice().createImageViewUnique(vk::ImageViewCreateInfo{
+                    .image = scratch.image,
+                    .viewType = vk::ImageViewType::e2D,
+                    .format = vk::Format::eR8G8B8A8Unorm,
+                    .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+                }));
+                scheduler.EndRendering();
+                scheduler.Record([image = vk::Image{scratch.image}](vk::CommandBuffer cmdbuf) {
+                    const vk::ImageMemoryBarrier2 barrier = {
+                        .srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+                        .dstStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                        .dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+                        .oldLayout = vk::ImageLayout::eUndefined,
+                        .newLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                        .image = image,
+                        .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
+                    };
+                    cmdbuf.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1,
+                                                               .pImageMemoryBarriers = &barrier});
+                });
+            }
+            state.color_attachments[0].image_view = *scratch_view;
+            state.color_attachments[0].image_layout = vk::ImageLayout::eColorAttachmentOptimal;
+            state.width = 1920;
+            state.height = 1080;
+        }
+    }
+    // g2-arm64 diagnosis: the render pass of the BB_TRACE_SHADER pixel shader's draws (read
+    // once: a getenv per draw scanned the environment, ~1% of the draw recording thread).
+    static const char* const trace = std::getenv("BB_TRACE_SHADER");
+    if (trace) {
+        const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+        static std::atomic<u32> traced_rp{0};
+        if (ps && u32(ps->pgm_hash) == u32(std::strtoul(trace, nullptr, 16)) &&
+            traced_rp++ < 6) {
+            std::printf("Trace %08x render pass %ux%u layers %u colors %u%s\n", u32(ps->pgm_hash),
+                        state.width, state.height, state.num_layers, state.num_color_attachments,
+                        scheduler.WillBeginRendering(state) ? " (new)" : " (continued)");
+            {
+                const auto& d = scheduler.GetDynamicState();
+                std::printf("Trace %08x dynamic depth %d/%d op %d bounds %d %.2f-%.2f bias %d "
+                            "stencil %d ref %u/%u wmask %x/%x cmask %x/%x restart %d discard %d "
+                            "cull %u front %d cwm %x line %.1f feedback %d\n",
+                            u32(ps->pgm_hash), d.depth_test_enabled, d.depth_write_enabled,
+                            int(d.depth_compare_op), d.depth_bounds_test_enabled,
+                            d.depth_bounds_min, d.depth_bounds_max, d.depth_bias_enabled,
+                            d.stencil_test_enabled, d.stencil_front_reference,
+                            d.stencil_back_reference, d.stencil_front_write_mask,
+                            d.stencil_back_write_mask, d.stencil_front_compare_mask,
+                            d.stencil_back_compare_mask, d.primitive_restart_enable,
+                            d.rasterizer_discard_enable, u32(d.cull_mode), int(d.front_face),
+                            d.color_write_masks.empty() ? 0u : u32(d.color_write_masks[0]),
+                            d.line_width, d.feedback_loop_enabled);
+            }
+            for (const auto& w : set_writes) {
+                std::printf("Trace %08x   write binding %u type %s count %u", u32(ps->pgm_hash),
+                            w.dstBinding, vk::to_string(w.descriptorType).c_str(),
+                            w.descriptorCount);
+                if (w.pBufferInfo) {
+                    std::printf(" buffer %p offset 0x%llx range 0x%llx",
+                                static_cast<void*>(static_cast<VkBuffer>(w.pBufferInfo->buffer)),
+                                static_cast<unsigned long long>(w.pBufferInfo->offset),
+                                static_cast<unsigned long long>(w.pBufferInfo->range));
+                }
+                if (w.pImageInfo) {
+                    std::printf(" view %p sampler %p layout %s",
+                                static_cast<void*>(static_cast<VkImageView>(w.pImageInfo->imageView)),
+                                static_cast<void*>(static_cast<VkSampler>(w.pImageInfo->sampler)),
+                                vk::to_string(w.pImageInfo->imageLayout).c_str());
+                }
+                std::printf("\n");
+            }
+            const auto& key = pipeline->GetGraphicsKey();
+            const auto* bytes = reinterpret_cast<const u8*>(&key);
+            std::printf("Trace %08x key", u32(ps->pgm_hash));
+            for (size_t b = sizeof(key.stage_hashes); b < sizeof(key); ++b) {
+                std::printf("%s%02x", (b - sizeof(key.stage_hashes)) % 16 ? "" : " ", bytes[b]);
+            }
+            std::printf("\n");
+            for (u32 c = 0; c < state.num_color_attachments; ++c) {
+                const auto& a = state.color_attachments[c];
+                std::printf("Trace %08x   color %u view %p layout %s clear %u", u32(ps->pgm_hash),
+                            c, static_cast<void*>(static_cast<VkImageView>(a.image_view)),
+                            vk::to_string(a.image_layout).c_str(), a.is_clear);
+                if (cb_descs[c].first) {
+                    const auto& image = texture_cache.GetImage(cb_descs[c].first);
+                    std::printf(" image %ux%u %s guest 0x%llx", image.info.size.width,
+                                image.info.size.height,
+                                vk::to_string(image.info.pixel_format).c_str(),
+                                static_cast<unsigned long long>(image.info.guest_address));
+                }
+                std::printf("\n");
+            }
+            const auto& ds = scheduler.GetDynamicState();
+            if (!ds.viewports.empty()) {
+                const auto& v = ds.viewports[0];
+                std::printf("Trace %08x   viewport %.1f,%.1f %.1fx%.1f scissor %d,%d %ux%u\n",
+                            u32(ps->pgm_hash), v.x, v.y, v.width, v.height,
+                            ds.scissors.empty() ? 0 : ds.scissors[0].offset.x,
+                            ds.scissors.empty() ? 0 : ds.scissors[0].offset.y,
+                            ds.scissors.empty() ? 0u : ds.scissors[0].extent.width,
+                            ds.scissors.empty() ? 0u : ds.scissors[0].extent.height);
+            }
+        }
+    }
     scheduler.BeginRendering(state);
 
     const auto& vs_info = pipeline->GetStage(Shader::SwStage::Vertex);
@@ -1577,7 +2148,13 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     const auto [vertex_offset, instance_offset] = GetDrawOffsets(regs, vs_info, fetch_shader);
 
     const vk::Pipeline handle = pipeline->Handle();
-    const u32 num_indices = regs.num_indices;
+    u32 num_indices = regs.num_indices;
+    // g2-arm64 experiment (BB_RECT_TRIM=1): rect lists are patches of 3 control points; the
+    // vertices past the last whole patch are dropped here instead of by the driver.
+    static const bool rect_trim = std::getenv("BB_RECT_TRIM") != nullptr;
+    if (rect_trim && !is_indexed && regs.primitive_type == AmdGpu::PrimitiveType::RectList) {
+        num_indices -= num_indices % 3;
+    }
     const u32 num_instances = regs.num_instances.NumInstances();
     const u32 first_vertex = vertex_offset;
     const u32 first_instance = instance_offset;
@@ -1587,17 +2164,42 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         checkpoint = NoteCheckpoint("draw", vs_info.pgm_hash, ps ? ps->pgm_hash : 0, num_indices,
                                     num_instances, 0, 0);
     }
+    // g2-arm64 experiment: BB_NO_FRAGMENTS_PS=<hash>: draws with that pixel shader get an empty
+    // scissor (the geometry stages run, no fragment does).
+    static const u32 no_fragments_ps = [] {
+        const char* env = std::getenv("BB_NO_FRAGMENTS_PS");
+        return env ? u32(std::strtoul(env, nullptr, 16)) : 0u;
+    }();
+    // BB_NO_DRAW_PS=<hash>: everything of the draw is recorded but the draw command itself.
+    static const u32 no_draw_ps = [] {
+        const char* env = std::getenv("BB_NO_DRAW_PS");
+        return env ? u32(std::strtoul(env, nullptr, 16)) : 0u;
+    }();
+    const auto* draw_ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+    const bool no_fragments = no_fragments_ps && draw_ps && u32(draw_ps->pgm_hash) == no_fragments_ps;
+    const bool no_draw = no_draw_ps && draw_ps && u32(draw_ps->pgm_hash) == no_draw_ps;
     scheduler.Record([=](vk::CommandBuffer cmdbuf) {
         if (checkpoint) {
             cmdbuf.setCheckpointNV(checkpoint);
         }
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, handle);
+        if (no_fragments) {
+            const vk::Rect2D empty{};
+            cmdbuf.setScissorWithCount(1, &empty);
+        }
+        if (no_draw) {
+            return;
+        }
         if (is_indexed) {
             cmdbuf.drawIndexed(num_indices, num_instances, 0, s32(first_vertex), first_instance);
         } else {
             cmdbuf.draw(num_indices, num_instances, first_vertex, first_instance);
         }
     });
+    if (no_fragments) {
+        scheduler.GetDynamicState().dirty_state.scissors = true;
+    }
+    SyncCheckpoint(scheduler);
     if (upscaler->Enabled() && cb_descs[0].first) {
         const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
         upscaler->OnDrawRecorded(ps ? ps->pgm_hash : 0, cb_descs[0].first);
@@ -1772,6 +2374,7 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
 
     ResetBindings(false);
     scheduler.KickRecording();
+    SyncCheckpoint(scheduler);
 }
 
 void Rasterizer::DispatchDirect() {
@@ -1782,20 +2385,28 @@ void Rasterizer::DispatchDirect() {
     if (!pipelined) {
         DrainDrawPipe();
     }
-    const ComputePipeline* pipeline = pipeline_cache.GetComputePipeline();
+    const ComputePipeline* pipeline = pipeline_cache.GetComputePipeline(true);
     if (!pipeline) {
         return;
     }
-    if (pipelined &&
-        !IsGuestMemoryShaderHLE(pipeline->GetStage(Shader::SwStage::Compute).pgm_hash)) {
-        PostDraw(pipeline, nullptr, false, 0, &CsRegs());
-        return;
+    if (pipelined) {
+        const auto& cs = pipeline->GetStage(Shader::SwStage::Compute);
+        if (!IsGuestMemoryShaderHLE(cs.pgm_hash) ||
+            PipelineGuestMemoryShaderHLE(cs, CsRegs(), *this)) {
+            PostDraw(pipeline, nullptr, false, 0, &CsRegs());
+            return;
+        }
     }
     DrainDrawPipe();
     DispatchRecord(pipeline);
 }
 
 void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
+    // g2-arm64: the skinning batch: other dispatches record it first, its own join it.
+    const bool skin_job = IsSkinBatchShader(pipeline->GetStage(Shader::SwStage::Compute).pgm_hash);
+    if (!skin_job) {
+        FlushSkinBatch(0, pipeline->GetStage(Shader::SwStage::Compute).pgm_hash);
+    }
     FrameCapture::Poll();
     gbuffer_draw = false;
 
@@ -1857,7 +2468,11 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
         }
     }
 
-    if (!BindResources(pipeline)) {
+    bool skin_bound = false;
+    if (skin_job && AddSkinJob(pipeline, cs_program, skin_bound)) {
+        return;
+    }
+    if (!skin_bound && !BindResources(pipeline)) {
         return;
     }
     if (StaleCheckEnabled()) {
@@ -1978,7 +2593,50 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
         }
     }
 
-    if (needs_barrier) {
+    // g2-arm64 diagnosis: BB_CS_BARRIER_STATS=1 counts, per compute shader, the dispatches that
+    // needed a barrier before them; BB_CS_NO_BARRIER=<hash,...> skips that barrier for these
+    // shaders when it is a memory barrier only (an experiment: unsafe if they really depend).
+    static const bool barrier_stats = std::getenv("BB_CS_BARRIER_STATS") != nullptr;
+    static const std::vector<u64> no_barrier = [] {
+        std::vector<u64> hashes;
+        if (const char* env = std::getenv("BB_CS_NO_BARRIER")) {
+            for (const char* q = env; *q;) {
+                char* end;
+                hashes.push_back(std::strtoull(q, &end, 16));
+                q = *end == ',' ? end + 1 : end;
+                if (end == q && *q) {
+                    break;
+                }
+            }
+        }
+        return hashes;
+    }();
+    if (barrier_stats) {
+        static std::mutex stats_mutex;
+        static std::unordered_map<u64, std::pair<u64, u64>> stats;
+        static u64 total = 0;
+        std::scoped_lock lock{stats_mutex};
+        auto& entry = stats[cs.pgm_hash];
+        ++entry.first;
+        entry.second += needs_barrier;
+        if (++total % 20000 == 0) {
+            std::vector<std::pair<u64, std::pair<u64, u64>>> top(stats.begin(), stats.end());
+            std::sort(top.begin(), top.end(),
+                      [](const auto& a, const auto& b) { return a.second.first > b.second.first; });
+            std::printf("CS barriers over %llu dispatches:", static_cast<unsigned long long>(total));
+            for (size_t i = 0; i < top.size() && i < 8; ++i) {
+                std::printf(" %08llx %llu/%llu", static_cast<unsigned long long>(top[i].first),
+                            static_cast<unsigned long long>(top[i].second.second),
+                            static_cast<unsigned long long>(top[i].second.first));
+            }
+            std::printf("\n");
+            stats.clear();
+        }
+    }
+    if (needs_barrier &&
+        !(std::find(no_barrier.begin(), no_barrier.end(), u64(u32(cs.pgm_hash))) !=
+              no_barrier.end() &&
+          !runtime.HasImageBarriers())) {
         runtime.FlushBarriers();
     }
 
@@ -1988,6 +2646,9 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
 
     const vk::Pipeline handle = pipeline->Handle();
     const u32 dim_x = cs_program.dim_x, dim_y = cs_program.dim_y, dim_z = cs_program.dim_z;
+    // g2-arm64: BB_CS_SPLIT: the pipeline was compiled for workgroups split this many times.
+    const u32 host_dim_x =
+        dim_x * (cs.cs_split_safe ? PipelineCache::CsSplitRequest(cs.pgm_hash, cs_program) : 1);
     if (FrameCapture::Active()) {
         FrameCapture::Dispatch(cs.pgm_hash, dim_x, dim_y, dim_z);
     }
@@ -2017,7 +2678,7 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
             cmdbuf.setCheckpointNV(checkpoint);
         }
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, handle);
-        cmdbuf.dispatch(dim_x, dim_y, dim_z);
+        cmdbuf.dispatch(host_dim_x, dim_y, dim_z);
         if (full_barrier >= 1) {
             cmdbuf.pipelineBarrier2(dependency);
         }
@@ -2026,6 +2687,7 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
 
     ResetBindings(true);
     scheduler.KickRecording();
+    SyncCheckpoint(scheduler);
 }
 
 void Rasterizer::DispatchIndirect(VAddr address, u32 offset, u32 size) {
@@ -2083,6 +2745,7 @@ void Rasterizer::DispatchIndirectRecord(const ComputePipeline* pipeline, VAddr a
 
     ResetBindings(true);
     scheduler.KickRecording();
+    SyncCheckpoint(scheduler);
 }
 
 u64 Rasterizer::Flush() {
@@ -2149,7 +2812,8 @@ bool Rasterizer::HelperEligible(const Pipeline* pipeline) const {
         }
         // Mip arrays make the descriptor layout depend on the T#s.
         for (const auto& image : stage->images) {
-            if (image.mip_fallback_mode != Shader::MipStorageFallbackMode::None) {
+            if (image.mip_fallback_mode != Shader::MipStorageFallbackMode::None ||
+                image.table_count) {
                 return false;
             }
         }
@@ -2537,6 +3201,26 @@ void Rasterizer::ResolveVertexBuffers(const GraphicsPipeline* pipeline,
         host_sizes.push_back(buffer.GetSize());
         host_strides.push_back(buffer.GetStride());
     }
+    // g2-arm64 diagnosis: BB_TRACE_VB=<vertex shader hash>: the vertex buffers of its draws
+    // (first 60), numbered as the checkpoint the draw is about to get.
+    static const u32 trace_vb = [] {
+        const char* env = std::getenv("BB_TRACE_VB");
+        return env ? u32(std::strtoul(env, nullptr, 16)) : 0u;
+    }();
+    static std::atomic<u32> traced_vb{0};
+    if (trace_vb && current_vs_hash == trace_vb && traced_vb++ < 60) {
+        for (size_t i = 0; i < guest_buffers.size(); ++i) {
+            const auto& g = guest_buffers[i];
+            std::printf("VB draw #%llu stream %zu: guest 0x%llx size 0x%llx stride %u -> buffer %p "
+                        "offset 0x%llx host size 0x%llx\n",
+                        static_cast<unsigned long long>(checkpoint_seq.load() + 1), i,
+                        static_cast<unsigned long long>(g.base_address),
+                        static_cast<unsigned long long>(g.GetSize()), u32(g.GetStride()),
+                        static_cast<void*>(static_cast<VkBuffer>(host_buffers[i])),
+                        static_cast<unsigned long long>(host_offsets[i]),
+                        static_cast<unsigned long long>(host_sizes[i]));
+        }
+    }
 
     v.num_buffers = static_cast<u32>(guest_buffers.size());
 }
@@ -2762,9 +3446,17 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
         const char* env = std::getenv("BB_TRACE_BUFFERS");
         return env ? std::strtoull(env, nullptr, 16) : 0ull;
     }();
-    if (trace_hash && u32(stage.pgm_hash) == u32(trace_hash)) {
+    // g2-arm64: BB_TRACE_FROM=N (with checkpoints on): only draws from checkpoint N on.
+    static const u64 trace_from = [] {
+        const char* env = std::getenv("BB_TRACE_FROM");
+        return env ? std::strtoull(env, nullptr, 10) : 0ull;
+    }();
+    if (trace_hash && u32(stage.pgm_hash) == u32(trace_hash) &&
+        checkpoint_seq.load(std::memory_order_relaxed) + 1 >= trace_from) {
         static std::atomic<u32> traced{0};
         if (traced.fetch_add(1, std::memory_order_relaxed) < 6) {
+            std::printf("Trace %08x buffers of draw #%llu:\n", u32(stage.pgm_hash),
+                        static_cast<unsigned long long>(checkpoint_seq.load() + 1));
             for (u32 i = 0; i < stage.buffers.size(); ++i) {
                 if (stage.buffers[i].IsSpecial()) {
                     continue;
@@ -3025,6 +3717,32 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
         }
         static std::atomic<u32> traced{0};
         if (traced.fetch_add(1, std::memory_order_relaxed) < 8) {
+            // g2-arm64: the draw's first render target, scissor, viewport and primitive.
+            if (stage.hw_stage == Shader::HwStage::Fragment) {
+                const auto& regs = Regs();
+                const auto& cb = regs.color_buffers[0];
+                const auto& sc = regs.screen_scissor;
+                const auto& vp = regs.viewports[0];
+                std::printf("Trace %08x target 0x%llx pitch %u height %u format %u samples %u, "
+                            "scissor %d,%d-%d,%d, viewport scale %.1f %.1f offset %.1f %.1f, "
+                            "primitive %u\n",
+                            u32(stage.pgm_hash), static_cast<unsigned long long>(cb.Address()),
+                            cb.Pitch(), cb.Height(), u32(cb.info.format), u32(cb.NumSamples()),
+                            sc.top_left_x, sc.top_left_y, sc.bottom_right_x, sc.bottom_right_y,
+                            vp.xscale, vp.yscale, vp.xoffset, vp.yoffset,
+                            u32(regs.primitive_type));
+                const auto& db = regs.depth_buffer;
+                std::printf("Trace %08x depth 0x%llx valid %d %ux%u format %u tile %u, "
+                            "stencil 0x%llx valid %d, depth test %u write %u stencil %u\n",
+                            u32(stage.pgm_hash),
+                            static_cast<unsigned long long>(db.DepthAddress()),
+                            int(db.DepthValid()), db.Pitch(), db.Height(),
+                            u32(db.z_info.format), u32(db.z_info.tile_mode_index),
+                            static_cast<unsigned long long>(db.StencilAddress()),
+                            int(db.StencilValid()), u32(regs.depth_control.depth_enable),
+                            u32(regs.depth_control.depth_write_enable),
+                            u32(regs.depth_control.stencil_enable));
+            }
             for (u32 i = 0; i < stage.images.size(); ++i) {
                 const auto t = prepared ? prepared->image_sharps[i] : stage.images[i].GetSharp(stage);
                 std::printf("Trace %08x image %u: at 0x%llx %ux%u data %u num %u dst_sel %u%u%u%u "
@@ -3111,6 +3829,39 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
 
     for (u32 image_index = 0; image_index < stage.images.size(); ++image_index) {
         const auto& image_desc = stage.images[image_index];
+        // g2-arm64: a table of T#s the shader indexes (ImageResource::table_count): an array of
+        // the entries' images, a null descriptor for an entry that is no valid T#.
+        if (image_desc.table_count) [[unlikely]] {
+            set_ok = false;
+            for (u32 i = 0; i < image_desc.table_count; ++i) {
+                const auto entry_sharp = image_desc.GetSharpAt(stage, i);
+                const auto entry_fmt = entry_sharp.GetDataFmt();
+                if (entry_sharp.Address() == 0 || entry_fmt == AmdGpu::DataFormat::FormatInvalid ||
+                    !memory->IsValidGpuMapping(entry_sharp.Address(), 0) ||
+                    !IsKnownFormat(entry_fmt, entry_sharp.GetNumberFmt())) {
+                    image_bindings.emplace_back(VideoCore::ImageId{},
+                                                &image_desc_storage.emplace_back());
+                    image_binding_entries.push_back(nullptr);
+                    binding_proxy_ok.push_back(false);
+                    continue;
+                }
+                auto& entry = CachedImageDescEntry(entry_sharp, image_desc);
+                auto& desc = image_desc_storage.emplace_back(entry.desc);
+                auto& [image_id, _] = image_bindings.emplace_back(VideoCore::ImageId{}, &desc);
+                image_binding_entries.push_back(nullptr);
+                binding_proxy_ok.push_back(false);
+                image_id = texture_cache.FindImage(desc);
+                auto* image = &texture_cache.GetImage(image_id);
+                if (auto depth_image_id =
+                        texture_cache.GetAssociatedDepth(*image, desc.view_info.format)) {
+                    image_id = depth_image_id;
+                    image = &texture_cache.GetImage(image_id);
+                }
+                image->binding.is_bound = 1u;
+            }
+            image_descriptor_array_sizes.push_back(image_desc.table_count);
+            continue;
+        }
         const auto tsharp =
             prepared ? prepared->image_sharps[image_index] : image_desc.GetSharp(stage);
         // bbport: a hash lookup per texture per draw for a diagnostic only.
@@ -3414,7 +4165,8 @@ bool Rasterizer::BindTexturesFromSet(const Shader::Info& stage, const PreparedSt
         return false;
     }
     for (const auto& image : stage.images) {
-        if (image.is_written || image.mip_fallback_mode != Shader::MipStorageFallbackMode::None) {
+        if (image.is_written || image.mip_fallback_mode != Shader::MipStorageFallbackMode::None ||
+            image.table_count) {
             return false;
         }
     }

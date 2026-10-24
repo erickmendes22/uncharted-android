@@ -2,12 +2,16 @@
 #define _CRT_RAND_S
 #include "runtime.h"
 #include "gpu/bbgpu.h"
+#include "guest_cpu.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdatomic.h>
 #include <sched.h>
 #include <pthread.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 typedef struct {
     union { GuestCallback plain; void (ABI *with_arg)(void *); } callback;
@@ -123,8 +127,8 @@ void runtime_finalize(void *dso) {
         if (!i) { pthread_mutex_unlock(&handler_lock); return; }
         ExitHandler handler = handlers[i-1]; handlers[i-1].active = 0;
         pthread_mutex_unlock(&handler_lock);
-        if (handler.with_arg) handler.callback.with_arg(handler.argument);
-        else handler.callback.plain();
+        if (handler.with_arg) GUEST_CALL(handler.callback.with_arg,(uint64_t)(uintptr_t)handler.argument);
+        else GUEST_CALL0(handler.callback.plain);
     }
 }
 static ABI void guest_finalize(void *dso) { runtime_finalize(dso); }
@@ -159,6 +163,25 @@ static ABI void guard_abort(uint64_t *guard) {
 }
 static ABI __attribute__((noreturn)) void stack_fail(void) {
     fputs("STOP: guest stack protector detected corruption\n", stderr);
+    /* g2-arm64: where: the guest return address of this call is the function whose check failed;
+     * also the guest registers (rbp: that function's frame), the guest stack and the fiber. */
+    {
+        char text[1536];
+#ifdef __linux__
+        char name[17] = {0};
+        prctl(PR_GET_NAME, (unsigned long)name, 0, 0, 0);
+        fprintf(stderr, "  thread %s\n", name);
+#endif
+        int n = guest_cpu_describe_thread(text, sizeof(text));
+        if (n > 0) fwrite(text, 1, (size_t)n, stderr);
+        n = guest_cpu_describe_registers(text, sizeof(text));
+        if (n > 0) fwrite(text, 1, (size_t)n, stderr);
+        n = guest_cpu_describe_stack(text, sizeof(text));
+        if (n > 0) fwrite(text, 1, (size_t)n, stderr);
+        n = runtime_fiber_describe(text, sizeof(text), guest_cpu_guest_rsp());
+        if (n > 0) fwrite(text, 1, (size_t)n, stderr);
+        fflush(stderr);
+    }
     exit(22);
 }
 static ABI void *guest_memset(void *dst, int value, size_t size) {

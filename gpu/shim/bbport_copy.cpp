@@ -13,6 +13,7 @@
 #include <thread>
 #include <vector>
 
+#include "bbport_owner_wait.h"
 #include "bbport_toggles.h"
 #include "common/thread.h"
 
@@ -186,6 +187,7 @@ private:
 
     void Loop(unsigned index) {
         Common::SetCurrentThreadName(("bb:Copy" + std::to_string(index)).c_str());
+        BbOwnerWait::helper_thread = true; // g2-arm64: runs fence labels (AfterCopies)
         u64 seen = 0;
         std::unique_lock lk{mutex};
         while (true) {

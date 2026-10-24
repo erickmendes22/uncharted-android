@@ -125,6 +125,11 @@ struct ImageResource {
     u8 constant_mip_index{};
     MipStorageFallbackMode mip_fallback_mode{};
     SharpFetchPostOp post_op{};
+    /// g2-arm64: a table of T#s the shader indexes (a sharp read through a constant window at an
+    /// index times a stride, resource_patching_pass.cpp): the binding is an array of table_count
+    /// images, entry i read at the sharp's locations plus i * table_stride_dw.
+    u8 table_count{};
+    u8 table_stride_dw{};
 
     constexpr AmdGpu::Image GetSharp(const auto& info) const noexcept {
         AmdGpu::Image image{};
@@ -160,7 +165,28 @@ struct ImageResource {
         return true;
     }
 
+    /// g2-arm64: entry i of a T# table; a null image past the flat buffer.
+    AmdGpu::Image GetSharpAt(const auto& info, u32 i) const noexcept {
+        ImageResource entry = *this;
+        const u32 size = static_cast<u32>(info.FlatUserData().size());
+        for (u32 d = 0; d < entry.sharp_fetch.offsets.size(); ++d) {
+            auto& offset = entry.sharp_fetch.offsets[d];
+            if (!(entry.sharp_fetch.load_mask & (1u << d))) {
+                continue;
+            }
+            const u32 shifted = offset + i * table_stride_dw;
+            if (offset == UNKNOWN_LOCATION || shifted >= size) {
+                return AmdGpu::Image::Null(is_depth);
+            }
+            offset = static_cast<SharpLocation>(shifted);
+        }
+        return entry.GetSharp(info);
+    }
+
     u32 NumBindings(const auto& info) const {
+        if (table_count) {
+            return table_count;
+        }
         const AmdGpu::Image tsharp = GetSharp(info);
         return (mip_fallback_mode == MipStorageFallbackMode::DynamicIndex)
                    ? (tsharp.last_level - tsharp.base_level + 1)

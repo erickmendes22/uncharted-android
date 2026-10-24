@@ -1,12 +1,21 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <map>
+#include <mutex>
+#include <string>
 #include <unordered_map>
 #include <boost/container/flat_map.hpp>
 #include <queue>
-#include <xbyak/xbyak.h>
-#include <xbyak/xbyak_util.h>
 #include "common/arch.h"
+// g2-arm64: Xbyak only assembles x86-64 bytes; ARM64 hosts run them on FEXCore (RunSrtWalker).
+#include <xbyak/xbyak.h>
+#ifdef ARCH_X86_64
+#include <xbyak/xbyak_util.h>
+#endif
 #include "common/decoder.h"
 #include "common/io_file.h"
 #include "common/logging/log.h"
@@ -18,12 +27,145 @@
 #include "shader_recompiler/ir/ir_emitter.h"
 #include "shader_recompiler/ir/opcodes.h"
 #include "shader_recompiler/ir/passes/srt.h"
+#include "shader_recompiler/ir/passes/srt_window.h"
 #include "shader_recompiler/ir/program.h"
 #include "shader_recompiler/ir/reg.h"
 #include "shader_recompiler/ir/srt_gvn_table.h"
 #include "shader_recompiler/ir/value.h"
 
-#ifdef ARCH_X86_64
+namespace Shader {
+
+// g2-arm64: constant window sizes (srt.h), the split of windowed offsets (srt_window.h) and the
+// flat buffer peek (BB_FLAT_PEEK).
+u32 ReadConstWindowSize(u64 pgm_hash) {
+    static const std::vector<std::pair<u64, u32>> sizes = [] {
+        // The tiled light of U1/U2 (cs 43b8ee5e) reads 224-byte light records (56 dwords) from
+        // the start of its block, light i at dword 56 * i, up to 127 lights (a 128-bit mask in
+        // LDS). The default window held lights 0-3 whole; the others read its last dword. Its
+        // lights' cookie T#s follow at dword 7220 + 8 * i: 7476 covers 32 of them (the T# table
+        // the resource patching pass binds).
+        std::vector<std::pair<u64, u32>> list{{0x43b8ee5eull, 7476}};
+        const char* p = std::getenv("BB_RC_WINDOW");
+        while (p && *p) {
+            char* end = nullptr;
+            const u64 hash = std::strtoull(p, &end, 16);
+            if (end == p || *end != ':') {
+                break;
+            }
+            p = end + 1;
+            const u64 dwords = std::strtoull(p, &end, 10);
+            if (end == p) {
+                break;
+            }
+            const u32 size = static_cast<u32>(std::clamp<u64>(dwords, 16, 16384));
+            const auto it = std::ranges::find(list, hash, &std::pair<u64, u32>::first);
+            if (it != list.end()) {
+                it->second = size;
+            } else {
+                list.emplace_back(hash, size);
+            }
+            p = *end == ',' ? end + 1 : nullptr;
+        }
+        return list;
+    }();
+    for (const auto& [hash, dwords] : sizes) {
+        if (hash == pgm_hash) {
+            return dwords;
+        }
+    }
+    return ReadConstWindowDwords;
+}
+
+std::pair<IR::Value, u32> SplitWindowOffset(const IR::Value& offset) {
+    IR::Value lane = offset;
+    u32 imm = 0;
+    while (!lane.IsImmediate()) {
+        const IR::Inst* inst = lane.Inst();
+        if (inst->GetOpcode() != IR::Opcode::IAdd32) {
+            break;
+        }
+        const IR::Value a = inst->Arg(0);
+        const IR::Value b = inst->Arg(1);
+        if (b.IsImmediate()) {
+            imm += b.U32();
+            lane = a;
+        } else if (a.IsImmediate()) {
+            imm += a.U32();
+            lane = b;
+        } else {
+            break;
+        }
+        if (imm > 1024) {
+            return {offset, 0}; // copies past the window stay small
+        }
+    }
+    if (imm == 0 || lane.IsImmediate()) {
+        return {offset, 0};
+    }
+    // The sum must not wrap (the clamp of the whole offset saw it unwrapped): a logical right
+    // shift by one or more is below 2^31.
+    const IR::Inst* inst = lane.Inst();
+    if (inst->GetOpcode() != IR::Opcode::ShiftRightLogical32 || !inst->Arg(1).IsImmediate() ||
+        (inst->Arg(1).U32() & 31) == 0) {
+        return {offset, 0};
+    }
+    return {lane, imm};
+}
+
+void NoteFlatBuf(u64 pgm_hash, const u32* flat, std::size_t dwords) {
+    static const std::vector<std::pair<u64, u32>> peeks = [] {
+        std::vector<std::pair<u64, u32>> list;
+        const char* p = std::getenv("BB_FLAT_PEEK");
+        while (p && *p) {
+            char* end = nullptr;
+            const u64 hash = std::strtoull(p, &end, 16);
+            if (end == p || *end != ':') {
+                break;
+            }
+            p = end + 1;
+            const u64 dword = std::strtoull(p, &end, 10);
+            if (end == p) {
+                break;
+            }
+            list.emplace_back(hash, static_cast<u32>(dword));
+            p = *end == ',' ? end + 1 : nullptr;
+        }
+        return list;
+    }();
+    static std::mutex mutex;
+    static std::map<std::pair<u64, u32>, std::map<u32, u64>> counts;
+    static auto window_start = std::chrono::steady_clock::now();
+    for (const auto& [hash, dword] : peeks) {
+        if (hash != pgm_hash || dword >= dwords) {
+            continue;
+        }
+        std::scoped_lock lk{mutex};
+        ++counts[{hash, dword}][flat[dword]];
+        const auto now = std::chrono::steady_clock::now();
+        if (now - window_start < std::chrono::seconds(5)) {
+            continue;
+        }
+        window_start = now;
+        for (const auto& [key, values] : counts) {
+            std::string line;
+            u32 shown = 0;
+            for (const auto& [value, n] : values) {
+                if (shown++ == 32) {
+                    line += " ...";
+                    break;
+                }
+                line += " " + std::to_string(value) + "x" + std::to_string(n);
+            }
+            std::printf("Flat buffer peek %llx[%u] over 5 s (value x walks):%s\n",
+                        static_cast<unsigned long long>(key.first), key.second, line.c_str());
+        }
+        counts.clear();
+    }
+}
+
+} // namespace Shader
+
+#if defined(ARCH_X86_64) || defined(ARCH_ARM64)
 
 using namespace Xbyak::util;
 
@@ -169,6 +311,9 @@ struct PassInfo {
 
     // Bumped during codegen to assign offsets to readconsts
     u16 dst_off_dw;
+
+    // g2-arm64: the shader's constant window (ReadConstWindowSize)
+    u32 window_dwords = ReadConstWindowDwords;
 
     PtrUserList* GetUsesAsPointer(IR::Inst* inst) {
         auto it = pointer_uses.find(inst);
@@ -669,15 +814,35 @@ static void VisitPointer(const IR::Value& off_dw, IR::Inst* subtree, PassInfo& p
     }
     // bbport: reads at offsets that vary per lane share a copy of the block's first
     // ReadConstWindowDwords dwords (ReadConstWindowFlag).
+    // g2-arm64: the window's size is per shader (ReadConstWindowSize), and the copy goes on for
+    // the largest immediate added to a per-lane part (SplitWindowOffset): reads clamped on that
+    // part alone stay inside it.
     if (!windowed.empty()) {
         const u32 start = pass_info.dst_off_dw;
-        for (u32 i = 0; i < ReadConstWindowDwords; ++i) {
+        u32 window = pass_info.window_dwords;
+        u32 extra = 0;
+        for (IR::Inst* use : windowed) {
+            extra = std::max(extra, SplitWindowOffset(use->Arg(1)).second);
+        }
+        u32 extra_bits = extra;
+        if (start + window + extra >= 0x10000) {
+            LOG_ERROR(Render_Recompiler, "Constant window of {} dwords does not fit: {}", window,
+                      ReadConstWindowDwords);
+            window = ReadConstWindowDwords;
+            extra = 0;
+            extra_bits = ReadConstWindowDefault;
+        }
+        if (window != ReadConstWindowDwords) {
+            LOG_INFO(Render_Recompiler, "Constant window of {} + {} dwords", window, extra);
+        }
+        for (u32 i = 0; i < window + extra; ++i) {
             c.mov(r10d, ptr[rdi + (i << 2)]);
             c.mov(ptr[rsi + ((start + i) << 2)], r10d);
         }
-        pass_info.dst_off_dw += ReadConstWindowDwords;
+        pass_info.dst_off_dw += window + extra;
         for (IR::Inst* use : windowed) {
-            use->SetFlags<u32>(start | ReadConstWindowFlag);
+            use->SetFlags<u32>(start | ReadConstWindowFlag |
+                               (extra_bits << ReadConstWindowExtraShift));
         }
     }
 
@@ -804,6 +969,7 @@ void SimplifyReadConstAddressAdd(IR::Inst& inst) {
 void FlattenExtendedUserdataPass(IR::Program& program) {
     auto& post_order = program.post_order_blocks;
     PassInfo pass_info;
+    pass_info.window_dwords = ReadConstWindowSize(program.info.pgm_hash); // g2-arm64
 
     // traverse at end and assign offsets to duplicate readconsts, using
     // vn_to_inst as the source

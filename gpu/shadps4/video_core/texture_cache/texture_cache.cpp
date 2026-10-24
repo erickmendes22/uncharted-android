@@ -23,7 +23,25 @@
 namespace VideoCore {
 
 static constexpr u64 PageShift = 12;
-static constexpr u64 NumFramesBeforeRemoval = 32;
+// g2-arm64: counted in scheduler ticks (submissions), not frames: with mid-frame flushes and the
+// deferred submit (~22 submissions a U2 frame) upstream's 32 ticks were ~1.5 frames, and U2's
+// shadow pool (4096/2624/2048 D32 depth maps at one address by turns) was freed and made anew
+// every few frames - a lamp's light dropped out in those frames (49 dips in 40 s at the palace
+// lamp; 2000 ticks, ~3 s there: 2). The long limit is for depth images (the pools of shadow
+// maps): with it on every image U3 held ~170 MiB more (630 against 457 MiB in its pub) with
+// ~400 MiB left in the system. BB_TC_REMOVAL_TICKS overrides the depth limit,
+// BB_TC_REMOVAL_TICKS_COLOR the other one (upstream's 32).
+static const u64 NumFramesBeforeRemovalDepth = [] {
+    const char* env = std::getenv("BB_TC_REMOVAL_TICKS");
+    return env ? static_cast<u64>(std::strtoull(env, nullptr, 10)) : u64{2000};
+}();
+static const u64 NumFramesBeforeRemovalColor = [] {
+    const char* env = std::getenv("BB_TC_REMOVAL_TICKS_COLOR");
+    return env ? static_cast<u64>(std::strtoull(env, nullptr, 10)) : u64{32};
+}();
+static u64 NumFramesBeforeRemoval(const ImageInfo& info) {
+    return info.props.is_depth ? NumFramesBeforeRemovalDepth : NumFramesBeforeRemovalColor;
+}
 
 TextureCache::TextureCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
                            Vulkan::Runtime& runtime_, AmdGpu::Liverpool* liverpool_,
@@ -254,7 +272,8 @@ std::tuple<ImageId, int, int> TextureCache::ResolveOverlap(const ImageInfo& imag
                                                            ImageId merged_image_id) {
     auto& cache_image = slot_images[cache_image_id];
     const bool safe_to_delete =
-        scheduler.CurrentTick() - cache_image.tick_accessed_last > NumFramesBeforeRemoval;
+        scheduler.CurrentTick() - cache_image.tick_accessed_last >
+        NumFramesBeforeRemoval(cache_image.info);
 
     // Equal address
     if (image_info.guest_address == cache_image.info.guest_address) {
@@ -497,6 +516,36 @@ ImageId TextureCache::ExpandImage(const ImageInfo& info, ImageId image_id) {
     return new_image_id;
 }
 
+namespace {
+/// g2-arm64 diagnosis: BB_POOL_LOG=<hex guest address>: image lookups at that address, the image
+/// handed out, creations and frees, while toggle bit 58 (PoolLog) is set.
+VAddr PoolLogAddress() {
+    static const VAddr address = [] {
+        const char* env = std::getenv("BB_POOL_LOG");
+        return env ? static_cast<VAddr>(std::strtoull(env, nullptr, 16)) : VAddr{0};
+    }();
+    return address;
+}
+bool PoolLogging(VAddr address) {
+    return address && address == PoolLogAddress() && BbToggle::Disabled(BbToggle::PoolLog);
+}
+void PoolLog(const char* what, const ImageInfo& info, u32 binding, u32 image_index,
+             const ImageInfo* resolved) {
+    static std::atomic<u32> lines{0};
+    if (lines.fetch_add(1, std::memory_order_relaxed) >= 6000) {
+        return;
+    }
+    const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now().time_since_epoch())
+                             .count();
+    std::printf("Pool %lld f%u %s %ux%u %s b%u -> #%u %ux%u\n", ms,
+                VideoCore::g_guest_frames.load(std::memory_order_relaxed), what, info.size.width,
+                info.size.height, vk::to_string(info.pixel_format).c_str(), binding, image_index,
+                resolved ? resolved->size.width : 0u, resolved ? resolved->size.height : 0u);
+}
+
+} // namespace
+
 ImageId TextureCache::FindImage(ImageDesc& desc, bool exact_fmt) {
     const auto& info = desc.info;
     ASSERT(info.guest_address != 0);
@@ -532,6 +581,10 @@ ImageId TextureCache::FindImage(ImageDesc& desc, bool exact_fmt) {
         Image& image = slot_images[cached.image_id];
         image.tick_accessed_last = scheduler.CurrentTick();
         TouchImage(image);
+        if (PoolLogging(info.guest_address)) {
+            PoolLog("find(cached)", info, static_cast<u32>(desc.type), cached.image_id.index,
+                    &image.info);
+        }
         if (cached.view_mip > 0) {
             desc.view_info.range.base.level = cached.view_mip;
         }
@@ -601,12 +654,17 @@ ImageId TextureCache::FindImage(ImageDesc& desc, bool exact_fmt) {
         }
     }
     // Create and register a new image
+    const bool created = !image_id;
     if (!image_id) {
         image_id = slot_images.insert(instance, runtime, slot_image_views, info);
         RegisterImage(image_id);
     }
 
     Image& image = slot_images[image_id];
+    if (PoolLogging(info.guest_address)) {
+        PoolLog(created ? "find(new)" : "find", info, static_cast<u32>(desc.type), image_id.index,
+                &image.info);
+    }
     image.tick_accessed_last = scheduler.CurrentTick();
     TouchImage(image);
 
@@ -761,6 +819,77 @@ ImageView& TextureCache::FindDepthTarget(ImageId image_id, const ImageDesc& desc
     return image.FindView(desc.view_info, false);
 }
 
+namespace {
+/// g2-arm64 diagnosis (BB_REFRESH_LOG=1): images the GPU wrote (render targets, depth) that are
+/// uploaded again from guest memory, with the reason; the first 80 and a count every 5 s.
+void NoteGpuImageUpload(const Image& image, u32 mips_uploaded) {
+    static const bool enabled = [] {
+        const char* env = std::getenv("BB_REFRESH_LOG");
+        return env && env[0] == '1';
+    }();
+    if (!enabled) {
+        return;
+    }
+    static std::atomic<u64> count{0}, printed{0};
+    static std::atomic<s64> window{0};
+    count.fetch_add(1, std::memory_order_relaxed);
+    if (printed.fetch_add(1, std::memory_order_relaxed) < 80) {
+        std::printf("Refresh of a GPU-written image: 0x%llx+0x%llx %ux%u %s mips %u/%u layers %u%s%s%s "
+                    "frame %u\n",
+                    static_cast<unsigned long long>(image.info.guest_address),
+                    static_cast<unsigned long long>(image.info.guest_size), image.info.size.width,
+                    image.info.size.height, vk::to_string(image.info.pixel_format).c_str(),
+                    mips_uploaded, image.info.resources.levels, image.info.resources.layers,
+                    True(image.flags & ImageFlagBits::CpuDirty) ? " CpuDirty" : "",
+                    True(image.flags & ImageFlagBits::GpuDirty) ? " GpuDirty" : "",
+                    True(image.flags & ImageFlagBits::MaybeCpuDirty) ? " MaybeCpuDirty" : "",
+                    VideoCore::g_guest_frames.load(std::memory_order_relaxed));
+    }
+    const s64 now = std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                        .count();
+    s64 start = window.load(std::memory_order_relaxed);
+    if (!start) {
+        window.store(now, std::memory_order_relaxed);
+    } else if (now - start >= 5 && window.compare_exchange_strong(start, now)) {
+        std::printf("Refreshes of GPU-written images over %lld s: %llu\n",
+                    static_cast<long long>(now - start),
+                    static_cast<unsigned long long>(count.exchange(0)));
+    }
+}
+} // namespace
+
+void TextureCache::NoteFreeImage(ImageId image_id, u32 line) {
+    const Image& image = slot_images[image_id];
+    if (PoolLogging(image.info.guest_address)) {
+        char what[32];
+        std::snprintf(what, sizeof(what), "free@%u", line);
+        PoolLog(what, image.info, 0, image_id.index, &image.info);
+    }
+}
+
+// g2-arm64 diagnosis (BB_ZERO_UPLOAD_LOG=1): an image about to be uploaded from guest memory
+// whose first page is all zeros - a texture whose bytes only ever reached the GPU (a copy made
+// there), uploaded again from memory the guest never received them in?
+static void NoteZeroUpload(const Image& image) {
+    static std::atomic<u32> lines{0};
+    const size_t size = std::min<size_t>(image.info.guest_size, 4096);
+    const u8* addr = std::bit_cast<const u8*>(image.info.guest_address);
+    for (size_t i = 0; i < size; ++i) {
+        if (addr[i] != 0) {
+            return;
+        }
+    }
+    if (lines.fetch_add(1, std::memory_order_relaxed) < 400) {
+        std::printf("Zero upload: 0x%llx %ux%u %s %llu bytes, f%u\n",
+                    static_cast<unsigned long long>(image.info.guest_address),
+                    image.info.size.width, image.info.size.height,
+                    vk::to_string(image.info.pixel_format).c_str(),
+                    static_cast<unsigned long long>(image.info.guest_size),
+                    VideoCore::g_guest_frames.load(std::memory_order_relaxed));
+    }
+}
+
 void TextureCache::RefreshImage(Image& image) {
     if (False(image.flags & ImageFlagBits::Dirty) || image.info.num_samples > 1) {
         return;
@@ -834,6 +963,15 @@ void TextureCache::RefreshImage(Image& image) {
     if (image_copies.empty()) {
         image.flags &= ~ImageFlagBits::Dirty;
         return;
+    }
+    if (is_gpu_modified) {
+        NoteGpuImageUpload(image, static_cast<u32>(image_copies.size()));
+    }
+
+    static const bool zero_log = std::getenv("BB_ZERO_UPLOAD_LOG") != nullptr;
+    if (zero_log &&
+        !buffer_cache.IsRegionGpuModified(image.info.guest_address, image.info.guest_size)) {
+        NoteZeroUpload(image);
     }
 
     scheduler.EndRendering();
@@ -1201,6 +1339,12 @@ void TextureCache::DeleteImage(ImageId image_id) {
         }
     }
 
+    // g2-arm64 experiment (BB_NO_FREE_IMAGES=1): the Vulkan images of deleted cache entries are
+    // kept (leaked), to rule out GPU work still using them.
+    static const bool no_free_images = std::getenv("BB_NO_FREE_IMAGES") != nullptr;
+    if (no_free_images) {
+        return;
+    }
     // Reclaim image and any image views it references.
     scheduler.DeferOperation([this, image_id] {
         Image& image = slot_images[image_id];

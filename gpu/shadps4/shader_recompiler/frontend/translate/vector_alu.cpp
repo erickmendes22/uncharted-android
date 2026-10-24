@@ -5,6 +5,9 @@
 #include "shader_recompiler/frontend/translate/translate.h"
 #include "shader_recompiler/ir/attribute.h"
 #include "shader_recompiler/profile.h"
+#include <algorithm>
+#include <vector>
+#include <cstdlib>
 
 namespace Shader::Gcn {
 
@@ -2025,10 +2028,47 @@ void Translator::SetCarryOut(const GcnInst& inst, const IR::U1& carry) {
 // TODO: add range analysis pass to hopefully put an upper bound on m0, and only select one of
 // [src_vgprno, src_vgprno + max_m0]. Same for dst regs we may write back to
 
+namespace {
+/// g2-arm64: how many registers from the base a relative move of a shader can reach (0: all
+/// allocated ones). Each move becomes a select over every candidate register (and a relative
+/// write rewrites them all), inside loops: U1's tiled lighting (cs 43b8ee5e, 18 ms a run on the
+/// G2) indexes a 4-dword light mask (v3..v6 from one DS_READ2_B64, m0 = 3..0) this way, ~120
+/// extra operations per light and pixel. Known bounds are built in; BB_MOVREL_RANGE=
+/// <hash>:<count>,... adds or overrides (count 0: no bound).
+u32 MovRelRange(u64 pgm_hash) {
+    static const std::vector<std::pair<u64, u32>> table = [] {
+        std::vector<std::pair<u64, u32>> t{{0x43b8ee5eull, 4}};
+        if (const char* env = std::getenv("BB_MOVREL_RANGE")) {
+            for (const char* p = env; *p;) {
+                char* end;
+                const u64 hash = std::strtoull(p, &end, 16);
+                if (*end != ':') {
+                    break;
+                }
+                const u32 count = static_cast<u32>(std::strtoul(end + 1, &end, 10));
+                std::erase_if(t, [hash](const auto& e) { return e.first == hash; });
+                t.emplace_back(hash, count);
+                p = *end == ',' ? end + 1 : end;
+            }
+        }
+        return t;
+    }();
+    for (const auto& [hash, count] : table) {
+        if (hash == pgm_hash) {
+            return count;
+        }
+    }
+    return 0;
+}
+} // namespace
+
 IR::U32 Translator::VMovRelSHelper(u32 src_vgprno, const IR::U32 m0) {
     // Read from VGPR0 by default when src_vgprno + m0 > num_allocated_vgprs
     IR::U32 src_val = ir.GetVectorReg<IR::U32>(IR::VectorReg::V0);
-    for (u32 i = src_vgprno; i < runtime_info.props.num_allocated_vgprs; i++) {
+    const u32 range = MovRelRange(info.pgm_hash);
+    const u32 end = range ? std::min(runtime_info.props.num_allocated_vgprs, src_vgprno + range)
+                          : runtime_info.props.num_allocated_vgprs;
+    for (u32 i = src_vgprno; i < end; i++) {
         const IR::U1 cond = ir.IEqual(m0, ir.Imm32(i - src_vgprno));
         src_val =
             IR::U32{ir.Select(cond, ir.GetVectorReg<IR::U32>(IR::VectorReg::V0 + i), src_val)};
@@ -2037,7 +2077,10 @@ IR::U32 Translator::VMovRelSHelper(u32 src_vgprno, const IR::U32 m0) {
 }
 
 void Translator::VMovRelDHelper(u32 dst_vgprno, const IR::U32 src_val, const IR::U32 m0) {
-    for (u32 i = dst_vgprno; i < runtime_info.props.num_allocated_vgprs; i++) {
+    const u32 range = MovRelRange(info.pgm_hash);
+    const u32 end = range ? std::min(runtime_info.props.num_allocated_vgprs, dst_vgprno + range)
+                          : runtime_info.props.num_allocated_vgprs;
+    for (u32 i = dst_vgprno; i < end; i++) {
         const IR::U1 cond = ir.IEqual(m0, ir.Imm32(i - dst_vgprno));
         const IR::U32 dst_val =
             IR::U32{ir.Select(cond, src_val, ir.GetVectorReg<IR::U32>(IR::VectorReg::V0 + i))};

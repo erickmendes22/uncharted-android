@@ -248,9 +248,18 @@ struct HwComputeRuntimeInfo {
     u32 shared_memory_size;
     std::array<u32, 3> workgroup_size;
     std::array<bool, 3> tgid_enable;
+    /// g2-arm64: workgroups of workgroup_size[0] / split_factor invocations, split_factor times
+    /// as many of them (direct dispatches of BB_CS_SPLIT shaders; 1 = as the guest).
+    u32 split_factor;
 
     bool operator==(const HwComputeRuntimeInfo& other) const noexcept {
-        return workgroup_size == other.workgroup_size && tgid_enable == other.tgid_enable;
+        return workgroup_size == other.workgroup_size && tgid_enable == other.tgid_enable &&
+               split_factor == other.split_factor;
+    }
+
+    /// The split the shader is compiled with: requested and safe for it.
+    [[nodiscard]] u32 AppliedSplit(bool split_safe) const noexcept {
+        return split_safe && split_factor > 1 ? split_factor : 1;
     }
 };
 

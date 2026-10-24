@@ -23,6 +23,12 @@ add_compile_options(-fno-omit-frame-pointer)
 # profile). Covers bbgpu and the static libraries linked into it. No -march: the same build
 # runs on the Steam Deck.
 option(BB_LTO "Link-time optimization of bbgpu" ON)
+# g2-arm64: network/PSN co-op (shadNet: protobuf, OpenSSL) is optional; off on Android.
+if (ANDROID)
+    option(BB_NET "Network and PSN libraries (co-op)" OFF)
+else()
+    option(BB_NET "Network and PSN libraries (co-op)" ON)
+endif()
 set(BB_PGO "off" CACHE STRING "Profile-guided optimization: off, generate, use")
 set(BB_PGO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../pgo" CACHE PATH "Profile directory")
 if (BB_LTO)
@@ -70,7 +76,7 @@ endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(XXHASH REQUIRED IMPORTED_TARGET libxxhash)
 pkg_check_modules(SDL3 REQUIRED IMPORTED_TARGET sdl3)
-if (NOT WIN32)
+if (NOT WIN32 AND NOT ANDROID)
     pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
 endif()
 find_package(miniz QUIET)
@@ -120,6 +126,7 @@ add_host_shader(fs_tri.vert fs_tri_vert)
 add_host_shader(fsr.comp fsr_easu_comp SAMPLE_EASU=1)
 add_host_shader(fsr.comp fsr_rcas_comp SAMPLE_RCAS=1)
 add_host_shader(post_process.frag post_process_frag)
+add_host_shader(present_rotate.frag present_rotate_frag)
 add_host_shader(camera_motion.comp camera_motion_comp)
 add_host_shader(upscale_merge.comp upscale_merge_comp)
 add_host_shader(upscale_reactive.comp upscale_reactive_comp)
@@ -127,6 +134,8 @@ add_host_shader(taa.comp taa_comp)
 add_host_shader(taa_sharpen.comp taa_sharpen_comp)
 add_host_shader(taa_sharpen.comp taa_sharpen_ldr_comp LDR_OUTPUT=1)
 add_host_shader(buffer_multi_copy.comp buffer_multi_copy_comp)
+add_host_shader(skin_batch.comp skin_batch_comp)
+add_host_shader(skin_mv_batch.comp skin_mv_batch_comp)
 add_host_shader(depth_resample.frag depth_resample_frag)
 add_host_shader(depth_resample.frag depth_stencil_resample_frag HAS_STENCIL=1)
 add_host_shader(depth_resample.frag depth_stencil_bits_frag STENCIL_BITS=1)
@@ -167,6 +176,7 @@ add_library(bbgpu ${BBGPU_KIND} ${VIDEO_CORE} ${RECOMPILER} ${COMMON} ${SHIM_SOU
 add_dependencies(bbgpu host_shaders)
 # bbport co-op: PS4 network and PSN libraries with the shadNet client, from shadp2p
 # (github.com/Wozzardman/shadp2p, GPL-2.0), for private Bloodborne co-op servers.
+if (BB_NET)
 find_package(Protobuf CONFIG REQUIRED)
 set(SHADNET_PROTO_OUT "${CMAKE_CURRENT_BINARY_DIR}/shadnet_proto_gen")
 file(MAKE_DIRECTORY "${SHADNET_PROTO_OUT}")
@@ -211,6 +221,10 @@ if (WIN32)
     target_link_libraries(bbnet PUBLIC ws2_32 iphlpapi bcrypt crypt32)
 endif()
 target_link_libraries(bbgpu PUBLIC bbnet)
+else()
+    # g2-arm64: no co-op; bbnet_register/bbnet_configure are no-ops.
+    target_sources(bbgpu PRIVATE bbnet/bbnet_stub.cpp)
+endif()
 # In-game settings menu: Dear ImGui (third_party/imgui, MIT) with its Vulkan backend, and an
 # embedded Cyrillic font (third_party/fonts).
 target_sources(bbgpu PRIVATE third_party/imgui/imgui.cpp third_party/imgui/imgui_draw.cpp
@@ -221,6 +235,10 @@ target_compile_definitions(bbgpu PRIVATE IMGUI_IMPL_VULKAN_NO_PROTOTYPES
     BB_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/DejaVuSans.ttf")
 set_source_files_properties(shim/bbport_overlay.cpp PROPERTIES
     OBJECT_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/DejaVuSans.ttf)
+if(ANDROID)
+    # g2-arm64: the touch menu (a panel on the right edge) instead of the PC window.
+    target_sources(bbgpu PRIVATE shim/bbport_overlay_android.cpp shim/bbport_touchpad.cpp)
+endif()
 target_include_directories(bbgpu PRIVATE shim shadps4 ${SHADER_INCLUDE} third_party/gcn/include third_party/half/include)
 target_compile_definitions(bbgpu PRIVATE BOOST_ASIO_STANDALONE NDEBUG)
 target_compile_options(bbgpu PRIVATE -Wno-deprecated-declarations -Wno-missing-field-initializers)
@@ -239,6 +257,27 @@ if (WIN32)
     target_compile_options(bbgpu PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/shim/bb_win_compat.h)
     target_include_directories(bbgpu PRIVATE third_party/xbyak)
     target_link_libraries(bbgpu PUBLIC Vulkan::Vulkan ws2_32 bcrypt ntdll synchronization winmm)
+elseif (ANDROID)
+    target_link_libraries(bbgpu PUBLIC log android)
+    # g2-arm64: calls between bbgpu's own functions bind inside the library instead of going
+    # through the PLT (default visibility made each one an indirect branch via the GOT: ~3% of
+    # the draw recording thread). libmain defines none of them.
+    target_link_options(bbgpu PRIVATE -Wl,-Bsymbolic-functions)
+    target_include_directories(bbgpu PRIVATE third_party/xbyak) # SRT walker assembler
+    target_compile_definitions(bbgpu PRIVATE XBYAK64_GCC)      # x86-64 code on an ARM64 host
+    # g2-arm64: libadrenotools (BSD-2) loads a custom Vulkan driver (Turnip) through the system
+    # loader in a separate linker namespace (BB_VK_DRIVER, vk_platform.cpp).
+    set(ADRENOTOOLS_SOURCE_DIR "$ENV{HOME}/src/libadrenotools" CACHE PATH "libadrenotools sources")
+    set(ADRENOTOOLS_BUILD_DIR "$ENV{HOME}/src/adrenotools-android" CACHE PATH "libadrenotools build")
+    if (EXISTS "${ADRENOTOOLS_BUILD_DIR}/libadrenotools.a")
+        target_include_directories(bbgpu PRIVATE "${ADRENOTOOLS_SOURCE_DIR}/include")
+        target_compile_definitions(bbgpu PRIVATE BB_ADRENOTOOLS)
+        target_link_libraries(bbgpu PRIVATE "${ADRENOTOOLS_BUILD_DIR}/libadrenotools.a"
+            "${ADRENOTOOLS_BUILD_DIR}/lib/linkernsbypass/liblinkernsbypass.a")
+    else()
+        message(WARNING "libadrenotools not found (ADRENOTOOLS_BUILD_DIR=${ADRENOTOOLS_BUILD_DIR}): "
+            "the app can use only the system Vulkan driver, not Turnip (BB_VK_DRIVER is ignored)")
+    endif()
 else()
     target_link_libraries(bbgpu PUBLIC PkgConfig::X11)
 endif()
@@ -253,7 +292,7 @@ if (WIN32)
     target_compile_options(atrac9 PRIVATE -w)
     set_target_properties(atrac9 PROPERTIES C_STANDARD 99 INTERPROCEDURAL_OPTIMIZATION OFF)
     add_executable(bb-probe ../src/probe.c ${BB_RUNTIME} ../src/compat_win.c ../src/vulkan_smoke.c
-        ../packaging/windows/bb-probe.rc)
+        ../src/guest_cpu_native.c ../packaging/windows/bb-probe.rc)
     set_target_properties(bb-probe PROPERTIES C_STANDARD 11 C_EXTENSIONS OFF)
     target_compile_options(bb-probe PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra -Werror>)
     target_include_directories(bb-probe PRIVATE .. ../src)
@@ -267,6 +306,54 @@ if (WIN32)
     add_executable(bb-play WIN32 ../packaging/windows/play.c ../packaging/windows/play.rc)
     target_compile_options(bb-play PRIVATE -municode)
     target_link_options(bb-play PRIVATE -municode)
+endif()
+
+# g2-arm64: the loader for Android arm64 (guest code on an embedded FEXCore, guest_cpu_fex.cpp).
+# FEX_SOURCE_DIR / FEX_BUILD_DIR: a FEXCore build for Android (uncharted-g2 scripts/port-arm64).
+if (ANDROID)
+    set(FEX_SOURCE_DIR "$ENV{HOME}/src/fex" CACHE PATH "FEX sources")
+    set(FEX_BUILD_DIR "$ENV{HOME}/src/fex-android" CACHE PATH "FEXCore build for Android")
+    file(GLOB BB_RUNTIME CONFIGURE_DEPENDS ../src/runtime*.c)
+    file(GLOB BB_ATRAC9 CONFIGURE_DEPENDS ../third_party/LibAtrac9/C/src/*.c)
+    add_library(atrac9 STATIC ${BB_ATRAC9})
+    target_compile_options(atrac9 PRIVATE -w)
+    set_target_properties(atrac9 PROPERTIES C_STANDARD 99)
+    # bb-probe: a command-line loader for adb shell (--cpu-only); main: the same as libmain.so,
+    # whose SDL_main the APK's SDLActivity calls (uncharted-g2 scripts/g2/game_app).
+    add_executable(bb-probe ../src/probe.c ${BB_RUNTIME} ../src/guest_cpu_fex.cpp ../src/vulkan_smoke.c)
+    add_library(main SHARED ../src/probe.c ${BB_RUNTIME} ../src/guest_cpu_fex.cpp ../src/vulkan_smoke.c)
+    target_compile_definitions(main PRIVATE BB_SDL_MAIN)
+    target_link_options(bb-probe PRIVATE -Wl,--export-dynamic) # runtime_*/guest_call for libbbgpu.so
+    foreach(loader bb-probe main)
+    set_target_properties(${loader} PROPERTIES C_STANDARD 11 C_EXTENSIONS ON CXX_STANDARD 20)
+    target_compile_options(${loader} PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wall>)
+    target_include_directories(${loader} PRIVATE .. ../src)
+    target_include_directories(${loader} PRIVATE
+        ${FEX_BUILD_DIR} ${FEX_SOURCE_DIR} ${FEX_SOURCE_DIR}/Source ${FEX_BUILD_DIR}/Source
+        ${FEX_BUILD_DIR}/generated ${FEX_SOURCE_DIR}/Source/Tools/CommonTools ${FEX_BUILD_DIR}/FEXCore/Source
+        ${FEX_SOURCE_DIR}/FEXCore/include ${FEX_BUILD_DIR}/include
+        ${FEX_SOURCE_DIR}/External/unordered_dense/include ${FEX_SOURCE_DIR}/External/fmt/include
+        ${FEX_SOURCE_DIR}/External/xxhash ${FEX_SOURCE_DIR}/FEXHeaderUtils ${FEX_SOURCE_DIR}/CodeEmitter
+        ${FEX_SOURCE_DIR}/External/range-v3/include ${FEX_SOURCE_DIR}/External/tiny-json)
+    endforeach()
+    set_source_files_properties(../src/guest_cpu_fex.cpp PROPERTIES COMPILE_DEFINITIONS
+        "ARCHITECTURE_arm64=1;FEXCORE_HAS_PRESERVE_ALL_ATTR=1;FEXCORE_PRESERVE_ALL_ATTR=__attribute__((preserve_all));FEX_HAS_PRESERVE_ALL_ATTR=1;FEX_PRESERVE_ALL_ATTR=__attribute__((preserve_all));FEX_DISABLE_TELEMETRY=1")
+    set(FEX_LIBS FEXCore/Source/libFEXCore.a Source/Common/libCommon.a Source/Tools/CommonTools/libCommonTools.a
+        FEXCore/Source/libJemallocLibs.a Source/Common/cpp-optparse/libcpp-optparse.a External/tiny-json/libtiny-json.a
+        FEXCore/Source/libFEXCore_Base.a External/fmt/libfmt.a External/xxhash/cmake_unofficial/libxxhash.a
+        External/cephes/libcephes_128bit.a External/SoftFloat-3e/libsoftfloat_3e.a External/rpmalloc/librpmalloc.a)
+    list(TRANSFORM FEX_LIBS PREPEND "${FEX_BUILD_DIR}/")
+    foreach(loader bb-probe main)
+        target_link_libraries(${loader} PRIVATE bbgpu atrac9 -Wl,--start-group ${FEX_LIBS} -Wl,--end-group
+            Vulkan::Vulkan dl atomic m log)
+    endforeach()
+    # runtime_restart: SDL's JNI environment and activity (the app restarts itself)
+    target_link_libraries(main PRIVATE PkgConfig::SDL3)
+    # The app's launcher: the game files from the user's dump (scripts/prepare.py and
+    # link_modules.py in C), without loading the game's libraries.
+    add_library(bbprepare SHARED ../src/game_prepare.c ../src/game_prepare_jni.c)
+    set_target_properties(bbprepare PROPERTIES C_STANDARD 11)
+    target_compile_options(bbprepare PRIVATE -Wall -Wextra)
 endif()
 
 # Explicit test targets; neither launches the game nor needs a Vulkan device.

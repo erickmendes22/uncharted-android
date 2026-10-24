@@ -1,0 +1,35 @@
+From 41b547abb56ef9e8d949d3cf51bdd845ec24db4e Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] g2-android: the FEXCore-only build without a smoke source
+ (the libraries only)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ CMakeLists.txt | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0ac8e308e..7a557183d 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -614,11 +614,15 @@ else()
+ endif()
+ 
+ if (BUILD_FEXCORE_ONLY)
++  add_subdirectory(Source/Common/ EXCLUDE_FROM_ALL)
++  add_subdirectory(Source/Tools/CommonTools/ EXCLUDE_FROM_ALL)
++  # The smoke executable is optional: an embedder only needs the libraries.
++  if (NOT FEXCORE_SMOKE_SOURCE)
++    return()
++  endif()
+   if (NOT IS_ABSOLUTE "${FEXCORE_SMOKE_SOURCE}")
+     message(FATAL_ERROR "FEXCORE_SMOKE_SOURCE must be an absolute path")
+   endif()
+-  add_subdirectory(Source/Common/ EXCLUDE_FROM_ALL)
+-  add_subdirectory(Source/Tools/CommonTools/ EXCLUDE_FROM_ALL)
+   add_executable(fexcore-smoke "${FEXCORE_SMOKE_SOURCE}")
+   target_compile_features(fexcore-smoke PRIVATE cxx_std_20)
+   target_include_directories(fexcore-smoke PRIVATE
+-- 
+2.43.0
+

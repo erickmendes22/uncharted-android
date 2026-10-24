@@ -25,7 +25,8 @@ ComputePipeline::ComputePipeline(const Instance& instance, Scheduler& scheduler,
         .requiredSubgroupSize = 64,
     };
     const vk::PipelineShaderStageCreateInfo shader_ci = {
-        .pNext = instance.IsSubgroupSize64Supported() ? &subgroup_size_ci : nullptr,
+        .pNext = instance.IsSubgroupSize64Supported() && NeedsWave64(stages) ? &subgroup_size_ci
+                                                                             : nullptr,
         .stage = vk::ShaderStageFlagBits::eCompute,
         .module = module,
         .pName = "main",

@@ -13,9 +13,11 @@
 
 namespace Serialization {
 /* You should increment versions below once corresponding serialization scheme is changed. */
-static constexpr u32 ShaderBinaryVersion = 9u; // bbport: addr64 buffer loads (ReadConst windows)
-static constexpr u32 ShaderMetaVersion = 7u; // bbport: ImageResource::needs_native
-static constexpr u32 PipelineKeyVersion = 5u; // bbport: Info layout (ImageResource::needs_native)
+// g2-arm64: 10 BB_CS_SPLIT; 11 constant windows per shader and sharps read through them (0047,
+// 0048: cached shaders with windowed reads kept the old clamp and a null cookie)
+static constexpr u32 ShaderBinaryVersion = 11u;
+static constexpr u32 ShaderMetaVersion = 9u; // g2-arm64: 8 Info::cs_split_safe, 9 T# tables
+static constexpr u32 PipelineKeyVersion = 6u; // g2-arm64: HwComputeRuntimeInfo::split_factor
 } // namespace Serialization
 
 namespace Vulkan {

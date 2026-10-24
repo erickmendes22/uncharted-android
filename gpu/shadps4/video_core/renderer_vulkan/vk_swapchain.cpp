@@ -21,6 +21,7 @@ static constexpr vk::SurfaceFormatKHR SURFACE_FORMAT_HDR = {
 
 Swapchain::Swapchain(const Instance& instance_, const Frontend::WindowSDL& window_)
     : instance{instance_}, window{window_}, surface{CreateSurface(instance.GetInstance(), window)} {
+    surface_window = window.CurrentWindowInfo().render_surface;
     FindPresentFormat();
     FindPresentMode();
 
@@ -40,7 +41,10 @@ void Swapchain::Create(u32 width_, u32 height_) {
 
     Destroy();
 
-    SetSurfaceProperties();
+    if (!SetSurfaceProperties()) {
+        surface_lost = true;
+        return;
+    }
 
     const std::array queue_family_indices = {
         instance.GetGraphicsQueueFamilyIndex(),
@@ -72,6 +76,17 @@ void Swapchain::Create(u32 width_, u32 height_) {
     };
 
     auto [swapchain_result, chain] = instance.GetDevice().createSwapchainKHR(swapchain_info);
+#ifdef __ANDROID__
+    if (swapchain_result != vk::Result::eSuccess) {
+        // g2-arm64: the window went away under the surface: present again once Android gives
+        // a new one (SurfaceReady).
+        std::printf("Swapchain: not created (%s): presenting waits for a new window\n",
+                    vk::to_string(swapchain_result).c_str());
+        swapchain = nullptr;
+        surface_lost = true;
+        return;
+    }
+#endif
     ASSERT_MSG(swapchain_result == vk::Result::eSuccess, "Failed to create swapchain: {}",
                vk::to_string(swapchain_result));
     swapchain = chain;
@@ -105,15 +120,42 @@ void Swapchain::SetHDR(bool hdr) {
 
 bool Swapchain::AcquireNextImage() {
     vk::Device device = instance.GetDevice();
-    vk::Result result =
-        device.acquireNextImageKHR(swapchain, std::numeric_limits<u64>::max(),
-                                   image_acquired[frame_index], VK_NULL_HANDLE, &image_index);
+    acquire_timed_out = false;
+    if (surface_lost || !swapchain) {
+        needs_recreation = true;
+        return false;
+    }
+#ifdef __ANDROID__
+    // g2-arm64: with the screen off the compositor stops taking buffers: never wait for one
+    // longer than a few frames.
+    constexpr u64 timeout = 100'000'000;
+#else
+    constexpr u64 timeout = std::numeric_limits<u64>::max();
+#endif
+    vk::Result result = device.acquireNextImageKHR(swapchain, timeout, image_acquired[frame_index],
+                                                   VK_NULL_HANDLE, &image_index);
 
     switch (result) {
     case vk::Result::eSuccess:
         break;
+#ifdef __ANDROID__
+    case vk::Result::eTimeout:
+    case vk::Result::eNotReady:
+        acquire_timed_out = true;
+        return false;
+#endif
+#ifdef __ANDROID__
     case vk::Result::eSuboptimalKHR:
+        // g2-arm64: an identity-transform swapchain on a rotated display (the G2's panel is
+        // portrait) is suboptimal on every frame; the compositor rotates it. Not a reason to
+        // recreate it each frame.
+        break;
+#else
+    case vk::Result::eSuboptimalKHR:
+#endif
     case vk::Result::eErrorSurfaceLostKHR:
+        surface_lost = true; // g2-arm64: a new surface, not only a new swapchain
+        [[fallthrough]];
     case vk::Result::eErrorOutOfDateKHR:
     case vk::Result::eErrorUnknown:
         needs_recreation = true;
@@ -138,8 +180,18 @@ bool Swapchain::Present() {
     };
 
     auto result = instance.GetPresentQueue().presentKHR(present_info);
+#ifdef __ANDROID__
+    if (result == vk::Result::eSuboptimalKHR) {
+        result = vk::Result::eSuccess; // rotated display, see AcquireNextImage
+    }
+#endif
     if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
         needs_recreation = true;
+#ifdef __ANDROID__
+    } else if (result == vk::Result::eErrorSurfaceLostKHR) {
+        needs_recreation = true; // g2-arm64: the window went away (SurfaceReady)
+        surface_lost = true;
+#endif
     } else {
         ASSERT_MSG(result == vk::Result::eSuccess, "Swapchain presentation failed: {}",
                    vk::to_string(result));
@@ -148,6 +200,35 @@ bool Swapchain::Present() {
     frame_index = (frame_index + 1) % image_count;
 
     return !needs_recreation;
+}
+
+bool Swapchain::SurfaceReady() {
+#ifdef __ANDROID__
+    if (window.InBackground()) {
+        return false;
+    }
+    void* const current = window.CurrentWindowInfo().render_surface;
+    if (!current) {
+        return false;
+    }
+    if (current == surface_window && !surface_lost) {
+        return true;
+    }
+    // A new window from Android (the app came back), or the old surface died: a new surface and
+    // swapchain on the current window.
+    std::printf("Swapchain: a new surface for the window %p (was %p, lost %d)\n", current,
+                surface_window, int(surface_lost));
+    Destroy();
+    swapchain = nullptr;
+    instance.GetInstance().destroySurfaceKHR(surface);
+    surface = CreateSurface(instance.GetInstance(), window);
+    surface_window = current;
+    surface_lost = false;
+    Create(width, height);
+    return !surface_lost;
+#else
+    return true;
+#endif
 }
 
 void Swapchain::FindPresentFormat() {
@@ -221,9 +302,14 @@ void Swapchain::FindPresentMode() {
     }
 }
 
-void Swapchain::SetSurfaceProperties() {
+bool Swapchain::SetSurfaceProperties() {
     const auto [capabilities_result, capabilities] =
         instance.GetPhysicalDevice().getSurfaceCapabilitiesKHR(surface);
+#ifdef __ANDROID__
+    if (capabilities_result == vk::Result::eErrorSurfaceLostKHR) {
+        return false; // g2-arm64: the window went away (SurfaceReady)
+    }
+#endif
     ASSERT_MSG(capabilities_result == vk::Result::eSuccess,
                "Failed to query surface capabilities: {}", vk::to_string(capabilities_result));
 
@@ -245,6 +331,48 @@ void Swapchain::SetSurfaceProperties() {
 
     // Prefer identity transform if possible
     transform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
+    quarter_turns = 0;
+#ifdef __ANDROID__
+    // g2-arm64: Android pre-rotation. The G2's panel is portrait: an identity swapchain made the
+    // compositor rotate every frame on the GPU (client composition, `dumpsys SurfaceFlinger`),
+    // its GPU context preempting the game's. With the display's transform the presenter draws
+    // the frame rotated into an image in the panel's orientation and the compositor scans it
+    // out as it is (device composition). BB_PRE_ROTATE=0: off.
+    static const bool pre_rotate = [] {
+        const char* env = std::getenv("BB_PRE_ROTATE");
+        return !env || env[0] != '0';
+    }();
+    if (pre_rotate && (capabilities.supportedTransforms & capabilities.currentTransform)) {
+        switch (capabilities.currentTransform) {
+        case vk::SurfaceTransformFlagBitsKHR::eRotate90:
+            quarter_turns = 1;
+            break;
+        case vk::SurfaceTransformFlagBitsKHR::eRotate180:
+            quarter_turns = 2;
+            break;
+        case vk::SurfaceTransformFlagBitsKHR::eRotate270:
+            quarter_turns = 3;
+            break;
+        default:
+            break;
+        }
+        if (quarter_turns) {
+            transform = capabilities.currentTransform;
+            // currentExtent is in the current (rotated) orientation: the images are in the
+            // panel's.
+            if (quarter_turns & 1) {
+                std::swap(extent.width, extent.height);
+            }
+        }
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            std::printf("Swapchain: display transform %s, pre-rotation %u quarter turns, %ux%u\n",
+                        vk::to_string(capabilities.currentTransform).c_str(), quarter_turns,
+                        extent.width, extent.height);
+        }
+    }
+#endif
     if (!(capabilities.supportedTransforms & transform)) {
         transform = capabilities.currentTransform;
     }
@@ -254,6 +382,7 @@ void Swapchain::SetSurfaceProperties() {
     if (!(capabilities.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::eOpaque)) {
         composite_alpha = vk::CompositeAlphaFlagBitsKHR::eInherit;
     }
+    return true;
 }
 
 void Swapchain::Destroy() {

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <limits>
+#include <optional>
 #include "shader_recompiler/info.h"
 #include "shader_recompiler/ir/basic_block.h"
 #include "shader_recompiler/ir/breadth_first_search.h"
@@ -10,6 +11,7 @@
 #include "shader_recompiler/ir/operand_helper.h"
 #include "shader_recompiler/ir/passes/ir_passes.h"
 #include "shader_recompiler/ir/passes/resource_pass.h"
+#include "shader_recompiler/ir/passes/srt.h"
 #include "shader_recompiler/ir/program.h"
 #include "shader_recompiler/ir/reinterpret.h"
 #include "shader_recompiler/profile.h"
@@ -117,7 +119,8 @@ public:
             return desc.sharp_fetch == existing.sharp_fetch && desc.is_array == existing.is_array &&
                    desc.mip_fallback_mode == existing.mip_fallback_mode &&
                    desc.constant_mip_index == existing.constant_mip_index &&
-                   desc.post_op == existing.post_op;
+                   desc.post_op == existing.post_op && desc.table_count == existing.table_count &&
+                   desc.table_stride_dw == existing.table_stride_dw;
         })};
         auto& image = image_resources[index];
         image.is_atomic |= desc.is_atomic;
@@ -164,12 +167,67 @@ private:
 
 using SharpSources = boost::container::small_vector<const IR::Inst*, 4>;
 
-SharpLocation SharpLocationFromSource(const IR::Inst* inst) {
+/// g2-arm64: the value of an offset with every value that is not an immediate taken as 0, or
+/// nothing when it uses an operation not listed.
+static std::optional<u32> OffsetWithLanePartsZero(const IR::Value& value, int depth = 0) {
+    if (value.IsImmediate()) {
+        return value.U32();
+    }
+    if (depth > 24) {
+        return std::nullopt;
+    }
+    const IR::Inst* inst = value.Inst();
+    const auto two = [&](auto op) -> std::optional<u32> {
+        const auto a = OffsetWithLanePartsZero(inst->Arg(0), depth + 1);
+        const auto b = OffsetWithLanePartsZero(inst->Arg(1), depth + 1);
+        if (!a || !b) {
+            return std::nullopt;
+        }
+        return op(*a, *b);
+    };
+    switch (inst->GetOpcode()) {
+    case IR::Opcode::IAdd32:
+        return two([](u32 a, u32 b) { return a + b; });
+    case IR::Opcode::ISub32:
+        return two([](u32 a, u32 b) { return a - b; });
+    case IR::Opcode::IMul32:
+        return two([](u32 a, u32 b) { return a * b; });
+    case IR::Opcode::ShiftLeftLogical32:
+        return two([](u32 a, u32 b) { return a << (b & 31); });
+    case IR::Opcode::ShiftRightLogical32:
+        return two([](u32 a, u32 b) { return a >> (b & 31); });
+    case IR::Opcode::BitwiseAnd32:
+        return two([](u32 a, u32 b) { return a & b; });
+    case IR::Opcode::BitwiseOr32:
+        return two([](u32 a, u32 b) { return a | b; });
+    default:
+        return 0u; // known only when the shader runs
+    }
+}
+
+SharpLocation SharpLocationFromSource(const IR::Inst* inst, const Info& info) {
     SharpLocation location{};
     if (inst->GetOpcode() == IR::Opcode::GetUserData) {
         return static_cast<SharpLocation>(inst->Arg(0).ScalarReg());
     } else if (inst->GetOpcode() == IR::Opcode::ReadConstBuffer) {
         location = inst->Flags<IR::BufferInstInfo>().flatbuf_off_dw;
+    } else if (const u32 flags = inst->Flags<u32>();
+               inst->GetOpcode() == IR::Opcode::ReadConst && (flags & ReadConstWindowFlag)) {
+        // g2-arm64: a sharp read through a constant window (bbport) sits at the window's start
+        // plus its offset, not at the start (every dword of such a sharp got the window's first
+        // dword): the offset with its per-lane parts taken as 0, the first entry of an indexed
+        // table. The tiled light 43b8ee5e reads its light's shadow cube T# by the light's index
+        // (dword 7220 + 8 * index of its block) and draws one light per dispatch: the port bound
+        // a null image for it. Past the window's copy the location stays unknown (null image).
+        const u32 extra = flags >> ReadConstWindowExtraShift;
+        const u32 copy = extra == ReadConstWindowDefault
+                             ? ReadConstWindowDwords
+                             : ReadConstWindowSize(info.pgm_hash) + extra;
+        const auto offset = OffsetWithLanePartsZero(inst->Arg(1));
+        if (!offset || *offset >= copy) {
+            return UNKNOWN_LOCATION;
+        }
+        return static_cast<SharpLocation>((flags & 0xFFFFu) + *offset);
     } else {
         location = inst->Flags<SharpLocation>();
     }
@@ -180,15 +238,119 @@ SharpLocation SharpLocationFromSource(const IR::Inst* inst) {
     return location;
 }
 
+/// g2-arm64: a T# read through a constant window at an index times a stride plus a base: a table
+/// of T#s the shader indexes. The tiled light 43b8ee5e reads its light's cookie (a 128x128 cube)
+/// at byte 28880 + 32 * index of its block, one per light; binding the first entry for every
+/// light (port 0048) gave all its lights the first light's cookie.
+struct SharpTable {
+    IR::Value index;
+    u32 stride_dw;
+    u32 count;
+};
+/// image_infos and the bindings of a pipeline hold 64 images (Shader::NUM_IMAGES).
+constexpr u32 MaxSharpTable = 32;
+
+/// The offset ((index * stride + base) >> 2) (+ 0), as the T#'s first dword computes it.
+static bool MatchTableOffset(IR::Value value, IR::Value& index, u32& stride_bytes,
+                             u32& base_bytes) {
+    if (!value.IsImmediate() && value.Inst()->GetOpcode() == IR::Opcode::IAdd32) {
+        const IR::Inst* add = value.Inst();
+        if (add->Arg(0).IsImmediate() && add->Arg(0).U32() == 0) {
+            value = add->Arg(1);
+        } else if (add->Arg(1).IsImmediate() && add->Arg(1).U32() == 0) {
+            value = add->Arg(0);
+        }
+    }
+    if (value.IsImmediate() || value.Inst()->GetOpcode() != IR::Opcode::ShiftRightLogical32 ||
+        !value.Inst()->Arg(1).IsImmediate() || value.Inst()->Arg(1).U32() != 2) {
+        return false;
+    }
+    const IR::Value sum = value.Inst()->Arg(0);
+    if (sum.IsImmediate() || sum.Inst()->GetOpcode() != IR::Opcode::IAdd32) {
+        return false;
+    }
+    IR::Value scaled = sum.Inst()->Arg(0);
+    IR::Value base = sum.Inst()->Arg(1);
+    if (scaled.IsImmediate()) {
+        std::swap(scaled, base);
+    }
+    if (!base.IsImmediate() || scaled.IsImmediate()) {
+        return false;
+    }
+    const IR::Inst* mul = scaled.Inst();
+    if (mul->GetOpcode() == IR::Opcode::IMul32) {
+        IR::Value a = mul->Arg(0);
+        IR::Value b = mul->Arg(1);
+        if (a.IsImmediate()) {
+            std::swap(a, b);
+        }
+        if (!b.IsImmediate() || a.IsImmediate()) {
+            return false;
+        }
+        index = a;
+        stride_bytes = b.U32();
+    } else if (mul->GetOpcode() == IR::Opcode::ShiftLeftLogical32 && mul->Arg(1).IsImmediate()) {
+        index = mul->Arg(0);
+        stride_bytes = 1u << (mul->Arg(1).U32() & 31);
+    } else {
+        return false;
+    }
+    base_bytes = base.U32();
+    return true;
+}
+
+static std::optional<SharpTable> FindSharpTable(const SharpReference& sharp, const Info& info) {
+    // A sharp is uniform per wave (GCN takes it from SGPRs); a compute workgroup of the port is
+    // one wave for this shader, so the index is dynamically uniform as Vulkan requires.
+    if (info.hw_stage != HwStage::Compute || sharp.num_dwords != 8) {
+        return std::nullopt;
+    }
+    const auto windowed = [](const IR::Value& v) {
+        return !v.IsImmediate() && v.Inst()->GetOpcode() == IR::Opcode::ReadConst &&
+               (v.Inst()->Flags<u32>() & ReadConstWindowFlag);
+    };
+    if (!windowed(sharp.dwords[0])) {
+        return std::nullopt;
+    }
+    const IR::Inst* first = sharp.dwords[0].Inst();
+    IR::Value index;
+    u32 stride_bytes = 0, base_bytes = 0;
+    if (!MatchTableOffset(first->Arg(1), index, stride_bytes, base_bytes) || stride_bytes % 4 ||
+        base_bytes % 4 || stride_bytes < 32) {
+        return std::nullopt;
+    }
+    const u32 base = base_bytes / 4, stride = stride_bytes / 4;
+    const u32 flags = first->Flags<u32>();
+    for (u32 d = 0; d < 8; ++d) {
+        if (!windowed(sharp.dwords[d]) || sharp.dwords[d].Inst()->Flags<u32>() != flags ||
+            OffsetWithLanePartsZero(sharp.dwords[d].Inst()->Arg(1)) != base + d) {
+            return std::nullopt;
+        }
+    }
+    const u32 extra = flags >> ReadConstWindowExtraShift;
+    if (extra == ReadConstWindowDefault) {
+        return std::nullopt;
+    }
+    const u32 copy = ReadConstWindowSize(info.pgm_hash) + extra;
+    if (base + 8 > copy) {
+        return std::nullopt;
+    }
+    const u32 count = std::min(MaxSharpTable, (copy - base - 8) / stride + 1);
+    if (count < 2) {
+        return std::nullopt;
+    }
+    return SharpTable{index, stride, count};
+}
+
 template <typename T>
-SharpFetch<T> ConstructSharpFetch(const SharpReference& sharp) {
+SharpFetch<T> ConstructSharpFetch(const SharpReference& sharp, const Info& info) {
     SharpFetch<T> sharp_fetch{};
     for (u32 i = 0; i < sharp.num_dwords; i++) {
         auto dword = sharp.dwords[i];
         if (dword.IsImmediate()) {
             sharp_fetch.immediates[i] = dword.U32();
         } else {
-            sharp_fetch.offsets[i] = SharpLocationFromSource(dword.Inst());
+            sharp_fetch.offsets[i] = SharpLocationFromSource(dword.Inst(), info);
             sharp_fetch.load_mask |= (1 << i);
         }
     }
@@ -200,7 +362,7 @@ void PatchBufferSharp(const ResourceDiscovery& resource, Info& info, Descriptors
     IR::Inst& inst = *resource.user;
 
     const u32 buffer_binding = descriptors.Add(BufferResource{
-        .sharp_fetch = ConstructSharpFetch<AmdGpu::Buffer>(resource.sharps[0]),
+        .sharp_fetch = ConstructSharpFetch<AmdGpu::Buffer>(resource.sharps[0], info),
         .used_types = BufferDataType(inst, profile),
         .buffer_type = BufferType::Guest,
         .is_written = IsBufferStore(inst),
@@ -237,7 +399,7 @@ void PatchImageSharp(const ResourceDiscovery& resource, Info& info, Descriptors&
          opcode == IR::Opcode::ImageQueryLod) &&
         !inst_info.has_offset && !inst_info.is_unnormalized;
     ImageResource image_res = {
-        .sharp_fetch = ConstructSharpFetch<AmdGpu::Image>(resource.sharps[0]),
+        .sharp_fetch = ConstructSharpFetch<AmdGpu::Image>(resource.sharps[0], info),
         .is_depth = bool(inst_info.is_depth),
         .is_atomic = is_atomic,
         .is_array = bool(inst_info.is_array),
@@ -306,7 +468,7 @@ void PatchImageSharp(const ResourceDiscovery& resource, Info& info, Descriptors&
 
             // Track FMask resource to do specialization.
             descriptors.Add(FMaskResource{
-                .sharp_idx = SharpLocationFromSource(resource.sharps[0].dwords[0].Inst()),
+                .sharp_idx = SharpLocationFromSource(resource.sharps[0].dwords[0].Inst(), info),
             });
             return;
         }
@@ -315,17 +477,29 @@ void PatchImageSharp(const ResourceDiscovery& resource, Info& info, Descriptors&
         }
     }
 
+    const auto table = FindSharpTable(resource.sharps[0], info);
+    if (table) {
+        image_res.table_count = static_cast<u8>(table->count);
+        image_res.table_stride_dw = static_cast<u8>(table->stride_dw);
+    }
+
     u32 image_binding = descriptors.Add(image_res);
 
     IR::IREmitter ir{*inst.GetParent(), IR::Block::InstructionList::s_iterator_to(inst)};
+    if (table) {
+        // g2-arm64: the entry this sample reads (the image emitters index the binding with it).
+        ir.ImageTableIndex(ir.Imm32(image_binding),
+                           ir.UMin(IR::U32{table->index}, ir.Imm32(table->count - 1)));
+    }
 
     if (inst.GetOpcode() == IR::Opcode::ImageSampleRaw) {
         auto& lod_prod = resource.sharps[1].post_op_data.lod_prod;
         const u32 sampler_binding = descriptors.Add(SamplerResource{
-            .sharp_fetch = ConstructSharpFetch<AmdGpu::Sampler>(resource.sharps[1]),
+            .sharp_fetch = ConstructSharpFetch<AmdGpu::Sampler>(resource.sharps[1], info),
             .post_op = resource.sharps[1].post_op,
             .post_op_tsharp_dw3_off =
-                lod_prod.IsEmpty() ? UNKNOWN_LOCATION : SharpLocationFromSource(lod_prod.Inst()),
+                lod_prod.IsEmpty() ? UNKNOWN_LOCATION
+                                   : SharpLocationFromSource(lod_prod.Inst(), info),
             .is_depth = bool(inst_info.is_depth), // true for the _C (compare) opcodes
         });
         inst.SetArg(0, ir.Imm32(image_binding | sampler_binding << 16));

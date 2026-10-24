@@ -12,6 +12,7 @@
  * Fibers without their own context run on the calling thread's stack, below the frame of
  * sceFiberRun; they cannot be suspended and start again from their entry next time. */
 #include "runtime.h"
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,6 +50,10 @@ typedef struct {
     uint64_t size_context;
     char name[32];
     uint64_t saved_rsp;      /* suspended context, 0 when the fiber starts from its entry */
+#if !defined(__x86_64__)
+    GuestContext saved;      /* ARM64: the suspended guest registers (valid when has_saved) */
+    uint64_t *resume_out;    /* where the resumed fiber gets the argument it is run with */
+#endif
     uint32_t flags, magic_end;
 } GuestFiber;
 _Static_assert(sizeof(GuestFiber)<=256,"OrbisFiber is 256 bytes");
@@ -65,6 +70,7 @@ typedef struct {
 } GuestFiberInfo;
 _Static_assert(sizeof(GuestFiberInfo)==128,"OrbisFiberInfo is 128 bytes");
 
+#if defined(__x86_64__)
 typedef struct {
     GuestFiber *current, *previous;
     uint64_t thread_rsp;         /* the thread's context, suspended in sceFiberRun */
@@ -100,6 +106,34 @@ __asm__(".text\n"
         ".globl fiber_start\nfiber_start:\n"
         " mov %rbx,%rdi\n and $-16,%rsp\n call fiber_main\n ud2\n");
 
+#else
+/* ARM64 (guest code on FEXCore): a fiber is a guest register state. The host functions below
+ * run on the host stack; switching saves the caller's guest registers (guest_context_get,
+ * taken at the veneer, so a resumed fiber returns from the same sceFiber call) and makes the
+ * guest resume with another state (guest_context_set). */
+typedef struct {
+    GuestFiber *current;
+    GuestContext thread_context; /* the thread, suspended in sceFiberRun */
+    uint64_t *thread_ret;        /* sceFiberRun's ret argument */
+    uint64_t arg_on_run_to, arg_on_return;
+} FiberThread;
+static _Thread_local FiberThread fiber_thread;
+static uint32_t context_size_check;
+static _Atomic uint64_t switches, fibers_started;
+static FiberThread *this_thread(void) { return &fiber_thread; }
+#endif
+
+int runtime_fiber_describe(char *out,size_t size,uint64_t rsp) {
+    const GuestFiber *f=this_thread()->current;
+    if (!f) return 0;
+    uint64_t lo=(uint64_t)(uintptr_t)f->addr_context, hi=lo+f->size_context;
+    int in=rsp>=lo && rsp<hi;
+    const char *bottom=!lo ? "no context" : *(const uint64_t *)f->addr_context==STACK_SIGNATURE ? "intact" : "OVERWRITTEN";
+    return snprintf(out,size,"  fiber '%.32s' stack %#llx-%#llx (%llu KiB), rsp %#llx %s (%lld bytes used), bottom signature %s\n",
+                    f->name,(unsigned long long)lo,(unsigned long long)hi,(unsigned long long)(f->size_context>>10),
+                    (unsigned long long)rsp,in ? "inside" : "OUTSIDE",(long long)(hi-rsp),bottom);
+}
+
 static void fatal(const char *what,const GuestFiber *fiber) {
     fprintf(stderr,"STOP: fiber '%s': %s\n",fiber ? fiber->name : "?",what);
     runtime_report();
@@ -107,6 +141,7 @@ static void fatal(const char *what,const GuestFiber *fiber) {
     _exit(24);
 }
 
+#if defined(__x86_64__)
 static void use_stack(const GuestFiber *fiber,FiberThread *t) {
 #ifdef _WIN32
     NT_TIB *tib=(NT_TIB *)NtCurrentTeb();
@@ -145,11 +180,14 @@ static uint64_t context_of(GuestFiber *fiber,uint64_t below) {
     return (uint64_t)(uintptr_t)frame;
 }
 
+#endif
+
 static void check_stack(const GuestFiber *fiber) {
     if (fiber && fiber->addr_context && *(const uint64_t *)fiber->addr_context!=STACK_SIGNATURE)
         fatal("stack overflow (context size too small)",fiber);
 }
 
+#if defined(__x86_64__)
 /* Runs first in every context that gains control: the previous fiber's context is saved. */
 static void arrived(FiberThread *t) {
     GuestFiber *previous=t->previous;
@@ -164,6 +202,8 @@ ABI __attribute__((used,noreturn)) void fiber_main(GuestFiber *fiber) {
     fatal("entry function returned",fiber);
     __builtin_unreachable();
 }
+
+#endif
 
 static int valid(const GuestFiber *fiber) {
     return fiber->magic_start==SIGNATURE_START && fiber->magic_end==SIGNATURE_END;
@@ -230,6 +270,7 @@ static int claim(GuestFiber *fiber) {
     return __atomic_compare_exchange_n(&fiber->state,&expected,STATE_RUN,0,__ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE);
 }
 
+#if defined(__x86_64__)
 static ABI int32_t fiber_run_with(GuestFiber *fiber,void *addr,uint64_t size,uint64_t arg,uint64_t *ret) {
     int32_t e=check_fiber(fiber);
     if (e) return e;
@@ -306,6 +347,105 @@ static ABI int32_t fiber_return_to_thread(uint64_t arg_on_return,uint64_t *arg_o
     if (arg_on_run) *arg_on_run=t->arg_on_run_to;
     return 0;
 }
+
+#else
+static ABI void fiber_entry_returned(void) {
+    fatal("entry function returned",this_thread()->current);
+}
+static uintptr_t entry_return_address(void) {
+    static uintptr_t address;
+    if (!address) address=guest_host_function((const void *)fiber_entry_returned,"fiber entry returned",GUEST_ABI_SYSV);
+    return address;
+}
+static void need_context(GuestContext *now) {
+    if (!guest_context_get(now)) fatal("no guest context (called outside guest code)",this_thread()->current);
+}
+/* Suspends `fiber` with the guest state `now` (resumed later with *arg_on_run set), or forgets
+ * it when it has no context of its own (it starts from its entry next time). */
+static void suspend(GuestFiber *fiber,const GuestContext *now,uint64_t *arg_on_run) {
+    if (fiber->addr_context) { fiber->saved=*now; fiber->saved_rsp=now->gpr[GUEST_RSP]; fiber->resume_out=arg_on_run; }
+    else fiber->saved_rsp=0;
+    __atomic_store_n(&fiber->state,STATE_IDLE,__ATOMIC_RELEASE);
+}
+/* The guest continues in `fiber`: its saved state or a fresh frame at the top of its stack
+ * (contextless fibers: on the thread stack below `below`). */
+static void resume(GuestFiber *fiber,const GuestContext *now,uint64_t below,uint64_t arg_on_run) {
+    GuestContext next;
+    if (fiber->saved_rsp) {
+        next=fiber->saved;
+        fiber->saved_rsp=0;
+        next.gpr[GUEST_RAX]=0; /* the sceFiber call it suspended in returns ORBIS_OK */
+        if (fiber->resume_out) *fiber->resume_out=arg_on_run;
+        fiber->resume_out=NULL;
+    } else {
+        next=*now;
+        uint64_t top=fiber->addr_context ? (uint64_t)(uintptr_t)(fiber->addr_context+fiber->size_context) : below-512;
+        top=(top&~UINT64_C(15))-8;
+        *(uint64_t *)(uintptr_t)top=entry_return_address(); /* SysV: rsp+8 is 16-byte aligned at entry */
+        next.gpr[GUEST_RSP]=top;
+        next.gpr[GUEST_RBP]=0;                               /* ends frame-pointer walks */
+        next.gpr[GUEST_RDI]=fiber->arg_on_initialize;
+        next.gpr[GUEST_RSI]=arg_on_run;
+        next.rip=(uint64_t)(uintptr_t)fiber->entry;
+        if (fiber->flags&FLAG_SET_FPU) { next.mxcsr=0x9fc0; next.fcw=0x037f; }
+        ++fibers_started;
+    }
+    ++switches;
+    guest_context_set(&next);
+}
+static ABI int32_t fiber_run_with(GuestFiber *fiber,void *addr,uint64_t size,uint64_t arg,uint64_t *ret) {
+    int32_t e=check_fiber(fiber);
+    if (e) return e;
+    if ((uintptr_t)addr&15) return FIBER_ERROR_ALIGNMENT;
+    FiberThread *t=this_thread();
+    if (t->current) return FIBER_ERROR_PERMISSION;
+    if ((e=attach_context(fiber,addr,size))) return e;
+    if (!claim(fiber)) return FIBER_ERROR_STATE;
+    GuestContext now;
+    need_context(&now);
+    t->thread_context=now; t->thread_ret=ret;
+    t->current=fiber; t->arg_on_run_to=arg; t->arg_on_return=0;
+    resume(fiber,&now,now.gpr[GUEST_RSP],arg);
+    return 0;
+}
+static ABI int32_t fiber_run(GuestFiber *fiber,uint64_t arg,uint64_t *ret) { return fiber_run_with(fiber,NULL,0,arg,ret); }
+
+static ABI int32_t fiber_switch_with(GuestFiber *fiber,void *addr,uint64_t size,uint64_t arg,uint64_t *arg_on_run) {
+    int32_t e=check_fiber(fiber);
+    if (e) return e;
+    if ((uintptr_t)addr&15) return FIBER_ERROR_ALIGNMENT;
+    FiberThread *t=this_thread();
+    GuestFiber *current=t->current;
+    if (!current) return FIBER_ERROR_PERMISSION;
+    if ((e=attach_context(fiber,addr,size))) return e;
+    if (!claim(fiber)) return FIBER_ERROR_STATE;
+    check_stack(current);
+    GuestContext now;
+    need_context(&now);
+    t->current=fiber; t->arg_on_run_to=arg;
+    suspend(current,&now,arg_on_run);
+    resume(fiber,&now,t->thread_context.gpr[GUEST_RSP],arg);
+    return 0;
+}
+static ABI int32_t fiber_switch(GuestFiber *fiber,uint64_t arg,uint64_t *arg_on_run) { return fiber_switch_with(fiber,NULL,0,arg,arg_on_run); }
+
+static ABI int32_t fiber_return_to_thread(uint64_t arg_on_return,uint64_t *arg_on_run) {
+    FiberThread *t=this_thread();
+    GuestFiber *current=t->current;
+    if (!current) return FIBER_ERROR_PERMISSION;
+    check_stack(current);
+    GuestContext now;
+    need_context(&now);
+    t->current=NULL; t->arg_on_return=arg_on_return;
+    suspend(current,&now,arg_on_run);
+    if (t->thread_ret) *t->thread_ret=arg_on_return;
+    GuestContext back=t->thread_context;
+    back.gpr[GUEST_RAX]=0; /* sceFiberRun returns ORBIS_OK */
+    ++switches;
+    guest_context_set(&back);
+    return 0;
+}
+#endif
 
 static ABI int32_t fiber_get_self(GuestFiber **fiber) {
     if (!fiber) return FIBER_ERROR_NULL;

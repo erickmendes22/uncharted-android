@@ -1,0 +1,62 @@
+From 289bf6e520703d0c04b24fa5afa11a86973be2ae Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] u_trace: MESA_GPU_TRACE_GATE (print only while a file exists)
+
+---
+ src/util/perf/u_trace.c | 26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+diff --git a/src/util/perf/u_trace.c b/src/util/perf/u_trace.c
+index d047016..e263fe2 100644
+--- a/src/util/perf/u_trace.c
++++ b/src/util/perf/u_trace.c
+@@ -22,6 +22,8 @@
+  */
+ 
+ #include "u_trace.h"
++#include <unistd.h>
++#include "util/os_time.h"
+ 
+ #include <inttypes.h>
+ 
+@@ -635,6 +637,28 @@ print_ranges(struct u_trace_context *utctx, struct hash_table *ranges, uint32_t
+    ralloc_free(ctx);
+ }
+ 
++/* uncharted-g2: MESA_GPU_TRACE_GATE=<file>: events are printed only while the file exists
++ * (a few frames of a running game instead of everything from the start). */
++static void
++gate_output(struct u_trace_context *utctx)
++{
++   static const char *gate;
++   static bool gate_read, open;
++   static uint64_t checked_ns;
++   if (!gate_read) {
++      gate = getenv("MESA_GPU_TRACE_GATE");
++      gate_read = true;
++   }
++   if (!gate || !utctx->out_printer)
++      return;
++   const uint64_t now = os_time_get_nano();
++   if (now - checked_ns > 100000000ull) {
++      checked_ns = now;
++      open = access(gate, F_OK) == 0;
++   }
++   utctx->out = open ? u_trace_state.trace_file : NULL;
++}
++
+ static void
+ process_flush(void *job, void *gdata, int thread_index)
+ {
+@@ -642,6 +666,8 @@ process_flush(void *job, void *gdata, int thread_index)
+    struct u_trace *ut = &flush->trace;
+    struct u_trace_context *utctx = ut->utctx;
+ 
++   gate_output(utctx);
++
+    if (flush->frame_nr != U_TRACE_FRAME_UNKNOWN &&
+        flush->frame_nr != utctx->frame_nr) {
+       if (utctx->out) {
+-- 
+2.43.0
+

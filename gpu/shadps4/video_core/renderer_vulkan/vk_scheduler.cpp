@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <thread>
+#include <chrono>
 #include <algorithm>
 #include <cstdio>
+#include "bbport_tsc.h"
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -15,6 +17,7 @@
 #include <functional>
 
 #include "bbport_copy.h"
+#include "bbport_owner_wait.h"
 #include "video_core/renderer_vulkan/vk_gpu_profiler.h"
 #include "bbport_toggles.h"
 #include "common/assert.h"
@@ -31,6 +34,8 @@ std::mutex Scheduler::submit_mutex;
 
 extern void (*g_gpu_stall_report)();
 bool (*g_draw_pipe_busy)() = nullptr;
+// g2-arm64: the latest GPU checkpoint recorded (BB_GPU_CHECKPOINTS, vk_rasterizer.cpp).
+u64 (*g_checkpoint_seq)() = nullptr;
 
 namespace {
 // bbport: the last submissions to the graphics queue (all schedulers share it), printed when a
@@ -42,6 +47,8 @@ struct SubmitRecord {
     u32 waits;
     std::array<VkSemaphore, 4> wait_semaphore;
     std::array<u64, 4> wait_value;
+    u64 checkpoint; // the latest checkpoint at submission (its draws are the ones up to it)
+    std::chrono::steady_clock::time_point time;
 };
 std::mutex g_recent_mutex;
 std::array<SubmitRecord, 32> g_recent;
@@ -69,7 +76,13 @@ void Scheduler::ReportStall() {
             std::printf(" %p=%llu", static_cast<void*>(r.wait_semaphore[w]),
                         static_cast<unsigned long long>(r.wait_value[w]));
         }
-        std::printf("\n");
+        if (g_checkpoint_seq) {
+            std::printf(", checkpoints up to #%llu", static_cast<unsigned long long>(r.checkpoint));
+        }
+        std::printf(", %lld ms ago\n",
+                    static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                               std::chrono::steady_clock::now() - r.time)
+                                               .count()));
     }
     std::fflush(stdout);
 }
@@ -113,6 +126,7 @@ Scheduler::~Scheduler() {
 }
 
 void Scheduler::BeginRendering(const RenderState& new_state) {
+    FrontCheck check{this, "BeginRendering"};
     if (is_rendering && render_state == new_state) {
         return;
     }
@@ -183,6 +197,7 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
 }
 
 void Scheduler::EndRendering() {
+    FrontCheck check{this, "EndRendering"};
     if (!is_rendering) {
         return;
     }
@@ -227,6 +242,49 @@ void Scheduler::TraceDirectRecording(void* caller) {
     callers.clear();
 }
 
+#ifndef _WIN32
+void PrintHostBacktrace(const char* prefix); // vk_semaphore.cpp
+#endif
+
+void Scheduler::ReportFront(const char* what, const char* other) {
+    static std::mutex report_mutex;
+    static u32 reports = 0;
+    std::scoped_lock lk{report_mutex};
+    if (reports >= 24) {
+        return;
+    }
+    ++reports;
+    char name[32] = "?";
+#ifndef _WIN32
+    pthread_getname_np(pthread_self(), name, sizeof(name));
+#endif
+    std::printf("Record check: scheduler %p: %s on thread '%s' while another thread is in %s\n",
+                static_cast<const void*>(this), what, name, other ? other : "?");
+#ifndef _WIN32
+    PrintHostBacktrace("Record check:");
+#endif
+    std::fflush(stdout);
+}
+
+void Scheduler::CheckDirectOwner(const char* what) {
+    const uintptr_t me = bb_thread_pointer();
+    uintptr_t owner = 0;
+    if (!direct_owner.compare_exchange_strong(owner, me, std::memory_order_acq_rel) && owner != me) {
+        ReportFront(what, "direct mode taken by another thread (raw command buffer held there)");
+    }
+}
+
+void Scheduler::CheckDirect(const char* what) {
+    bool busy;
+    {
+        std::scoped_lock lk{recorder_mutex};
+        busy = recorder_busy || !recorder_queue.empty();
+    }
+    if (busy) {
+        ReportFront(what, "the recording thread (commands queued or running)");
+    }
+}
+
 std::unique_ptr<RecordChunk> Scheduler::AcquireChunk() {
     std::scoped_lock lk{recorder_mutex};
     if (free_chunks.empty()) {
@@ -261,6 +319,7 @@ void Scheduler::WaitDeferredSignals() {
         return;
     }
     BbStats::WaitTimer timer{BbStats::host_copies_wait_ns};
+    const BbOwnerWait::Scope owner_waits; // g2-arm64: the signals may need the owner
     KickRecording(true);
     while (deferred_signals_done->load(std::memory_order_acquire) < issued) {
         // Helps the copy threads the signals wait for.
@@ -270,6 +329,8 @@ void Scheduler::WaitDeferredSignals() {
 }
 
 void Scheduler::WaitHostCopies() {
+    // g2-arm64: a fence label on the recording or a copy thread may need the owner meanwhile.
+    const BbOwnerWait::Scope owner_waits;
     if (host_copies_done.load(std::memory_order_acquire) < host_copies_issued) {
         BbStats::WaitTimer timer{BbStats::host_copies_wait_ns};
         BbStats::host_copy_waits.fetch_add(1, std::memory_order_relaxed);
@@ -283,8 +344,12 @@ void Scheduler::WaitHostCopies() {
 }
 
 void Scheduler::KickRecording(bool force) {
+    FrontCheck check{this, "KickRecording"};
     if (!recording_threaded) {
         return;
+    }
+    if (check.on) {
+        direct_owner.store(0, std::memory_order_release);
     }
     // Callers kick where nobody holds the raw command buffer: deferral resumes.
     direct_mode = false;
@@ -318,29 +383,89 @@ void Scheduler::KickRecording(bool force) {
 }
 
 void Scheduler::SyncRecording() {
+    FrontCheck check{this, "SyncRecording"};
     if (!recording_threaded) {
         return;
     }
+    // g2-arm64 diagnosis: BB_SYNC_STATS=1 prints every 5 s how often and how long recording
+    // threads waited here, with what was queued for the Vulkan recording thread on entry.
+    static const bool stats = std::getenv("BB_SYNC_STATS") != nullptr;
+    size_t entry_chunks = 0, entry_bytes = 0;
+    bool entry_sleeping = false;
+    if (stats) {
+        entry_bytes = record_chunk->Size();
+        for (const auto& chunk : full_chunks) {
+            entry_bytes += chunk->Size();
+        }
+        entry_chunks = full_chunks.size() + !record_chunk->Empty();
+        std::scoped_lock lk{recorder_mutex};
+        for (const auto& chunk : recorder_queue) {
+            entry_bytes += chunk->Size();
+        }
+        entry_chunks += recorder_queue.size();
+        entry_sleeping = recorder_sleeping;
+    }
+    const auto start = stats ? std::chrono::steady_clock::now()
+                             : std::chrono::steady_clock::time_point{};
     KickRecording(true);
-    BbStats::WaitTimer timer{BbStats::sync_recording_ns};
-    std::unique_lock lk{recorder_mutex};
-    recorder_idle_cv.wait(lk, [this] { return recorder_queue.empty() && !recorder_busy; });
+    {
+        BbStats::WaitTimer timer{BbStats::sync_recording_ns};
+        // g2-arm64: a fault on the recording thread may need the owner meanwhile.
+        const BbOwnerWait::Scope owner_waits;
+        std::unique_lock lk{recorder_mutex};
+        recorder_idle_cv.wait(lk, [this] { return recorder_queue.empty() && !recorder_busy; });
+    }
+    if (stats) {
+        static std::mutex stats_mutex;
+        static u64 syncs, ns, max_ns, chunks, bytes, asleep;
+        static std::chrono::steady_clock::time_point window_start;
+        std::scoped_lock lk{stats_mutex};
+        const auto now = std::chrono::steady_clock::now();
+        const u64 waited = std::chrono::duration_cast<std::chrono::nanoseconds>(now - start).count();
+        ++syncs;
+        ns += waited;
+        max_ns = std::max(max_ns, waited);
+        chunks += entry_chunks;
+        bytes += entry_bytes;
+        asleep += entry_sleeping;
+        if (window_start.time_since_epoch().count() == 0) {
+            window_start = now;
+        } else if (now - window_start >= std::chrono::seconds(5)) {
+            const double secs = std::chrono::duration<double>(now - window_start).count();
+            std::printf("Recording syncs over %.1f s: %.0f/s, %.0f us each (max %.0f), %.1f ms/s; "
+                        "on entry %.1f chunks, %.1f KiB queued, recorder asleep %.0f%%\n",
+                        secs, syncs / secs, ns / 1e3 / syncs, max_ns / 1e3, ns / 1e6 / secs,
+                        double(chunks) / syncs, double(bytes) / 1024 / syncs,
+                        100.0 * asleep / syncs);
+            syncs = ns = max_ns = chunks = bytes = asleep = 0;
+            window_start = now;
+        }
+    }
 }
 
 void Scheduler::RecorderThread(std::stop_token stoken) {
     Common::SetCurrentThreadName("bb:VkRecorder");
+    BbOwnerWait::helper_thread = true; // g2-arm64: writes fence labels (RecorderFences)
     while (true) {
         // Spin briefly before sleeping: the next chunk usually follows within microseconds,
         // and a sleeping recorder costs the GPU thread a wake-up syscall per kick. With few
         // hardware threads (Steam Deck: 8) the spin would take time from guest threads.
-        static const auto spin_time = std::chrono::microseconds(
-            BbThreads::Available() >= 12 ? 200 : 20);
-        const auto spin_until = std::chrono::steady_clock::now() + spin_time;
+        // g2-arm64: with wfe (bb_wait_word) the core idles until the queue's line is written,
+        // so the spin can cover the gaps between kicks within a frame: a sleeping recorder
+        // cost the draw recording thread a futex wake per fence it hands over (U1: ~4% of its
+        // profile). BB_RECORDER_SPIN_US overrides.
+        static const u64 spin_us = [] {
+            if (const char* env = std::getenv("BB_RECORDER_SPIN_US")) {
+                return static_cast<u64>(std::max(0, std::atoi(env)));
+            }
+            return u64{BbThreads::Available() >= 12 || bb_wfe_enabled() ? 200u : 20u};
+        }();
+        const BbSpinDeadline spin_until{spin_us};
         for (u32 spins = 1; queued_chunks.load(std::memory_order_acquire) == 0; ++spins) {
-            __builtin_ia32_pause();
-            // The clock is read every 256 pauses, not per iteration.
-            if (!(spins & 255) &&
-                (stoken.stop_requested() || std::chrono::steady_clock::now() >= spin_until)) {
+            bb_wait_word(&queued_chunks, size_t{0});
+            // Without wfe the clock is read every 256 pauses, not per iteration.
+            if ((bb_wfe_enabled() || !(spins & 255)) &&
+                (stoken.stop_requested() || spin_until.Passed())) {
                 break;
             }
         }
@@ -358,7 +483,11 @@ void Scheduler::RecorderThread(std::stop_token stoken) {
             queued_chunks.store(recorder_queue.size(), std::memory_order_release);
             recorder_busy = true;
         }
-        // current_cmdbuf only changes after SyncRecording(), which waits for this thread.
+        // current_cmdbuf only changes after SyncRecording(), which waits for this thread, or
+        // on this thread (a deferred submission): Execute reads it for every command.
+        if (FrontCheck::Wanted() && direct_mode) {
+            ReportFront("recording thread runs commands", "direct mode (raw command buffer held)");
+        }
         chunk->Execute(current_cmdbuf);
         {
             std::scoped_lock lk{recorder_mutex};
@@ -403,6 +532,8 @@ void Scheduler::Wait(u64 tick) {
         Flush(info);
     }
     BbStats::WaitTimer timer{BbStats::tick_wait_ns};
+    // g2-arm64: the submission may still be on the recording thread (BB_DEFERRED_SUBMIT).
+    const BbOwnerWait::Scope owner_waits;
     work_semaphore.Wait(tick);
 }
 
@@ -451,9 +582,38 @@ void Scheduler::AllocateWorkerCommandBuffers() {
 #endif
 }
 
+namespace {
+// g2-arm64: BB_DEFERRED_SUBMIT=1: a submission from a thread that records through the Vulkan
+// recording thread is itself recorded: that thread ends the command buffer, submits it and
+// begins the next once it has recorded everything before. The thread submitting went on at
+// once; before, it waited for the recording thread to catch up (SyncRecording). U1 720p:
+// ~250 submissions a second (mid-frame flushes), ~600 us each in SyncRecording, ~15% of the
+// time - mostly on the draw recording thread. Experimental, off by default: no frame rate
+// gained where measured (the flip waits for the GPU, BB_FRAMES_AHEAD), and the device was lost
+// in one run of six (2026-10-20; a wait on a tick still deferred?).
+bool DeferredSubmitWanted() {
+    static const bool wanted = [] {
+        const char* env = std::getenv("BB_DEFERRED_SUBMIT");
+        return env && env[0] == '1';
+    }();
+    return wanted;
+}
+} // namespace
+
 void Scheduler::SubmitExecution(SubmitInfo& info) {
+    // g2-arm64: a deferred submission takes submit_mutex on the recording thread: none may be
+    // pending while this thread holds it and waits for that thread. Direct recording (or
+    // deferral off) means the recording thread has nothing queued.
+    FrontCheck check{this, "SubmitExecution"};
+    const bool defer = DeferredSubmitWanted() && IsRecordingDeferred();
+    if (defer && DeferredSubmitsPending() && queue_work_pending && queue_work_pending()) {
+        // The submit callback's sparse binds go to the queue now: earlier deferred
+        // submissions reach it first, as before.
+        SyncRecording();
+    }
     std::scoped_lock lk{submit_mutex};
     // bbport: BB_SUBMIT_THREADS=1 names each thread that submits through this scheduler (once).
+#ifdef _WIN32 // g2-arm64: Windows-only diagnostics
     static const bool submit_threads = std::getenv("BB_SUBMIT_THREADS") != nullptr;
     if (submit_threads) {
         static std::mutex seen_mutex;
@@ -492,6 +652,7 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
             std::printf("\n");
         }
     }
+#endif
     const u64 signal_value = work_semaphore.NextTick();
 
 #if TRACY_GPU_ENABLED
@@ -509,13 +670,51 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
     EndRendering();
     if (auto* profiler = GpuProfiler::Get(); profiler && profiler->Records(this)) {
         // Until the next submission's first timestamp: mostly the GPU waiting for it.
-        profiler->Mark(0x5B317ull, [] { return std::string{"(between submissions: GPU idle)"}; });
+        profiler->Mark(GpuProfiler::IdleKey,
+                       [] { return std::string{"(between submissions: GPU idle)"}; });
+    }
+    if (defer && IsRecordingDeferred()) {
+        ++deferred_submits_issued;
+        Record([this, info, signal_value](vk::CommandBuffer cmdbuf) mutable {
+            SubmitRecorded(cmdbuf, info, signal_value);
+        });
+        // Commands recorded from here on go to the next command buffer: its dynamic state
+        // starts unset.
+        dynamic_state.Invalidate();
+        KickRecording(true);
+        PopPendingOperations();
+        return;
     }
     SyncRecording();
     // Guest memory copies into staging read by this submission (copy threads).
     WaitHostCopies();
     Check(current_cmdbuf.end());
+    QueueSubmit(current_cmdbuf, info, signal_value);
+    work_semaphore.Refresh();
+    AllocateWorkerCommandBuffers();
 
+    // Apply pending operations
+    PopPendingOperations();
+}
+
+void Scheduler::SubmitRecorded(vk::CommandBuffer cmdbuf, SubmitInfo& info, u64 signal_value) {
+    // Guest memory copies into staging read by this submission: this thread ran its own
+    // (RecordHostCopy) before; the copy threads' may still run.
+    BbCopy::WaitAsync();
+    Check(cmdbuf.end());
+    {
+        std::scoped_lock lk{submit_mutex};
+        QueueSubmit(cmdbuf, info, signal_value);
+    }
+    work_semaphore.Refresh();
+    current_cmdbuf = command_pool.Commit();
+    Check(current_cmdbuf.begin(vk::CommandBufferBeginInfo{
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+    }));
+    deferred_submits_done.fetch_add(1, std::memory_order_release);
+}
+
+void Scheduler::QueueSubmit(vk::CommandBuffer cmdbuf, SubmitInfo& info, u64 signal_value) {
     const vk::Semaphore timeline = work_semaphore.Handle();
     info.AddSignal(timeline, signal_value);
 
@@ -537,7 +736,7 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
         .pWaitSemaphores = info.wait_semas.data(),
         .pWaitDstStageMask = wait_stage_masks.data(),
         .commandBufferCount = 1U,
-        .pCommandBuffers = &current_cmdbuf,
+        .pCommandBuffers = &cmdbuf,
         .signalSemaphoreCount = info.num_signal_semas,
         .pSignalSemaphores = info.signal_semas.data(),
     };
@@ -545,24 +744,51 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
     {
         std::scoped_lock lk{g_recent_mutex};
         auto& record = g_recent[g_recent_count++ % g_recent.size()];
-        record = {this, timeline, signal_value, info.num_wait_semas, {}, {}};
+        record = {this, timeline, signal_value, info.num_wait_semas, {}, {},
+                  g_checkpoint_seq ? g_checkpoint_seq() : 0, std::chrono::steady_clock::now()};
         for (u32 w = 0; w < info.num_wait_semas && w < 4; ++w) {
             record.wait_semaphore[w] = info.wait_semas[w];
             record.wait_value[w] = info.wait_ticks[w];
         }
     }
     ImGui::Core::TextureManager::Submit();
+    static const bool submit_stats = std::getenv("BB_SYNC_STATS") != nullptr; // g2-arm64
+    const auto t0 = submit_stats ? std::chrono::steady_clock::now()
+                                 : std::chrono::steady_clock::time_point{};
     auto submit_result = instance.GetGraphicsQueue().submit(submit_info, info.fence);
     if (submit_result == vk::Result::eErrorDeviceLost) {
         std::printf("Device lost during submit\n");
         DeviceLost(instance.GetDevice());
     }
+    const auto t1 = submit_stats ? std::chrono::steady_clock::now() : t0;
 
-    work_semaphore.Refresh();
-    AllocateWorkerCommandBuffers();
-
-    // Apply pending operations
-    PopPendingOperations();
+    if (submit_stats) {
+        // Time in vkQueueSubmit, and in getting the next command buffer (it may wait for the
+        // GPU to release one).
+        static std::mutex stats_mutex; // the schedulers submit from different threads
+        static u64 submits, submit_ns, alloc_ns, max_ns;
+        static std::chrono::steady_clock::time_point window_start;
+        std::scoped_lock stats_lk{stats_mutex};
+        const auto t2 = std::chrono::steady_clock::now();
+        const auto ns = [](auto d) {
+            return u64(std::chrono::duration_cast<std::chrono::nanoseconds>(d).count());
+        };
+        ++submits;
+        submit_ns += ns(t1 - t0);
+        alloc_ns += ns(t2 - t1);
+        max_ns = std::max(max_ns, ns(t2 - t0));
+        if (window_start.time_since_epoch().count() == 0) {
+            window_start = t2;
+        } else if (t2 - window_start >= std::chrono::seconds(5)) {
+            const double secs = std::chrono::duration<double>(t2 - window_start).count();
+            std::printf("Submissions over %.1f s: %.0f/s, vkQueueSubmit %.0f us each, next "
+                        "command buffer %.0f us each (max both %.0f us)\n",
+                        secs, submits / secs, submit_ns / 1e3 / submits, alloc_ns / 1e3 / submits,
+                        max_ns / 1e3);
+            submits = submit_ns = alloc_ns = max_ns = 0;
+            window_start = t2;
+        }
+    }
 }
 
 void Scheduler::PriorityPendingOpsThread(std::stop_token stoken) {

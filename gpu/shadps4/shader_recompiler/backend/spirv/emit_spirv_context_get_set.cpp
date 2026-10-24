@@ -7,6 +7,7 @@
 #include "bbport_nan_guard.h"
 #include "shader_recompiler/backend/spirv/spirv_emit_context.h"
 #include "shader_recompiler/ir/attribute.h"
+#include "shader_recompiler/ir/passes/srt_window.h"
 #include "shader_recompiler/ir/microinstruction.h"
 #include "shader_recompiler/ir/patch.h"
 #include "shader_recompiler/runtime_info.h"
@@ -62,10 +63,22 @@ Id EmitReadConst(EmitContext& ctx, IR::Inst* inst, Id addr, Id offset) {
     const u32 flatbuf_off_dw = inst->Flags<u32>();
     if (flatbuf_off_dw & ReadConstWindowFlag) {
         // bbport: the lane's dword of the block's window (ReadConstWindowFlag)
-        const Id index =
-            ctx.OpUMin(ctx.U32[1], offset, ctx.ConstU32(ReadConstWindowDwords - 1));
-        return ctx.EmitFlatbufferLoad(
-            ctx.OpIAdd(ctx.U32[1], ctx.ConstU32(flatbuf_off_dw & 0xFFFFu), index));
+        // g2-arm64: the window's size is per shader; the clamp goes on the per-lane part of the
+        // offset when the immediates added to it are inside the copy (SplitWindowOffset), so the
+        // dwords of one load share their base and Turnip merges them into vector loads.
+        const u32 start = flatbuf_off_dw & 0xFFFFu;
+        const u32 extra = flatbuf_off_dw >> ReadConstWindowExtraShift;
+        const bool fallback = extra == ReadConstWindowDefault;
+        const Id last = ctx.ConstU32(
+            (fallback ? ReadConstWindowDwords : ReadConstWindowSize(ctx.info.pgm_hash)) - 1);
+        if (const auto [lane, imm] = SplitWindowOffset(inst->Arg(1));
+            !fallback && imm != 0 && imm <= extra) {
+            const Id clamped = ctx.OpUMin(ctx.U32[1], ctx.Def(lane), last);
+            return ctx.EmitFlatbufferLoad(
+                ctx.OpIAdd(ctx.U32[1], clamped, ctx.ConstU32(start + imm)));
+        }
+        const Id index = ctx.OpUMin(ctx.U32[1], offset, last);
+        return ctx.EmitFlatbufferLoad(ctx.OpIAdd(ctx.U32[1], ctx.ConstU32(start), index));
     }
     if (!EmulatorSettings.IsDirectMemoryAccessEnabled()) {
         return ctx.EmitFlatbufferLoad(ctx.ConstU32(flatbuf_off_dw));
@@ -236,11 +249,20 @@ Id EmitGetAttributeU32(EmitContext& ctx, IR::Attribute attr, u32 comp) {
     case IR::Attribute::WorkgroupIndex:
         return ctx.workgroup_index_id;
     case IR::Attribute::WorkgroupId:
+        if (ctx.split_workgroup_id.value) {
+            return ctx.OpCompositeExtract(ctx.U32[1], ctx.split_workgroup_id, comp);
+        }
         return ctx.OpCompositeExtract(ctx.U32[1], ctx.OpLoad(ctx.U32[3], ctx.workgroup_id), comp);
     case IR::Attribute::LocalInvocationId:
+        if (ctx.split_local_id.value) {
+            return ctx.OpCompositeExtract(ctx.U32[1], ctx.split_local_id, comp);
+        }
         return ctx.OpCompositeExtract(ctx.U32[1], ctx.OpLoad(ctx.U32[3], ctx.local_invocation_id),
                                       comp);
     case IR::Attribute::LocalInvocationIndex:
+        if (ctx.split_local_id.value) {
+            return ctx.OpCompositeExtract(ctx.U32[1], ctx.split_local_id, 0);
+        }
         return ctx.OpLoad(ctx.U32[1], ctx.local_invocation_index);
     case IR::Attribute::SampleIndex:
         return ctx.OpLoad(ctx.U32[1], ctx.sample_index);

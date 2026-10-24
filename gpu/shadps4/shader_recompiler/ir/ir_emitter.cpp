@@ -2161,6 +2161,10 @@ Value IREmitter::ImageQueryLod(const Value& handle, const Value& coords, Texture
     return Inst(Opcode::ImageQueryLod, Flags{info}, handle, coords);
 }
 
+void IREmitter::ImageTableIndex(const U32& handle, const U32& index) {
+    Inst(Opcode::ImageTableIndex, handle, index);
+}
+
 Value IREmitter::ImageGradient(const Value& handle, const Value& coords,
                                const Value& derivatives_dx, const Value& derivatives_dy,
                                const Value& offset, const F32& lod_clamp, TextureInstInfo info) {

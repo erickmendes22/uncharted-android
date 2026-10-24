@@ -1,0 +1,21 @@
+diff --git a/lib/Arch/X86/Semantics/BITBYTE.cpp b/lib/Arch/X86/Semantics/BITBYTE.cpp
+index 7a8a82c..00457db 100644
+--- a/lib/Arch/X86/Semantics/BITBYTE.cpp
++++ b/lib/Arch/X86/Semantics/BITBYTE.cpp
+@@ -338,11 +338,12 @@ ALWAYS_INLINE static T LowBitMask(T count, T bit_size) {
+ 
+ template <typename T>
+ ALWAYS_INLINE static T PopulationCount(T val) {
+-  auto count = Literal<T>(0);
+-  for (unsigned i = 0; i < (sizeof(T) * 8U); ++i) {
+-    count = UAdd(count, UAnd(UShr(val, Literal<T>(i)), Literal<T>(1)));
++  // llvm.ctpop: one CNT on AArch64 instead of a 64-step bit loop.
++  if constexpr (sizeof(T) == 8) {
++    return static_cast<T>(__builtin_popcountll(val));
++  } else {
++    return static_cast<T>(__builtin_popcount(static_cast<uint32_t>(val)));
+   }
+-  return count;
+ }
+ 
+ ALWAYS_INLINE static uint32_t CRC32Byte(uint32_t crc, uint8_t byte) {

@@ -26,3 +26,18 @@ patches.json
 !launcher/bloodborne.png
 # Official cover art: local only, never in the repository or a release
 launcher/art/
+# uncharted-android: game files and dumps never go into the repository
+eboot.bin
+*.elf
+*.self
+*.prx
+*.sprx
+sce_sys/
+sce_module/
+u1data/
+u2data/
+u3data/
+CUSA*/
+*.rdc
+*.core
+*.dmp

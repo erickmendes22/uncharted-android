@@ -1,0 +1,281 @@
+{
+ "game": "u3",
+ "executable": "big3-ps4_Shipping.elf",
+ "base": "0x400000",
+ "writes": [
+  {
+   "address": "0x12396e0",
+   "length": 4,
+   "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+   "when": "below_1080p",
+   "fields": [
+    {
+     "offset": 0,
+     "width": 4,
+     "value": "W"
+    }
+   ]
+  },
+  {
+   "address": "0x12396e7",
+   "length": 4,
+   "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+   "when": "below_1080p",
+   "fields": [
+    {
+     "offset": 0,
+     "width": 4,
+     "value": "H"
+    }
+   ]
+  },
+  {
+   "address": "0x125d74e",
+   "length": 44,
+   "sha256": "1e2b472fc1251a27a16032216ed74dde8dccce20349567ad5f86e5f77030635a",
+   "when": "below_1080p",
+   "edits": [
+    {
+     "offset": 0,
+     "bytes": "be00e01f00eb2590909090909090909090909090909090909090909090909090909090909090909090909090"
+    }
+   ]
+  },
+  {
+   "address": "0x123b8bf",
+   "length": 1,
+   "sha256": "0bfe935e70c321c7ca3afc75ce0d0ca2f98b5422e008bb31c00c6d7f1f1c0ad6",
+   "when": "always",
+   "edits": [
+    {
+     "offset": 0,
+     "bytes": "eb"
+    }
+   ]
+  },
+  {
+   "address": "0x12396b6",
+   "length": 4,
+   "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+   "when": "below_1080p",
+   "fields": [
+    {
+     "offset": 0,
+     "width": 4,
+     "value": "W"
+    }
+   ]
+  },
+  {
+   "address": "0x12396bd",
+   "length": 4,
+   "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+   "when": "below_1080p",
+   "fields": [
+    {
+     "offset": 0,
+     "width": 4,
+     "value": "H"
+    }
+   ]
+  },
+  {
+   "address": "0x12396cb",
+   "length": 4,
+   "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+   "when": "below_1080p",
+   "fields": [
+    {
+     "offset": 0,
+     "width": 4,
+     "value": "W"
+    }
+   ]
+  },
+  {
+   "address": "0x12396d2",
+   "length": 4,
+   "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+   "when": "below_1080p",
+   "fields": [
+    {
+     "offset": 0,
+     "width": 4,
+     "value": "H"
+    }
+   ]
+  },
+  {
+   "address": "0x12396fc",
+   "length": 4,
+   "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+   "when": "below_1080p",
+   "fields": [
+    {
+     "offset": 0,
+     "width": 4,
+     "value": "W/8"
+    }
+   ]
+  },
+  {
+   "address": "0x1239703",
+   "length": 4,
+   "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+   "when": "below_1080p",
+   "fields": [
+    {
+     "offset": 0,
+     "width": 4,
+     "value": "H/4"
+    }
+   ]
+  },
+  {
+   "address": "0x1239726",
+   "length": 4,
+   "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+   "when": "below_1080p",
+   "fields": [
+    {
+     "offset": 0,
+     "width": 4,
+     "value": "W"
+    }
+   ]
+  },
+  {
+   "address": "0x123972d",
+   "length": 4,
+   "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+   "when": "below_1080p",
+   "fields": [
+    {
+     "offset": 0,
+     "width": 4,
+     "value": "H"
+    }
+   ]
+  },
+  {
+   "address": "0x134af5e",
+   "length": 56,
+   "sha256": "ce67d203d2fe210a0bf09e982feaebfa5f114b1af064892e9f2da9ec0a679690",
+   "when": "below_1080p",
+   "edits": [
+    {
+     "offset": 0,
+     "bytes": "6a118f8518"
+    },
+    {
+     "offset": 6,
+     "bytes": "ffff6a018f"
+    },
+    {
+     "offset": 14,
+     "bytes": "6a"
+    },
+    {
+     "offset": 16,
+     "bytes": "8f4424086a078f0424488d9518ffffff6a3d4159b98007000041b83804"
+    },
+    {
+     "offset": 46,
+     "bytes": "00e85eb0f8ff90909090"
+    }
+   ]
+  },
+  {
+   "address": "0x134af9d",
+   "length": 83,
+   "sha256": "2631a71b00e823a38f3c1b3f74087355d7b27a3d40b5d218a64949161f5aa6e9",
+   "when": "below_1080p",
+   "edits": [
+    {
+     "offset": 0,
+     "bytes": "6a118f8510"
+    },
+    {
+     "offset": 6,
+     "bytes": "ffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f"
+    },
+    {
+     "offset": 40,
+     "bytes": "6a"
+    },
+    {
+     "offset": 42,
+     "bytes": "8f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c02"
+    },
+    {
+     "offset": 72,
+     "bytes": "00e805b0f8ff9090909090"
+    }
+   ]
+  },
+  {
+   "address": "0x134aff7",
+   "length": 61,
+   "sha256": "4c551b48da0b97b503b2c43d399c0c7503c4b360c8312e18542e375ed9891d64",
+   "when": "below_1080p",
+   "edits": [
+    {
+     "offset": 0,
+     "bytes": "6a118f8508"
+    },
+    {
+     "offset": 6,
+     "bytes": "ffff6a018f"
+    },
+    {
+     "offset": 14,
+     "bytes": "6a"
+    },
+    {
+     "offset": 16,
+     "bytes": "8f4424086a078f0424488d9508ffffff6a3d4159b98007000041b83804"
+    },
+    {
+     "offset": 46,
+     "bytes": "00e8c5aff8"
+    },
+    {
+     "offset": 52,
+     "bytes": "909090909090909090"
+    }
+   ]
+  },
+  {
+   "address": "0x134b03b",
+   "length": 64,
+   "sha256": "a447cb4af9f3b602fe57d163b98ffaa21beb5a98a7e455cea72fd7b578708167",
+   "when": "below_1080p",
+   "edits": [
+    {
+     "offset": 0,
+     "bytes": "6a118f8500"
+    },
+    {
+     "offset": 6,
+     "bytes": "ffff6a018f"
+    },
+    {
+     "offset": 14,
+     "bytes": "6a"
+    },
+    {
+     "offset": 16,
+     "bytes": "8f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c02"
+    },
+    {
+     "offset": 46,
+     "bytes": "00488b9d00fdffffe87aaff8"
+    },
+    {
+     "offset": 59,
+     "bytes": "9090909090"
+    }
+   ]
+  }
+ ]
+}

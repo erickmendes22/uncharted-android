@@ -243,6 +243,7 @@ const Shader::RuntimeInfo& PipelineCache::BuildRuntimeInfo(PipelineSelection& se
         info.hw.cs.tgid_enable = {cs_pgm.IsTgidEnabled(0), cs_pgm.IsTgidEnabled(1),
                                   cs_pgm.IsTgidEnabled(2)};
         info.hw.cs.shared_memory_size = cs_pgm.SharedMemSize();
+        info.hw.cs.split_factor = compute_split;
         break;
     }
     default:
@@ -288,7 +289,13 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
         .max_viewport_height = instance.GetMaxViewportHeight(),
         .max_shared_memory_size = instance.MaxComputeSharedMemorySize(),
         .supported_spirv = SpirvVersion1_6,
-        .subgroup_size = instance.SubgroupSize(),
+        // g2-arm64: the subgroup size shaders run with. Pipelines with lane operations require
+        // 64 when the driver allows it (NeedsWave64), but the device default can differ (Turnip on
+        // A7xx: 128); with it LowerWave64BallotPass emulated wave64 for 32-lane subgroups inside
+        // the real 64-lane ones: ReadLane of lanes 32-63 and the upper half of ballots took the
+        // lower half (the tiled light cs 43b8ee5e culled lights against the depth range of half
+        // of each tile), through LDS slots outside the declared workgroup memory.
+        .subgroup_size = instance.IsSubgroupSize64Supported() ? 64u : instance.SubgroupSize(),
         .sparse_page_shift = sparse_page_shift,
         .support_int8 = instance.IsShaderInt8Supported(),
         .support_int16 = instance.IsShaderInt16Supported(),
@@ -451,7 +458,45 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline(const DrawIndirectPar
     return it->second.get();
 }
 
-const ComputePipeline* PipelineCache::GetComputePipeline() {
+u32 PipelineCache::CsSplitRequest(u64 hash, const AmdGpu::ComputeProgram& cs_pgm) {
+    struct Setting {
+        u32 size = 0;
+        std::vector<u32> hashes;
+    };
+    static const Setting setting = [] {
+        Setting s;
+        if (const char* env = std::getenv("BB_CS_SPLIT")) {
+            char* end;
+            s.size = static_cast<u32>(std::strtoul(env, &end, 10));
+            if (s.size < 64 || s.size % 64 != 0) {
+                s.size = 0;
+            }
+            for (const char* p = *end == ':' ? end + 1 : end; *p;) {
+                const u32 value = static_cast<u32>(std::strtoull(p, &end, 16));
+                if (end == p) {
+                    break;
+                }
+                s.hashes.push_back(value);
+                p = *end == ',' ? end + 1 : end;
+            }
+            std::printf("CS split: workgroups larger than %u invocations into %u (%s)\n", s.size,
+                        s.size, s.hashes.empty() ? "all shaders" : env);
+        }
+        return s;
+    }();
+    const u32 x = cs_pgm.num_thread_x.full;
+    if (setting.size == 0 || x <= setting.size || x % setting.size != 0 ||
+        cs_pgm.num_thread_y.full != 1 || cs_pgm.num_thread_z.full != 1 ||
+        (!setting.hashes.empty() &&
+         std::find(setting.hashes.begin(), setting.hashes.end(), u32(hash)) ==
+             setting.hashes.end())) {
+        return 1;
+    }
+    return x / setting.size;
+}
+
+const ComputePipeline* PipelineCache::GetComputePipeline(bool direct) {
+    compute_direct = direct;
     if (!RefreshComputeKey()) {
         return nullptr;
     }
@@ -785,6 +830,7 @@ bool PipelineCache::RefreshComputeKey() {
     Shader::Backend::Bindings binding{};
     const auto& cs_pgm = liverpool->GetCsRegs();
     const auto cs_params = AmdGpu::GetParams(cs_pgm);
+    compute_split = compute_direct ? CsSplitRequest(cs_params.hash, cs_pgm) : 1;
     std::tie(sel.infos[0], sel.modules[0], sel.fetch_shader, compute_key.value) =
         GetProgram(sel, HwStage::Compute, SwStage::Compute, cs_params, binding);
     return true;

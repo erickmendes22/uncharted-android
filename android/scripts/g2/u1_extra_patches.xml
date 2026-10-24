@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!-- uncharted-g2: own patches for U1 (eboot.bin 01.02), for scripts/g2/u1_patches.py.
+     ExpectedSha256: the SHA-256 of the executable's original bytes at the address (as many as
+     Value has), which u1_patches.py checks; the bytes themselves are the game's, not kept here. -->
+<Patch>
+    <TitleID>
+        <ID>CUSA02344</ID>
+    </TitleID>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Post shading at render size" Note="For the Bachata 'N render, 1080p output' resolution patches: UpdatePostProcessingCsConst (post-shading-win.cpp) takes the display size (display configuration +0x24/+0x28) for the post-processing compute constants: the 8x8 light tile grid (U1's tiled lighting, cs 43b8ee5e), 128x64 blocks and 1/size. With a smaller scene the lights land in the wrong tiles (blocky projected light of the temple lanterns). These reads take the scene size (+0x18/+0x1c) instead." Author="uncharted-g2" PatchVer="0.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x00973a22" ExpectedSha256="ba86a66b6ff213f399dfffb765a32a53ca300fcca72ae0540aa5cbfd4301d8f4" Value="448b7018"/>
+            <Line Type="bytes" Address="0x00973a26" ExpectedSha256="e5e7a8a61d64e9d9a9f12d88ed39eab7ebbdea1bd8485fc8cdedece2298d8c39" Value="448b781c"/>
+            <Line Type="bytes" Address="0x00973dd4" ExpectedSha256="bb7885edc65c3c051bb323f3e82ccbb5d2b81862738f49422ab4ab050bb9c8f1" Value="448b6018"/>
+            <Line Type="bytes" Address="0x00973dd8" ExpectedSha256="a6279149b1b0b1b883c74cd645ead59f987766ea1bc82a380c2c759e6fa8a07d" Value="448b701c"/>
+            <Line Type="bytes" Address="0x00973fc6" ExpectedSha256="8f5a8164a6f08b7e9280495bedb8f996575548b53949893935858295c15031e1" Value="8b5818"/>
+            <Line Type="bytes" Address="0x00973fc9" ExpectedSha256="ddf2a6c6c13c181de33bd9111f1b3d3b0d3d1f55be44afabb8f35c41fce69c81" Value="8b401c"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Movie chroma plane at 1920x1088" Note="For the full resolution patches (output below 1080p) with the S4+ movie texture lines (@0x9de4fe/53d/597/5db) instead of their @0x8fb7b1 line: the movie renderer (movie-rendering.cpp) finds the decoded frame's chroma plane at displaySize.w * AlignUp(displaySize.h, 64); movies are 1920x1080, so it is pinned to 1920 * 1088. Unlike @0x8fb7b1 the YUV-to-RGB dispatch keeps the display size (no writes past the display buffer). With the port's BB_VDEC_CONTENT set to the output size the whole movie shows." Author="uncharted-g2" PatchVer="0.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x008fb8be" ExpectedSha256="1e2b472fc1251a27a16032216ed74dde8dccce20349567ad5f86e5f77030635a" Value="be00e01f00eb2590909090909090909090909090909090909090909090909090909090909090909090909090"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Job workers sleep when idle" Note="The job system's six NdJobWorkerThreads wait for work by spinning (pause) at the lowest priority, 767, during gameplay: on PS4 any other thread takes the core first, on Android they took cores from the port's GPU threads. The game has a sleep mode of its own (flag [ctx+0x59], set only while loading: after 1000 spins Lock / Wait(10 ms) / Unlock, and adding a job Broadcasts). These lines make it unconditional and cut the spins before sleeping to 64. Resumed fibers do not Broadcast: the worker that resumed one usually runs it, otherwise the 10 ms wait bounds the delay. Same code in U2 and U3." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0085d234" ExpectedSha256="ef46a230cfb0c087fdd8883bc989a3eaa253428f9f6033335e0cee7173c42a92" Value="9090"/>
+            <Line Type="bytes" Address="0x0085d239" ExpectedSha256="79ff7fbc96a0a6111e3c2706d61deb84c7c8e5a137b776f34a7dc3775f3652de" Value="40000000"/>
+            <Line Type="bytes" Address="0x0085d2dd" ExpectedSha256="17f0f193bb4c8668bb2d95719c6ca9132cf7a69b119cd07129df11224d11b922" Value="9090"/>
+            <Line Type="bytes" Address="0x0085c5d3" ExpectedSha256="1c352b55132391212ceb1c09daceb6e7d41b09d429a9893cacb1645104ddd31b" Value="909090909090"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Job workers wait 1 ms when idle" Note="Goes with &quot;Job workers sleep when idle&quot;: the idle wait (scePthreadCondTimedwait on ctx+0x80) times out after 1 ms instead of 10 ms, so work nobody signals (a resumed fiber) waits at most 1 ms. Same code in U2 and U3." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0085d2ea" ExpectedSha256="357a5ee3d2310bbe73599486ad57f2bfe1b8cc812faead6c39cdc498fe4c4e88" Value="bae8030000"/>
+        </PatchList>
+    </Metadata>
+    <Metadata Title="Uncharted: The Nathan Drake Collection" Name="Idle job workers sleep 50 us between checks" Note="Instead of the sleep mode. An idle worker checks its queues, then spins with a pause (@0x85d26f, @0x85d276); in our FEX a pause is a wfe that waits up to ~100 us for the event stream but keeps the core, so six idle workers hold six cores the render threads need. Here the pause is sceKernelUsleep(50) (PLT @0xb68f00; a nanosleep, ~100 us with the timer slack): the same check interval, the core free meanwhile, no condition variable to miss. The call is in the block @0x85d281 that reported a failed lock of the sleepers' mutex (r11 kept in its slot at rbp-0x60). Same code in U2 and U3." Author="uncharted-android" PatchVer="0.1" AppVer="01.02" AppElf="eboot.bin" isEnabled="false">
+        <PatchList>
+            <Line Type="bytes" Address="0x0085d26f" ExpectedSha256="dc0f81385d6989d61b43b158ce8a1f70fa7e3e21728690cb979cd0b3d0891079" Value="e90d0000009090"/>
+            <Line Type="bytes" Address="0x0085d276" ExpectedSha256="d7c4265ca9a9047a81e91e52b55960506f0d7409524e46674ecba85f2d7566b1" Value="e9060000009090"/>
+            <Line Type="bytes" Address="0x0085d281" ExpectedSha256="fb8d6bc4f92233a7e789367fc111aef00798e3fb3528490c052b46e6cd7e71f5" Value="4c895da0bf32000000e871bc30004c8b5da0e938010000"/>
+        </PatchList>
+    </Metadata>
+</Patch>

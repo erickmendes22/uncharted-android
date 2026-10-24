@@ -390,12 +390,14 @@ private:
     /// Touch the image in the LRU cache.
     void TouchImage(const Image& image);
 
-    void FreeImage(ImageId image_id) {
+    void FreeImage(ImageId image_id, u32 line = __builtin_LINE()) {
+        NoteFreeImage(image_id, line); // g2-arm64 diagnosis (BB_POOL_LOG): the caller's line
         UntrackImage(image_id);
         UnregisterImage(image_id);
         DeleteImage(image_id);
     }
 
+    void NoteFreeImage(ImageId image_id, u32 line);
     void GarbageCollectImages();
     void GarbageCollectSamplers();
 

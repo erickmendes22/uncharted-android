@@ -101,8 +101,10 @@ public:
     /// thread while the draw pipeline is in use (PipelinedTasks), else here after a drain.
     using OrderedTask = void (*)(Rasterizer& rasterizer, const u8* data);
     /// Returns true when the task was handed to the recording thread (not run yet).
+    /// g2-arm64: `passes_skin_batch`: a fence write only, it may run before the held skinning
+    /// batch is recorded (vk_skin_batch.cpp).
     bool RunInOrder(OrderedTask task, const void* data, u32 size,
-                    u64 toggle = BbToggle::PipelinedTasks);
+                    u64 toggle = BbToggle::PipelinedTasks, bool passes_skin_batch = false);
     /// Stage A: the draw pipe position after the last handed-over packet, and whether the
     /// recording thread has run everything before a position.
     [[nodiscard]] u64 DrawPipeHead() const {
@@ -110,6 +112,10 @@ public:
     }
     [[nodiscard]] bool DrawPipeReached(u64 position) const {
         return !draw_pipe || draw_pipe->Reached(position);
+    }
+    /// Stage A (statistics): packets the recording thread has not run yet.
+    [[nodiscard]] u64 DrawPipePending() const {
+        return draw_pipe ? draw_pipe->PendingPackets() : 0;
     }
     /// Stage A: no draws waiting for the recording thread.
     [[nodiscard]] bool DrawPipeIdle() const {
@@ -240,6 +246,19 @@ private:
                   const IndirectDraw* indirect = nullptr);
     /// Everything of a direct dispatch after the pipeline selection (GPU thread or stage B).
     void DispatchRecord(const ComputePipeline* pipeline);
+    /// g2-arm64 (vk_skin_batch.cpp, BB_SKIN_BATCH=1): U1's skinning dispatches collected on
+    /// stage B and recorded as one dispatch. AddSkinJob: false when the dispatch takes the
+    /// regular path (the batch is recorded first; `bound`: its resources are bound already).
+    /// FlushSkinBatch: records the batch, if any.
+    void InitSkinBatch();
+    [[nodiscard]] bool IsSkinBatchShader(u64 hash) const noexcept;
+    bool AddSkinJob(const ComputePipeline* pipeline, const AmdGpu::ComputeProgram& program,
+                    bool& bound);
+    /// `cause` (statistics): what ended the batch: a task function, a shader hash, or 0.
+    void FlushSkinBatch(u32 reason = 0, u64 cause = 0);
+    static void FlushSkinBatchIdle(void* rasterizer);
+    void FlushSkinBatchForSubmit();
+    struct SkinBatch;
     /// The compute registers of the dispatch being recorded.
     const AmdGpu::ComputeProgram& CsRegs() const;
     static void RunDrawPacket(void* rasterizer, const u8* packet, u32 size);
@@ -323,6 +342,13 @@ private:
 
     const Instance& instance;
     Scheduler& scheduler;
+
+public:
+    /// g2-arm64: submissions handed to the scheduler that the GPU has not finished (the
+    /// adaptive mid-frame flush reads it on the command processor thread).
+    u64 PendingSubmissions();
+
+private:
     Runtime& runtime;
     VideoCore::PageManager page_manager;
     VideoCore::BufferCache buffer_cache;
@@ -475,8 +501,10 @@ private:
     bool needs_barrier{};
     // bbport: two-stage draw pipeline (stage B state; the thread is the last member so it
     // stops first).
-    static inline thread_local const AmdGpu::Regs* stage_regs = nullptr;
-    static inline thread_local const AmdGpu::ComputeProgram* stage_cs = nullptr;
+    // g2-arm64: stage B only, read after DrawPipe::OnStageB() (were thread_local: the dynamic
+    // TLS resolver on every Regs() call, libbbgpu is loaded with dlopen).
+    const AmdGpu::Regs* stage_regs = nullptr;
+    const AmdGpu::ComputeProgram* stage_cs = nullptr;
     AmdGpu::Regs pipe_regs{};
     bool pipe_synced = false;
     std::array<AmdGpu::CbDbExtent, AmdGpu::NUM_COLOR_BUFFERS> pipe_cb_extent{};
@@ -522,6 +550,8 @@ private:
         return nullptr;
     }
     std::unique_ptr<ConstantRing> constant_ring;
+    /// Before draw_pipe: its destructor drains, which records a held batch.
+    std::shared_ptr<SkinBatch> skin_batch;
     /// Submissions (prepared draws) kept alive until stage B reaches the position.
     std::deque<std::pair<u64, std::shared_ptr<const void>>> pipe_keepalive;
     std::unique_ptr<DrawPipe> draw_pipe;

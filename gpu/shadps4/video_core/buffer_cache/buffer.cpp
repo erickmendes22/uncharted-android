@@ -208,6 +208,13 @@ Buffer::Buffer(const Vulkan::Instance& instance, VAddr cpu_addr_, u64 size_bytes
     }
     VmaAllocationInfo alloc_info{};
     buffer.Create(buffer_ci, mem_type, &alloc_info);
+    if (mem_type != MemoryType::Sparse) {
+        // g2-arm64: the name in VMA's statistics (BB_VMA_DUMP): who holds the device memory.
+        const std::string vma_name = !debug_name.empty()
+                                         ? std::string{debug_name}
+                                         : fmt::format("Buffer {}", BufferTypeName(mem_type));
+        vmaSetAllocationName(instance.GetAllocator(), buffer.allocation, vma_name.c_str());
+    }
 
     const auto device = instance.GetDevice();
     if (buffer.bda_addr) {

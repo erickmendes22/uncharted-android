@@ -1,0 +1,38 @@
+From d755ef3f0589fca9950cfd97718c2384ae22a4b2 Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip/kgsl: poll timestamps instead of a zero-timeout wait
+ (KGSL waits forever on 0)
+
+---
+ src/freedreno/vulkan/tu_knl_kgsl.cc | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/src/freedreno/vulkan/tu_knl_kgsl.cc b/src/freedreno/vulkan/tu_knl_kgsl.cc
+index 8b51fa2..871a744 100644
+--- a/src/freedreno/vulkan/tu_knl_kgsl.cc
++++ b/src/freedreno/vulkan/tu_knl_kgsl.cc
+@@ -793,6 +793,21 @@ wait_timestamp_safe(int fd,
+       .timeout = get_relative_ms(abs_timeout_ns),
+    };
+ 
++   /* uncharted-g2: KGSL takes a zero timeout as "wait forever" (adreno_drawctxt_wait uses
++    * wait_event_interruptible without a timeout then), so a poll (vkGetSemaphoreCounterValue on
++    * an emulated timeline, vkGetFenceStatus) or a wait with under a millisecond left blocked
++    * until the GPU got there. Read the retired timestamp instead.
++    */
++   if (wait.timeout == 0) {
++      struct kgsl_cmdstream_readtimestamp_ctxtid req = {
++         .context_id = context_id,
++         .type = KGSL_TIMESTAMP_RETIRED,
++      };
++      if (safe_ioctl(fd, IOCTL_KGSL_CMDSTREAM_READTIMESTAMP_CTXTID, &req) == 0)
++         return timestamp_cmp(req.timestamp, timestamp) ? VK_SUCCESS : VK_TIMEOUT;
++      return VK_TIMEOUT;
++   }
++
+    while (true) {
+       int ret = ioctl(fd, IOCTL_KGSL_DEVICE_WAITTIMESTAMP_CTXTID, &wait);
+ 
+-- 
+2.43.0
+

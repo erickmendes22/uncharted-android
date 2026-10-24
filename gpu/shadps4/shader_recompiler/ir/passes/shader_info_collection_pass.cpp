@@ -170,11 +170,27 @@ void Visit(Info& info, const IR::Inst& inst) {
 
 void CollectShaderInfoPass(IR::Program& program, const Profile& profile) {
     Info& info = program.info;
+    bool workgroup_sync = false;
     for (IR::Block* const block : program.post_order_blocks) {
         for (IR::Inst& inst : block->Instructions()) {
             Visit(info, inst);
+            const auto opcode = inst.GetOpcode();
+            workgroup_sync |= opcode == IR::Opcode::Barrier ||
+                              opcode == IR::Opcode::WorkgroupMemoryBarrier;
         }
     }
+    // g2-arm64: invocations that never see each other's work (no LDS, also not lowered to a
+    // per-workgroup buffer; no barrier; no cross-lane operation) give the same results in
+    // smaller workgroups. The subgroup composition is kept by splitting at a multiple of the
+    // host subgroup size (BB_CS_SPLIT).
+    info.cs_split_safe =
+        info.sw_stage == SwStage::Compute && !workgroup_sync && info.shared_types == IR::Type::Void &&
+        info.shared_memory_scratch_size == 0 && !info.uses_lane_id && !info.uses_group_quad &&
+        !info.uses_group_shuffle && !info.uses_group_ballot &&
+        std::none_of(info.buffers.begin(), info.buffers.end(), [](const BufferResource& buffer) {
+            return buffer.buffer_type == BufferType::SharedMemory ||
+                   buffer.buffer_type == BufferType::GdsBuffer;
+        });
 
     if (!EmulatorSettings.IsDirectMemoryAccessEnabled()) {
         info.uses_dma = false;

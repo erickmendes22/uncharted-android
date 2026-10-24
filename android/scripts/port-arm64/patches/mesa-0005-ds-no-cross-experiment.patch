@@ -1,0 +1,166 @@
+From b07a90ed29f41666fe86f2388d0924a6e3e59b05 Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip: TU_DS_NO_CROSS=1 keeps draw state groups within 4 KiB
+ pages (experiment)
+
+---
+ src/freedreno/vulkan/tu_cs.cc       | 61 +++++++++++++++++++++++++++++
+ src/freedreno/vulkan/tu_cs.h        | 16 +++++++-
+ src/freedreno/vulkan/tu_pipeline.cc |  1 +
+ src/freedreno/vulkan/tu_shader.cc   | 10 ++++-
+ 4 files changed, 86 insertions(+), 2 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_cs.cc b/src/freedreno/vulkan/tu_cs.cc
+index cd8631d4cc8..53ded3ce455 100644
+--- a/src/freedreno/vulkan/tu_cs.cc
++++ b/src/freedreno/vulkan/tu_cs.cc
+@@ -123,6 +123,61 @@ tu_cs_get_offset(const struct tu_cs *cs)
+    return (cs->refcount_bo || bos->bo_count != 0) ? cs->start - (uint32_t *) tu_cs_current_bo(cs)->map : 0;
+ }
+ 
++bool
++tu_ds_no_cross(void)
++{
++   static int on = -1;
++   if (on < 0) {
++      const char *env = getenv("TU_DS_NO_CROSS");
++      on = env && env[0] == '1';
++      if (on)
++         fprintf(stderr, "tu: draw states kept within 4 KiB pages (TU_DS_NO_CROSS)\n");
++   }
++   return on;
++}
++
++uint32_t
++tu_ds_no_cross_allowance(uint32_t dwords)
++{
++   /* Each sub stream skips less than its own size. */
++   return tu_ds_no_cross() ? dwords + 64 : 0;
++}
++
++/* Called with no sub stream open (cs->start == cs->cur). A fixed-size stream (sub-allocated)
++ * that lacks the room for the skip keeps the crossing rather than overflow. */
++VkResult
++tu_cs_avoid_page_cross(struct tu_cs *cs, uint32_t dwords)
++{
++   if (!tu_ds_no_cross() || dwords == 0 || dwords > 1024 ||
++       unlikely(cs->status != VK_SUCCESS))
++      return VK_SUCCESS;
++   assert(cs->mode == TU_CS_MODE_SUB_STREAM);
++
++   VkResult result = tu_cs_reserve_space(cs, dwords);
++   if (result != VK_SUCCESS)
++      return result;
++   const uint64_t iova = tu_cs_get_cur_iova(cs);
++   const uint32_t in_page = iova & 0xfff;
++   if (in_page + dwords * 4 <= 0x1000)
++      return VK_SUCCESS;
++   const uint32_t skip = (0x1000 - in_page) / 4;
++   if (tu_cs_get_space(cs) >= skip + dwords) {
++      cs->start += skip;
++      cs->cur = cs->start;
++      return VK_SUCCESS;
++   }
++   if (cs->refcount_bo) {
++      static bool warned;
++      if (!warned) {
++         warned = true;
++         fprintf(stderr, "tu: TU_DS_NO_CROSS: no room to skip in a sub-allocated stream\n");
++      }
++      return VK_SUCCESS;
++   }
++   /* A new BO starts on a page. */
++   return tu_cs_reserve_space(cs, skip + dwords);
++}
++
+ /**
+  * Get the iova for the next dword to be emitted. Useful after
+  * tu_cs_reserve_space() to create a patch point that can be overwritten on
+@@ -356,6 +411,12 @@ tu_cs_begin_sub_stream_aligned(struct tu_cs *cs, uint32_t count,
+       result = tu_cs_reserve_space(cs, count * size + (size - tu_cs_get_offset(cs)) % size);
+       cs->start += (size - tu_cs_get_offset(cs)) % size;
+    }
++   if (result == VK_SUCCESS && size == 1) {
++      cs->cur = cs->start;
++      result = tu_cs_avoid_page_cross(cs, count);
++      if (result == VK_SUCCESS)
++         result = tu_cs_reserve_space(cs, count);
++   }
+    if (result != VK_SUCCESS) {
+       /* Freshly declared, nothing owned yet so safe to zero. */
+       memset(sub_cs, 0, sizeof(*sub_cs));
+diff --git a/src/freedreno/vulkan/tu_cs.h b/src/freedreno/vulkan/tu_cs.h
+index 78dcf684c32..25b0eb544e2 100644
+--- a/src/freedreno/vulkan/tu_cs.h
++++ b/src/freedreno/vulkan/tu_cs.h
+@@ -209,12 +209,26 @@ tu_cs_fail(struct tu_cs *cs, VkResult result)
+ uint64_t
+ tu_cs_get_cur_iova(const struct tu_cs *cs);
+ 
++/* uncharted-android: TU_DS_NO_CROSS=1: draw state groups (CP_SET_DRAW_STATE) do not cross a
++ * 4 KiB page: the stream skips to the next page first. tu_ds_no_cross_allowance() is the extra
++ * room a fixed-size stream needs for that. */
++bool
++tu_ds_no_cross(void);
++
++uint32_t
++tu_ds_no_cross_allowance(uint32_t dwords);
++
++VkResult
++tu_cs_avoid_page_cross(struct tu_cs *cs, uint32_t dwords);
++
+ static inline struct tu_draw_state
+ tu_cs_draw_state(struct tu_cs *sub_cs, struct tu_cs *cs, uint32_t size)
+ {
+    struct tu_cs_memory memory;
+ 
+-   VkResult result = tu_cs_alloc(sub_cs, size, 1, &memory);
++   VkResult result = tu_cs_avoid_page_cross(sub_cs, size);
++   if (result == VK_SUCCESS)
++      result = tu_cs_alloc(sub_cs, size, 1, &memory);
+    if (result != VK_SUCCESS) {
+       /* Freshly declared, nothing owned yet so safe to zero. */
+       memset(cs, 0, sizeof(*cs));
+diff --git a/src/freedreno/vulkan/tu_pipeline.cc b/src/freedreno/vulkan/tu_pipeline.cc
+index 2177a3c995c..1b091821d7e 100644
+--- a/src/freedreno/vulkan/tu_pipeline.cc
++++ b/src/freedreno/vulkan/tu_pipeline.cc
+@@ -1494,6 +1494,7 @@ tu_pipeline_allocate_cs(struct tu_device *dev,
+     * can't use its EXTERNALLY_SYNCHRONIZED flag to avoid atomics because
+     * pipeline destroy isn't synchronized by the cache.
+     */
++   size += tu_ds_no_cross_allowance(size);
+    mtx_lock(&dev->pipeline_mutex);
+    VkResult result = tu_suballoc_bo_alloc(&pipeline->bo, &dev->pipeline_suballoc,
+                                           size * 4, 128);
+diff --git a/src/freedreno/vulkan/tu_shader.cc b/src/freedreno/vulkan/tu_shader.cc
+index fbac2e33033..0cb99f16954 100644
+--- a/src/freedreno/vulkan/tu_shader.cc
++++ b/src/freedreno/vulkan/tu_shader.cc
+@@ -2951,6 +2951,14 @@ tu_upload_shader(struct tu_device *dev,
+          size += vpc_size;
+    }
+ 
++   /* The binaries are not draw states: the allowance is for the rest. */
++   uint32_t binaries = 0;
++   for (auto& variant : {v, binning, safe_const, safe_const_binning}) {
++      if (variant)
++         binaries += variant->info.size / 4;
++   }
++   size += tu_ds_no_cross_allowance(size - binaries);
++
+    pthread_mutex_lock(&dev->pipeline_mutex);
+    VkResult result = tu_suballoc_bo_alloc(&shader->bo, &dev->pipeline_suballoc,
+                                           size * 4, 128);
+@@ -3813,7 +3821,7 @@ tu_empty_shader_create(struct tu_device *dev,
+ 
+    pthread_mutex_lock(&dev->pipeline_mutex);
+    VkResult result = tu_suballoc_bo_alloc(&shader->bo, &dev->pipeline_suballoc,
+-                                          32 * 4, 128);
++                                          (32 + tu_ds_no_cross_allowance(32)) * 4, 128);
+    pthread_mutex_unlock(&dev->pipeline_mutex);
+ 
+    if (result != VK_SUCCESS) {
+-- 
+2.43.0
+

@@ -27,11 +27,18 @@ public:
     s32 Reset();
 
 private:
-    AVFrame* ConvertNV12Frame(AVFrame& frame);
+    AVFrame* ConvertNV12Frame(AVFrame& frame, s32 width, s32 height, s32 content_width,
+                              s32 content_height);
+    /// bbport: the size frames are handed to the game in (see OutputSize).
+    void OutputSize(const AVFrame& frame, s32& width, s32& height, s32& content_width,
+                    s32& content_height);
 
 private:
     AVCodecContext* m_codec_context = nullptr;
     SwsContext* m_sws_context = nullptr;
+    s32 m_max_width = 0;
+    s32 m_max_height = 0;
+    bool m_reported = false;
 };
 
 } // namespace Libraries::Videodec2

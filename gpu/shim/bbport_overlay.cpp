@@ -9,13 +9,25 @@
 #include <cstdio>
 #include <cstdlib>
 #include <mutex>
+#include <cstring>
+#include <thread>
+#include <vector>
+#if defined(__linux__)
+#include <pthread.h>
+#endif
 
 #include <SDL3/SDL.h>
+#ifdef __ANDROID__
+#include "bbport_overlay_android.h" // g2-arm64: the touch menu
+#include "bbport_touchpad.h"          // g2-arm64: the on-screen gamepad
+#endif
 #include "bbport_settings.h"
+#include "bbport_toggles.h"
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include <vk_mem_alloc.h>
 
 // DejaVu Sans (Cyrillic), embedded (third_party/fonts, Bitstream Vera license).
 #ifdef _WIN32
@@ -43,6 +55,7 @@ extern "C" const unsigned char bb_font_ttf[];
 extern "C" const unsigned char bb_font_ttf_end[];
 
 extern "C" void runtime_restart(void); // bb-probe (probe.c)
+extern "C" size_t runtime_memory_protect_count(void); // g2-arm64: runtime_memory.c
 
 namespace BbOverlay {
 
@@ -67,6 +80,11 @@ void SetOpen(bool value) {
         return;
     }
     ImGui::GetIO().MouseDrawCursor = value;
+#ifdef __ANDROID__
+    if (value) {
+        TouchPadReset(); // g2-arm64: the on-screen gamepad lets go while the panel is open
+    }
+#endif
     if (!value && dirty) {
         dirty = false;
         BbSettings::Save();
@@ -454,7 +472,11 @@ void FpsCounter() {
 
 } // namespace
 
+// g2-arm64: the memory log's view of the device (set once the presenter has one).
+static std::atomic<const Vulkan::Instance*> memory_log_instance{nullptr};
+
 void Init(const Vulkan::Instance& instance, vk::Format format, u32 image_count) {
+    memory_log_instance = &instance;
     std::scoped_lock lock{imgui_mutex};
     if (initialized) {
         return;
@@ -572,6 +594,13 @@ bool HandleEvent(const SDL_Event& event) {
         if (!is_open) {
             return false;
         }
+#ifdef __ANDROID__
+        // g2-arm64: the touch menu has no popups, so B (Circle) closes it.
+        if (down && button == SDL_GAMEPAD_BUTTON_EAST) {
+            SetOpen(false);
+            return true;
+        }
+#endif
         if (const ImGuiKey key = KeyFromGamepad(button); key != ImGuiKey_None) {
             io.AddKeyEvent(key, down);
         }
@@ -614,13 +643,41 @@ bool HandleEvent(const SDL_Event& event) {
         }
         io.AddMouseWheelEvent(event.wheel.x, event.wheel.y);
         return true;
+#ifdef __ANDROID__
+    case SDL_EVENT_FINGER_DOWN:
+    case SDL_EVENT_FINGER_MOTION:
+    case SDL_EVENT_FINGER_UP:
+    case SDL_EVENT_FINGER_CANCELED:
+        // g2-arm64: a swipe in from the right edge opens the menu, a tap outside closes it. The
+        // mouse events SDL makes from touches work the panel itself; the game gets neither
+        // while the menu is open.
+        switch (AndroidTouch(event, is_open)) {
+        case TouchAction::Open:
+            SetOpen(true);
+            return true;
+        case TouchAction::Close:
+            SetOpen(false);
+            return true;
+        case TouchAction::None:
+            break;
+        }
+        if (!is_open && TouchPadActive()) {
+            TouchPadEvent(event); // g2-arm64: the on-screen gamepad takes fingers off the edge
+        }
+        return is_open;
+#endif
     default:
         return false;
     }
 }
 
 bool Visible() {
+#ifdef __ANDROID__
+    return initialized &&
+           (menu_open || text_entry_active || BbSettings::Get().show_fps || TouchPadActive());
+#else
     return initialized && (menu_open || text_entry_active || BbSettings::Get().show_fps);
+#endif
 }
 
 bool CapturesInput() {
@@ -635,6 +692,166 @@ void SetTextEntry(bool active, const std::string& prompt, const std::string& tex
 }
 
 // Called for every presented frame: the interval for the FPS readout and BB_FPS_LOG.
+// g2-arm64: with BB_FPS_LOG, every 30 s: the process's mappings (Android's vm.max_map_count is 65530;
+// past it mmap and mprotect fail - after 17 min of U2 a malloc returned NULL in
+// sceAjmBatchStartBuffer while the GPU library threw bad_alloc), its RSS and swap, and the system's
+// available memory. From its own thread: reading /proc/self/maps walks every mapping.
+static long ProcField(const char* path, const char* name) {
+    long value = -1;
+    if (FILE* f = std::fopen(path, "r")) {
+        char line[256];
+        const size_t len = std::strlen(name);
+        while (std::fgets(line, sizeof(line), f)) {
+            if (std::strncmp(line, name, len) == 0) {
+                value = std::strtol(line + len, nullptr, 10);
+                break;
+            }
+        }
+        std::fclose(f);
+    }
+    return value;
+}
+
+// BB_MEM_SMAPS=1: RSS+swap and the number of mappings by kind, from /proc/self/smaps (it walks every
+// page table: tens of milliseconds with the address space lock held - diagnostic runs only).
+static void PrintMemoryMap() {
+    FILE* f = std::fopen("/proc/self/smaps", "r");
+    if (!f) {
+        return;
+    }
+    enum { Guest, Jit, Scudo, Kgsl, Anon, Files, Kinds };
+    static const char* const names[Kinds] = {"guest", "FEX JIT", "scudo", "kgsl", "other anon", "files"};
+    unsigned long long kb[Kinds] = {}, count[Kinds] = {};
+    int kind = Anon;
+    char line[512];
+    while (std::fgets(line, sizeof(line), f)) {
+        unsigned long long lo, hi;
+        char perms[8];
+        if (std::sscanf(line, "%llx-%llx %7s", &lo, &hi, perms) == 3 && std::strchr(line, '-') < std::strchr(line, ' ')) {
+            const char* path = line;
+            for (int field = 0; *path && field < 5; ++field) {
+                while (*path && *path != ' ') ++path;
+                while (*path == ' ') ++path;
+            }
+            // Guest memory: 64 GiB (USER_MIN) up to 256 GiB; Android maps its own at 448-512 GiB.
+            if (lo >= 0x1000000000ull && lo < 0x4000000000ull) {
+                kind = Guest;
+            } else if (!*path || *path == '\n') {
+                kind = Anon;
+            } else if (std::strstr(path, "FEXMem")) {
+                kind = Jit;
+            } else if (std::strstr(path, "scudo")) {
+                kind = Scudo;
+            } else if (std::strstr(path, "kgsl")) {
+                kind = Kgsl;
+            } else if (*path == '[') {
+                kind = Anon;
+            } else {
+                kind = Files;
+            }
+            ++count[kind];
+            continue;
+        }
+        unsigned long long v;
+        if (std::sscanf(line, "Rss: %llu", &v) == 1 || std::sscanf(line, "Swap: %llu", &v) == 1) {
+            kb[kind] += v;
+        }
+    }
+    std::fclose(f);
+    char out[512];
+    int n = std::snprintf(out, sizeof(out), "Memory map (RSS+swap, mappings):");
+    for (int k = 0; k < Kinds; ++k) {
+        n += std::snprintf(out + n, sizeof(out) - n, " %s %llu MiB/%llu%s", names[k], kb[k] >> 10,
+                           count[k], k + 1 < Kinds ? "," : "\n");
+    }
+    std::fputs(out, stdout);
+}
+
+static void StartMemoryLog() {
+    std::thread([] {
+#if defined(__linux__)
+        pthread_setname_np(pthread_self(), "BbMemLog");
+#endif
+        std::vector<char> buf(1 << 20);
+        const auto count_maps = [&buf] {
+            size_t maps = 0;
+            if (FILE* f = std::fopen("/proc/self/maps", "r")) {
+                size_t n;
+                while ((n = std::fread(buf.data(), 1, buf.size(), f)) > 0) {
+                    maps += std::count(buf.data(), buf.data() + n, '\n');
+                }
+                std::fclose(f);
+            }
+            return maps;
+        };
+        for (;;) {
+            size_t maps = 0;
+            for (int tick = 0; tick < 6; ++tick) {
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+                maps = count_maps();
+                if (maps > 16000) {
+                    std::printf("Memory alarm: %zu mappings\n", maps);
+                    PrintMemoryMap();
+                }
+            }
+            static const bool smaps = [] {
+                const char* env = std::getenv("BB_MEM_SMAPS");
+                return env && env[0] == '1';
+            }();
+            static unsigned round = 0;
+            if (smaps && (++round & 1) == 0) {
+                PrintMemoryMap();
+            }
+            const long rss = ProcField("/proc/self/status", "VmRSS:");
+            const long swap = ProcField("/proc/self/status", "VmSwap:");
+            const long avail = ProcField("/proc/meminfo", "MemAvailable:");
+            // GPU side: the driver's total, all VMA blocks (images, buffers, staging), the texture
+            // cache's images among them, and the arenas (own allocations); the rest is the driver's.
+            unsigned long long device = 0, vma = 0, vma_used = 0;
+            if (const auto* instance = memory_log_instance.load()) {
+                device = instance->CanReportMemoryUsage() ? instance->GetDeviceMemoryUsage() : 0;
+                VmaTotalStatistics stats{};
+                vmaCalculateStatistics(instance->GetAllocator(), &stats);
+                vma = stats.total.statistics.blockBytes;
+                vma_used = stats.total.statistics.allocationBytes;
+                // BB_VMA_DUMP=<file>: every VMA allocation (size, usage, memory type) once, ~2 min in.
+                static int rounds = 0;
+                static const char* dump = std::getenv("BB_VMA_DUMP");
+                if (dump && ++rounds == 4) {
+                    char* json = nullptr;
+                    vmaBuildStatsString(instance->GetAllocator(), &json, VK_TRUE);
+                    if (FILE* f = std::fopen(dump, "w")) {
+                        std::fputs(json, f);
+                        std::fclose(f);
+                    }
+                    vmaFreeStatsString(instance->GetAllocator(), json);
+                }
+            }
+            // g2-arm64: the page tracker's host protection changes a second (each an mprotect
+            // with TLB shootdowns on every core running the game's threads).
+            static size_t last_protects = 0;
+            static auto last_protects_time = std::chrono::steady_clock::now();
+            const size_t protects = runtime_memory_protect_count();
+            const auto now_protects = std::chrono::steady_clock::now();
+            const double protect_secs =
+                std::chrono::duration<double>(now_protects - last_protects_time).count();
+            const double protects_per_s =
+                protect_secs > 1.0 ? double(protects - last_protects) / protect_secs : 0.0; // the first report: ~0 s
+            last_protects = protects;
+            last_protects_time = now_protects;
+            std::printf("Memory: %zu mappings, RSS %ld MiB, swap %ld MiB, system available %ld MiB; "
+                        "GPU %llu MiB: VMA %llu (used %llu; images %lld in %lld), buffer arenas %llu "
+                        "in %llu allocations; host protects %.0f/s\n",
+                        maps, rss / 1024, swap / 1024, avail / 1024, device >> 20, vma >> 20,
+                        vma_used >> 20,
+                        (long long)(BbStats::image_bytes.load() >> 20),
+                        (long long)BbStats::image_count.load(),
+                        (unsigned long long)(BbStats::arena_bytes.load() >> 20),
+                        (unsigned long long)BbStats::arena_allocations.load(), protects_per_s);
+        }
+    }).detach();
+}
+
 void NotePresent() {
     const auto now = std::chrono::steady_clock::now();
     const float ms = std::chrono::duration<float, std::milli>(now - last_present).count();
@@ -646,7 +863,11 @@ void NotePresent() {
     // BB_FPS_LOG=1: presents per second and the slowest frame, every 5 seconds (test runs).
     static const bool fps_log = [] {
         const char* env = std::getenv("BB_FPS_LOG");
-        return env && env[0] == '1';
+        const bool on = env && env[0] == '1';
+        if (on) {
+            StartMemoryLog();
+        }
+        return on;
     }();
     if (fps_log) {
         static auto window_start = now;
@@ -664,17 +885,48 @@ void NotePresent() {
     }
 }
 
-void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
+// g2-arm64: turns ImGui's draw data (laid out w x h) clockwise by quarter turns, for an image
+// in the display panel's orientation (Android pre-rotation).
+static void TurnDrawData(ImDrawData* data, unsigned turns, float w, float h) {
+    const auto turn = [&](ImVec2 p) {
+        switch (turns) {
+        case 1:
+            return ImVec2(h - p.y, p.x);
+        case 2:
+            return ImVec2(w - p.x, h - p.y);
+        default:
+            return ImVec2(p.y, w - p.x);
+        }
+    };
+    for (ImDrawList* list : data->CmdLists) {
+        for (ImDrawVert& vertex : list->VtxBuffer) {
+            vertex.pos = turn(vertex.pos);
+        }
+        for (ImDrawCmd& cmd : list->CmdBuffer) {
+            const ImVec2 a = turn(ImVec2(cmd.ClipRect.x, cmd.ClipRect.y));
+            const ImVec2 b = turn(ImVec2(cmd.ClipRect.z, cmd.ClipRect.w));
+            cmd.ClipRect = ImVec4(std::min(a.x, b.x), std::min(a.y, b.y), std::max(a.x, b.x),
+                                  std::max(a.y, b.y));
+        }
+    }
+    data->DisplayPos = ImVec2(0.0f, 0.0f);
+    data->DisplaySize = turns & 1 ? ImVec2(h, w) : ImVec2(w, h);
+}
+
+void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent,
+            unsigned quarter_turns) {
     const float ms = last_present_ms;
     if (!Visible()) {
         return;
     }
     std::scoped_lock lock{imgui_mutex};
     ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2(float(extent.width), float(extent.height));
+    const vk::Extent2D logical =
+        quarter_turns & 1 ? vk::Extent2D{extent.height, extent.width} : extent;
+    io.DisplaySize = ImVec2(float(logical.width), float(logical.height));
     io.DeltaTime = ms > 0.0f && ms < 1000.0f ? ms / 1000.0f : 1.0f / 60.0f;
     // UI scale follows the display height (1080p = 1).
-    const float scale = std::max(float(extent.height) / 1080.0f, 0.75f);
+    const float scale = std::max(float(logical.height) / 1080.0f, 0.75f);
     if (std::abs(scale - base_scale) > 0.01f) {
         ImGuiStyle& style = ImGui::GetStyle();
         style.ScaleAllSizes(scale / base_scale);
@@ -685,15 +937,32 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent) {
     ImGui_ImplVulkan_NewFrame();
     ImGui::NewFrame();
     if (menu_open) {
+#ifdef __ANDROID__
+        bool keep_open = true; // g2-arm64: the touch panel instead of the PC window
+        AndroidMenu(base_scale, frame_ms_avg, keep_open);
+        if (!keep_open) {
+            SetOpen(false);
+        }
+#else
         Menu();
+#endif
     }
     if (BbSettings::Get().show_fps && !menu_open) {
         FpsCounter();
     }
+#ifdef __ANDROID__
+    if (!menu_open) {
+        TouchPadFrame(io.DisplaySize.x, io.DisplaySize.y); // g2-arm64: the on-screen gamepad
+    }
+#endif
     if (text_entry_active) {
         TextEntryBox();
     }
     ImGui::Render();
+    if (quarter_turns) {
+        TurnDrawData(ImGui::GetDrawData(), quarter_turns, float(logical.width),
+                     float(logical.height));
+    }
 
     const vk::RenderingAttachmentInfo attachment{
         .imageView = view,

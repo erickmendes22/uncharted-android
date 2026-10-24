@@ -20,6 +20,11 @@ class Rasterizer;
 /// not on the draw recording thread: the SRT walkers of the draws after them read that memory.
 bool IsGuestMemoryShaderHLE(unsigned long long pgm_hash);
 
+/// bbport: whether a guest memory HLE shader (IsGuestMemoryShaderHLE) can go down the draw pipe
+/// and run on the recording thread in order, instead of the GPU thread draining the pipe first.
+bool PipelineGuestMemoryShaderHLE(const Shader::Info& info,
+                                  const AmdGpu::ComputeProgram& cs_program, Rasterizer& rasterizer);
+
 /// Attempts to execute a shader using HLE if possible.
 bool ExecuteShaderHLE(const Shader::Info& info, const AmdGpu::Regs& regs,
                       const AmdGpu::ComputeProgram& cs_program, Rasterizer& rasterizer);

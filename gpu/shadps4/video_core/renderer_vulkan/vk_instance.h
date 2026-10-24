@@ -264,6 +264,15 @@ public:
 
     /// Returns true when VK_KHR_workgroup_memory_explicit_layout is supported.
     bool IsWorkgroupMemoryExplicitLayoutSupported() const {
+        // g2-arm64: the Adreno proprietary compiler (libllvm-qgl) crashes on aliased u32/u64
+        // workgroup blocks with atomics (U1 compute shader 0x43b8ee5e); shared memory goes to a
+        // storage buffer there instead. BB_WG_EXPLICIT_LAYOUT=1 uses the extension anyway.
+        if (driver_id == vk::DriverId::eQualcommProprietary) {
+            const char* env = std::getenv("BB_WG_EXPLICIT_LAYOUT");
+            if (!env || env[0] != '1') {
+                return false;
+            }
+        }
         return workgroup_memory_explicit_layout &&
                workgroup_memory_explicit_layout_features.workgroupMemoryExplicitLayout16BitAccess;
     }
@@ -382,6 +391,13 @@ public:
     /// Returns the maximum size of compute shared memory.
     u32 MaxComputeSharedMemorySize() const {
         return properties.limits.maxComputeSharedMemorySize;
+    }
+
+    /// g2-arm64: the most workgroups one dispatch may have per dimension (Adreno: 65535).
+    std::array<u32, 3> GetMaxComputeWorkGroupCount() const {
+        return {properties.limits.maxComputeWorkGroupCount[0],
+                properties.limits.maxComputeWorkGroupCount[1],
+                properties.limits.maxComputeWorkGroupCount[2]};
     }
 
     /// Returns the maximum sampler LOD bias.

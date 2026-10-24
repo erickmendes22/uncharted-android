@@ -69,6 +69,8 @@ enum : std::uint64_t {
     // when nothing moves. Static-camera flicker of railings/window bars p99.9 -45% (2026-10-03).
     TaaKeepNearerHistory = 1ull << 55,
     SceneMipBias = 1ull << 57, ///< negative LOD bias of G-buffer samplers at reduced scene sizes
+    // g2-arm64 diagnosis: set to log the images at BB_POOL_LOG (texture_cache.cpp).
+    PoolLog = 1ull << 58,
     // Bits 20-29 are used as raw debug toggles by the camera/object motion and the upscaler.
 };
 inline bool Disabled(std::uint64_t bit) {
@@ -93,6 +95,11 @@ inline std::atomic<std::uint64_t> image_upload_bytes{0};
 inline std::atomic<std::uint64_t> buffer_upload_bytes{0};
 inline std::atomic<int> gpu_thread_clock{-1}; ///< clockid_t of the GPU command thread
 inline std::atomic<std::uint64_t> draws{0}, dispatches{0}, submissions{0};
+/// g2-arm64: device memory bound into the buffer arenas (guest memory mirrored for the GPU; never
+/// unbound), and the allocations that hold it.
+inline std::atomic<std::uint64_t> arena_bytes{0}, arena_allocations{0};
+/// g2-arm64: the texture cache's images (UniqueImage): their memory and number.
+inline std::atomic<std::int64_t> image_bytes{0}, image_count{0};
 /// Frames the GPU command thread has started (display pass), for per-frame diagnostics.
 inline std::atomic<std::uint64_t> gpu_frames{0};
 /// Wall time spent in operations suspected of stalls (ns, all threads).

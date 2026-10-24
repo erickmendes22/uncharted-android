@@ -24,6 +24,13 @@ bool g_device_fault_ext = false;
 // bbport diagnosis: BB_GPU_CHECKPOINTS=1 (VK_NV_device_diagnostic_checkpoints): the queue whose
 // last checkpoints a GPU crash report prints.
 bool g_gpu_checkpoints = false;
+// g2-arm64: BB_GPU_CHECKPOINTS=sync (drivers without the NV extension, e.g. Adreno): the same
+// records, and every draw and dispatch is waited for (vk_rasterizer.cpp SyncCheckpoint);
+// BB_GPU_CHECKPOINTS=ring: the records alone, each submission notes the latest one;
+// BB_GPU_CHECKPOINTS=marker: the GPU writes each one it completes to host memory.
+bool g_gpu_checkpoints_nv = false;
+bool g_gpu_sync = false;
+bool g_gpu_marker = false;
 VkQueue g_crash_queue = VK_NULL_HANDLE;
 
 namespace {
@@ -392,6 +399,13 @@ bool Instance::CreateDevice() {
     g_device_fault_ext = add_extension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
     if (const char* env = std::getenv("BB_GPU_CHECKPOINTS"); env && env[0] == '1') {
         g_gpu_checkpoints = add_extension(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
+        g_gpu_checkpoints_nv = g_gpu_checkpoints;
+    } else if (env && std::strcmp(env, "sync") == 0) {
+        g_gpu_checkpoints = g_gpu_sync = true;
+    } else if (env && std::strcmp(env, "ring") == 0) {
+        g_gpu_checkpoints = true; // records only; the stall report maps submissions to them
+    } else if (env && std::strcmp(env, "marker") == 0) {
+        g_gpu_checkpoints = g_gpu_marker = true;
     }
     const bool address_report =
         AddressReportEnabled() && add_extension(VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME);
@@ -493,6 +507,9 @@ bool Instance::CreateDevice() {
                 // bbport: required by the FSR 3 accumulate shaders (vk_temporal_upscaler).
                 .shaderStorageImageWriteWithoutFormat =
                     features.shaderStorageImageWriteWithoutFormat,
+                // g2-arm64: T# tables (ImageResource::table_count) index sampled image arrays.
+                .shaderSampledImageArrayDynamicIndexing =
+                    features.shaderSampledImageArrayDynamicIndexing,
                 .shaderClipDistance = features.shaderClipDistance,
                 .shaderFloat64 = features.shaderFloat64,
                 .shaderInt64 = features.shaderInt64,
@@ -749,6 +766,11 @@ void Instance::CreateAllocator() {
         .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
         .physicalDevice = physical_device,
         .device = *device,
+#ifdef __ANDROID__
+        // g2-arm64: 64 MiB blocks instead of VMA's 256: a block goes back to the system only when
+        // empty, and with the images coming and going ~0.5 GB of the blocks sat free in U2.
+        .preferredLargeHeapBlockSize = 64ull << 20,
+#endif
         .pVulkanFunctions = &functions,
         .instance = *instance,
         .vulkanApiVersion = TargetVulkanApiVersion,

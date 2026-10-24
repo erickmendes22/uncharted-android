@@ -20,6 +20,7 @@
 #include <queue>
 
 #include "bbport_toggles.h"
+#include "bbport_tsc.h"
 #include "common/assert.h"
 #include "common/interval_set.h"
 #include "common/unique_function.h"
@@ -621,7 +622,9 @@ public:
         return overflow.emplace_back(std::make_unique_for_overwrite<std::byte[]>(bytes)).get();
     }
 
-    void Execute(vk::CommandBuffer cmdbuf) {
+    /// g2-arm64: the command buffer is read for every command: a deferred submission
+    /// (Scheduler::SubmitRecorded) switches to the next one in the middle of the stream.
+    void Execute(const vk::CommandBuffer& cmdbuf) {
         for (CommandBase* command = first; command;) {
             CommandBase* const next = command->next;
             command->Execute(cmdbuf);
@@ -716,6 +719,12 @@ public:
         this->on_submit = std::move(on_submit);
     }
 
+    /// g2-arm64: whether the submit callback will put work on the queue itself (sparse binds):
+    /// that work must not pass a submission still deferred to the recording thread.
+    void SetQueueWorkCheck(std::function<bool()>&& check) {
+        queue_work_pending = std::move(check);
+    }
+
     /// Returns the current render state.
     const RenderState& GetRenderState() const {
         return render_state;
@@ -731,6 +740,10 @@ public:
     /// records directly (Record() included, so callers may mix both) until the next
     /// KickRecording() or submission.
     [[gnu::noinline]] vk::CommandBuffer CommandBuffer() {
+        FrontCheck check{this, "CommandBuffer"};
+        if (check.on && recording_threaded) {
+            CheckDirectOwner("CommandBuffer");
+        }
         if (recording_threaded && !direct_mode) {
             SyncRecording();
             direct_mode = true;
@@ -747,7 +760,12 @@ public:
     /// everything it uses (capture by value): it may run later on the recording thread.
     template <typename Func>
     void Record(Func&& func) {
+        FrontCheck check{this, "Record"};
         if (!recording_threaded || direct_mode) {
+            if (check.on && recording_threaded) {
+                CheckDirect("Record (direct)");
+                CheckDirectOwner("Record (direct)");
+            }
             func(current_cmdbuf);
             return;
         }
@@ -819,6 +837,44 @@ public:
     /// Hands recorded commands to the recording thread. Called at points where no caller holds
     /// the raw command buffer (end of draws and dispatches); small batches are kept.
     void KickRecording(bool force = false);
+
+    /// g2-arm64 diagnosis: BB_RECORD_CHECK=1 reports two threads in the recording front end of
+    /// one scheduler at once (Record, CommandBuffer, KickRecording, SyncRecording,
+    /// SubmitExecution, Begin/EndRendering), and direct recording while the recording thread
+    /// still has commands: either corrupts the command stream (CP opcode errors, device lost).
+    struct FrontCheck {
+        Scheduler* s;
+        uintptr_t prev = 0;
+        bool on;
+        FrontCheck(Scheduler* scheduler, const char* what) : s(scheduler), on(Wanted()) {
+            if (!on) {
+                return;
+            }
+            const uintptr_t me = bb_thread_pointer();
+            prev = s->front_owner.exchange(me, std::memory_order_acq_rel);
+            const char* other = s->front_what.exchange(what, std::memory_order_relaxed);
+            if (prev != 0 && prev != me) {
+                s->ReportFront(what, other);
+            }
+        }
+        ~FrontCheck() {
+            if (on) {
+                s->front_owner.store(prev, std::memory_order_release);
+            }
+        }
+        static bool Wanted() {
+            static const bool wanted = [] {
+                const char* env = std::getenv("BB_RECORD_CHECK");
+                return env && env[0] == '1';
+            }();
+            return wanted;
+        }
+    };
+    void ReportFront(const char* what, const char* other);
+    /// Direct recording: the recording thread must have nothing queued or running.
+    void CheckDirect(const char* what);
+    /// Direct recording: only by the thread that took the raw command buffer.
+    void CheckDirectOwner(const char* what);
 
     /// Waits until every recorded command is in the command buffer.
     void SyncRecording();
@@ -912,6 +968,17 @@ private:
 
     void SubmitExecution(SubmitInfo& info);
 
+    /// g2-arm64: the queue submission of the recorded command buffer (submit_mutex held).
+    void QueueSubmit(vk::CommandBuffer cmdbuf, SubmitInfo& info, u64 signal_value);
+
+    /// g2-arm64: a submission deferred to the recording thread (BB_DEFERRED_SUBMIT), run there
+    /// after the commands recorded before it.
+    void SubmitRecorded(vk::CommandBuffer cmdbuf, SubmitInfo& info, u64 signal_value);
+
+    [[nodiscard]] bool DeferredSubmitsPending() const noexcept {
+        return deferred_submits_done.load(std::memory_order_acquire) < deferred_submits_issued;
+    }
+
     void PriorityPendingOpsThread(std::stop_token stoken);
 
 private:
@@ -920,6 +987,7 @@ private:
     CommandPool command_pool;
     DynamicState dynamic_state;
     SubmitFunc on_submit{};
+    std::function<bool()> queue_work_pending{}; // g2-arm64
     vk::CommandBuffer current_cmdbuf;
     std::condition_variable_any event_cv;
     struct PendingOp {
@@ -945,11 +1013,16 @@ private:
     std::deque<std::unique_ptr<RecordChunk>> recorder_queue;
     std::vector<std::unique_ptr<RecordChunk>> free_chunks;
     bool recorder_busy = false;
+    std::atomic<uintptr_t> front_owner{0};          ///< BB_RECORD_CHECK: thread in the front end
+    std::atomic<const char*> front_what{nullptr};   ///< and where it entered
+    std::atomic<uintptr_t> direct_owner{0};         ///< BB_RECORD_CHECK: thread in direct mode
     std::atomic<size_t> queued_chunks{0}; ///< recorder_queue.size() for lock-free polling
     bool recorder_sleeping = false; ///< waiting on recorder_cv (guarded by recorder_mutex)
     bool direct_mode = false; ///< the command buffer is recorded on the caller's thread
     u64 host_copies_issued = 0;
     std::atomic<u64> host_copies_done{0};
+    u64 deferred_submits_issued = 0; ///< g2-arm64: by the thread recording (A or B)
+    std::atomic<u64> deferred_submits_done{0};
     std::atomic<u64> deferred_signals_issued{0}; ///< by the thread recording (A or B)
     std::shared_ptr<std::atomic<u64>> deferred_signals_done =
         std::make_shared<std::atomic<u64>>(0);

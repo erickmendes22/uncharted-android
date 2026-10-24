@@ -7,6 +7,7 @@
 #include <vector>
 #include <boost/container/static_vector.hpp>
 #include "common/assert.h"
+#include "bbport_tsc.h" // g2-arm64: BbThreadSlot
 #include "common/types.h"
 #include "shader_recompiler/backend/bindings.h"
 #include "shader_recompiler/frontend/copy_shader.h"
@@ -75,6 +76,9 @@ struct InfoPersistent {
     bool has_fetch_shader{};
     bool has_bitwise_xor{};
     bool uses_dma{};
+    /// g2-arm64: a compute shader whose invocations do not interact (no LDS, barriers or
+    /// cross-lane operations): one workgroup can run as several smaller ones (BB_CS_SPLIT).
+    bool cs_split_safe{};
 
     InfoPersistent() = default;
     InfoPersistent(HwStage hw_stage_, SwStage sw_stage_, u64 pgm_hash_)
@@ -171,10 +175,16 @@ struct Info : InfoPersistent {
         VAddr pgm_base;
     };
     static constexpr u32 MaxUdSnapshots = 6;
-    static inline thread_local UdSnapshot ud_snapshots[MaxUdSnapshots];
-    static inline thread_local u32 num_ud_snapshots = 0;
+    // g2-arm64: one thread installs snapshots and only it sees them (were thread_local: the
+    // dynamic TLS resolver on every user data access, libbbgpu is loaded with dlopen).
+    static inline BbThreadSlot ud_snapshot_thread;
+    alignas(64) static inline UdSnapshot ud_snapshots[MaxUdSnapshots];
+    static inline u32 num_ud_snapshots = 0;
 
     const UdSnapshot* Snapshot() const noexcept {
+        if (!ud_snapshot_thread.IsCurrent()) {
+            return nullptr;
+        }
         for (u32 i = 0; i < num_ud_snapshots; ++i) {
             if (ud_snapshots[i].info == this) {
                 return &ud_snapshots[i];
@@ -242,7 +252,10 @@ struct Info : InfoPersistent {
         ASSERT(user_data.size() <= NUM_USER_DATA_REGS);
         std::memcpy(flattened_ud_buf.data(), user_data.data(), user_data.size_bytes());
         if (srt_info.walker_func) {
-            srt_info.walker_func(user_data.data(), flattened_ud_buf.data());
+            RunSrtWalker(srt_info.walker_func, user_data.data(), flattened_ud_buf.data());
+        }
+        if (FlatPeekEnabled()) [[unlikely]] {
+            NoteFlatBuf(pgm_hash, flattened_ud_buf.data(), flattened_ud_buf.size()); // g2-arm64
         }
     }
 

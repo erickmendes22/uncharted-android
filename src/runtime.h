@@ -15,7 +15,14 @@ typedef bb_jmp_buf sigjmp_buf;
 extern __thread sigjmp_buf *runtime_fault_recover;
 /* Restarts the game (in-game settings menu, render resolution change). */
 void runtime_restart(void);
+/* Guest-facing host functions: System V on x86-64 hosts (called by native guest code). ARM64:
+ * plain AAPCS64 functions, reached through the FEX veneers (guest_cpu_fex.cpp bridge). */
+#if defined(__x86_64__)
 #define ABI __attribute__((sysv_abi))
+#else
+#define ABI
+#endif
+#include "guest_cpu.h"
 typedef void (ABI *GuestCallback)(void);
 void runtime_start(uint64_t capabilities);
 uintptr_t runtime_resolve(const char *name, int is_data);
@@ -25,6 +32,16 @@ uintptr_t runtime_mutex_resolve(const char *name);
 void runtime_mutex_report(void);
 uintptr_t runtime_memory_resolve(const char *name);
 void runtime_memory_report(void);
+size_t runtime_memory_protect_count(void); /* g2-arm64: host_protect calls so far */
+/* g2-arm64: the overlay's touch gamepad (gpu/shim/bbport_touchpad.cpp): PadData button bits,
+ * sticks 0..255 or -1 while no finger drives them, triggers 0..255; merged into every pad read
+ * like the pad file's input. */
+void runtime_touch_pad(uint32_t buttons, const int sticks[4], uint8_t l2, uint8_t r2);
+/* g2-arm64: a physical gamepad is open (the touch gamepad's Auto mode hides itself then). */
+int runtime_gamepad_connected(void);
+/* g2-arm64: the app went to the background (1) or came back (0): gpu/shim/window.cpp. While SDL
+ * pauses the audio device nothing is queued; the queue starts afresh after it. */
+void runtime_audio_background(int background);
 int runtime_memory_is_mapped(uintptr_t address, uint64_t size);
 const char *runtime_import_name(const char *name);
 uintptr_t runtime_rwlock_resolve(const char *name);
@@ -89,7 +106,14 @@ void runtime_savedata_report(void);
 int runtime_savedata_pick(int32_t user, const char *title, const char (*names)[32], uint32_t count,
                           int which, const char *focus, char out[32], void *param_out);
 void runtime_thread_attach_host(const char *name);
+/* g2-arm64: around HLE calls that start host threads for the system (audio): the calling guest
+ * thread runs at the main thread's priority, so the new threads do not inherit a lowered one. */
+int runtime_thread_system_priority_begin(void);
+void runtime_thread_system_priority_end(int changed);
 uintptr_t runtime_fiber_resolve(const char *name);
+/* g2-arm64: crash reports: the calling thread's current fiber (name, stack, whether rsp is in it
+ * and the stack bottom signature is intact). Returns the length, 0 when not on a fiber. */
+int runtime_fiber_describe(char *out, size_t size, uint64_t rsp);
 void runtime_fiber_report(void);
 /* Host functions the loader runs at the start of matching guest functions (probe.c): the code
  * at `offset` must equal `signature`; `moved` bytes of whole position-independent instructions

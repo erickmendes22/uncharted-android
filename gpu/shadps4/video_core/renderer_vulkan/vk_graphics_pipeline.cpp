@@ -120,12 +120,23 @@ GraphicsPipeline::GraphicsPipeline(
 
     if (!preloading) {
         const auto& fs_info = runtime_infos[u32(Shader::SwStage::Fragment)].hw.fs;
+        // g2-arm64 experiment: BB_NO_SAMPLE_SHADING=1 never enables sample shading.
+        static const bool no_sample_shading = std::getenv("BB_NO_SAMPLE_SHADING") != nullptr;
+        const bool sample_shading =
+            (fs_info.addr_flags.persp_sample_ena || fs_info.addr_flags.linear_sample_ena) &&
+            !no_sample_shading;
         sdata.multisampling = {
             .rasterizationSamples = LiverpoolToVK::NumSamples(
                 key.num_samples, instance.GetColorSampleCounts() & instance.GetDepthSampleCounts()),
-            .sampleShadingEnable =
-                fs_info.addr_flags.persp_sample_ena || fs_info.addr_flags.linear_sample_ena,
+            .sampleShadingEnable = sample_shading,
         };
+        if (std::getenv("BB_DUMP_AUX")) {
+            const auto* ps = infos[u32(Shader::SwStage::Fragment)];
+            std::printf("Pipeline ps %08x: samples %u sample shading %d (persp %u linear %u)\n",
+                        ps ? u32(ps->pgm_hash) : 0u, u32(key.num_samples), int(sample_shading),
+                        u32(fs_info.addr_flags.persp_sample_ena),
+                        u32(fs_info.addr_flags.linear_sample_ena));
+        }
     }
 
     const vk::PipelineViewportDepthClipControlCreateInfoEXT clip_control = {
@@ -215,6 +226,21 @@ GraphicsPipeline::GraphicsPipeline(
             const auto& fs_info = runtime_infos[u32(Shader::SwStage::Fragment)].hw.fs;
             sdata.tes = Shader::Backend::SPIRV::EmitAuxilaryTessShader(
                 AuxShaderType::PassthroughTES, fs_info);
+            // g2-arm64 diagnosis: BB_DUMP_AUX=<dir>: the generated quad/rect list TCS and TES
+            // of each pipeline, named by its pixel shader.
+            if (const char* dir = std::getenv("BB_DUMP_AUX")) {
+                const auto* ps = infos[u32(Shader::SwStage::Fragment)];
+                const u64 ps_hash = ps ? ps->pgm_hash : 0;
+                for (const auto& [name, code] :
+                     {std::pair{"tcs", &sdata.tcs}, std::pair{"tes", &sdata.tes}}) {
+                    const std::string path =
+                        fmt::format("{}/aux_{}_ps{:08x}.spv", dir, name, u32(ps_hash));
+                    if (FILE* f = std::fopen(path.c_str(), "wb")) {
+                        std::fwrite(code->data(), sizeof(u32), code->size(), f);
+                        std::fclose(f);
+                    }
+                }
+            }
         }
         shader_stages.emplace_back(vk::PipelineShaderStageCreateInfo{
             .stage = vk::ShaderStageFlagBits::eTessellationEvaluation,
@@ -245,8 +271,9 @@ GraphicsPipeline::GraphicsPipeline(
     const vk::PipelineShaderStageRequiredSubgroupSizeCreateInfo subgroup_size_ci = {
         .requiredSubgroupSize = 64,
     };
+    const bool wave64 = instance.IsSubgroupSize64Supported() && NeedsWave64(stages);
     for (auto& stage : shader_stages) {
-        stage.pNext = instance.IsSubgroupSize64Supported() ? &subgroup_size_ci : nullptr;
+        stage.pNext = wave64 ? &subgroup_size_ci : nullptr;
     }
 
     const auto depth_format =
@@ -522,7 +549,9 @@ void GraphicsPipeline::BuildDescSetLayout(bool preloading) {
             });
         }
     }
-    uses_push_descriptors = binding < instance.MaxPushDescriptors();
+    // g2-arm64 experiment: BB_NO_PUSH_DESCRIPTORS=1 binds descriptor sets instead.
+    static const bool no_push_descriptors = std::getenv("BB_NO_PUSH_DESCRIPTORS") != nullptr;
+    uses_push_descriptors = binding < instance.MaxPushDescriptors() && !no_push_descriptors;
     const auto flags = uses_push_descriptors
                            ? vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR
                            : vk::DescriptorSetLayoutCreateFlagBits{};

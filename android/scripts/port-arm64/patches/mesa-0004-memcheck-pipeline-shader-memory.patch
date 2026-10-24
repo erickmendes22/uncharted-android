@@ -1,0 +1,277 @@
+From 17ddc5cd541c4977d2764d70cca5c26d7e0e3c07 Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip: diagnostics: TU_MEMCHECK=1 watches the memory of
+ pipelines and shaders for changes
+
+---
+ src/freedreno/vulkan/meson.build    |   1 +
+ src/freedreno/vulkan/tu_memcheck.cc | 151 ++++++++++++++++++++++++++++
+ src/freedreno/vulkan/tu_memcheck.h  |  20 ++++
+ src/freedreno/vulkan/tu_pipeline.cc |   3 +
+ src/freedreno/vulkan/tu_shader.cc   |   4 +
+ 5 files changed, 179 insertions(+)
+ create mode 100644 src/freedreno/vulkan/tu_memcheck.cc
+ create mode 100644 src/freedreno/vulkan/tu_memcheck.h
+
+diff --git a/src/freedreno/vulkan/meson.build b/src/freedreno/vulkan/meson.build
+index b0197103975..a7bf60d0a35 100644
+--- a/src/freedreno/vulkan/meson.build
++++ b/src/freedreno/vulkan/meson.build
+@@ -53,6 +53,7 @@ libtu_files = files(
+   'tu_nir_lower_multiview.cc',
+   'tu_nir_lower_ray_query.cc',
+   'tu_pass.cc',
++  'tu_memcheck.cc',
+   'tu_pipeline.cc',
+   'tu_sampler.cc',
+   'tu_query_pool.cc',
+diff --git a/src/freedreno/vulkan/tu_memcheck.cc b/src/freedreno/vulkan/tu_memcheck.cc
+new file mode 100644
+index 00000000000..d46a5ec3e7e
+--- /dev/null
++++ b/src/freedreno/vulkan/tu_memcheck.cc
+@@ -0,0 +1,151 @@
++/*
++ * Copyright © 2026 uncharted-android
++ * SPDX-License-Identifier: MIT
++ */
++
++#include "tu_memcheck.h"
++
++#include <chrono>
++#include <cinttypes>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <mutex>
++#include <thread>
++#include <unordered_map>
++#include <vector>
++
++#include "tu_suballoc.h"
++
++namespace {
++
++using clock_type = std::chrono::steady_clock;
++
++struct Entry {
++   const char *kind;
++   uint64_t iova;
++   uint32_t size;
++   const uint32_t *cpu;
++   clock_type::time_point created;
++   std::vector<uint32_t> ref; /* empty until the range is two seconds old */
++   uint32_t reports;
++};
++
++std::mutex entries_lock;
++std::unordered_map<const void *, Entry> entries;
++
++bool
++enabled()
++{
++   static const bool on = [] {
++      const char *env = getenv("TU_MEMCHECK");
++      return env && env[0] == '1';
++   }();
++   return on;
++}
++
++/* Compares one range with its reference (taken here the first time it is old enough).
++ * Called with entries_lock held: the range cannot be freed meanwhile. */
++void
++check(const void *owner, Entry &e, clock_type::time_point now, uint32_t &changes)
++{
++   const uint32_t dwords = e.size / 4;
++   if (e.ref.empty()) {
++      if (now - e.created < std::chrono::seconds(2))
++         return;
++      e.ref.assign(e.cpu, e.cpu + dwords);
++      return;
++   }
++   if (memcmp(e.cpu, e.ref.data(), dwords * 4) == 0)
++      return;
++   ++changes;
++   uint32_t changed = 0, first = 0;
++   for (uint32_t i = 0; i < dwords; ++i) {
++      if (e.cpu[i] != e.ref[i]) {
++         if (!changed)
++            first = i;
++         ++changed;
++      }
++   }
++   if (e.reports < 4) {
++      ++e.reports;
++      fprintf(stderr,
++              "tu-memcheck: %s %p iova 0x%" PRIx64 " size 0x%x changed %.1f s after creation: "
++              "%u dwords, first at +0x%x\n",
++              e.kind, owner, e.iova, e.size,
++              std::chrono::duration<double>(now - e.created).count(), changed, first * 4);
++      uint32_t shown = 0;
++      for (uint32_t i = first; i < dwords && shown < 12; ++i) {
++         if (e.cpu[i] != e.ref[i]) {
++            fprintf(stderr, "tu-memcheck:   +0x%04x (iova 0x%" PRIx64 "): %08x -> %08x\n",
++                    i * 4, e.iova + i * 4, e.ref[i], e.cpu[i]);
++            ++shown;
++         }
++      }
++   }
++   /* Changes after this one are reported against what is there now. */
++   e.ref.assign(e.cpu, e.cpu + dwords);
++}
++
++void
++watch()
++{
++   std::vector<const void *> owners;
++   uint32_t changes = 0;
++   auto summary = clock_type::now();
++   for (;;) {
++      std::this_thread::sleep_for(std::chrono::seconds(1));
++      const auto start = clock_type::now();
++      {
++         std::lock_guard<std::mutex> guard(entries_lock);
++         owners.clear();
++         owners.reserve(entries.size());
++         for (const auto &kv : entries)
++            owners.push_back(kv.first);
++      }
++      uint64_t bytes = 0;
++      for (const void *owner : owners) {
++         std::lock_guard<std::mutex> guard(entries_lock);
++         auto it = entries.find(owner);
++         if (it == entries.end())
++            continue;
++         check(owner, it->second, start, changes);
++         bytes += it->second.size;
++      }
++      const auto end = clock_type::now();
++      if (end - summary >= std::chrono::seconds(30)) {
++         summary = end;
++         fprintf(stderr,
++                 "tu-memcheck: %zu ranges, %.1f MiB, a pass %.1f ms; %u changes so far\n",
++                 owners.size(), bytes / 1048576.0,
++                 std::chrono::duration<double, std::milli>(end - start).count(), changes);
++      }
++   }
++}
++
++} /* namespace */
++
++void
++tu_memcheck_register(const void *owner, const char *kind, struct tu_suballoc_bo *bo)
++{
++   if (!enabled())
++      return;
++   static std::once_flag started;
++   std::call_once(started, [] {
++      fprintf(stderr, "tu-memcheck: on\n");
++      std::thread(watch).detach();
++   });
++   std::lock_guard<std::mutex> guard(entries_lock);
++   entries[owner] = Entry{kind, bo->iova, bo->size,
++                          static_cast<const uint32_t *>(tu_suballoc_bo_map(bo)),
++                          clock_type::now(), {}, 0};
++}
++
++void
++tu_memcheck_unregister(const void *owner)
++{
++   if (!enabled())
++      return;
++   std::lock_guard<std::mutex> guard(entries_lock);
++   entries.erase(owner);
++}
+diff --git a/src/freedreno/vulkan/tu_memcheck.h b/src/freedreno/vulkan/tu_memcheck.h
+new file mode 100644
+index 00000000000..50cc4c2a39d
+--- /dev/null
++++ b/src/freedreno/vulkan/tu_memcheck.h
+@@ -0,0 +1,20 @@
++/*
++ * Copyright © 2026 uncharted-android
++ * SPDX-License-Identifier: MIT
++ */
++
++#ifndef TU_MEMCHECK_H
++#define TU_MEMCHECK_H
++
++#include "tu_common.h"
++
++/* uncharted-android diagnostics: TU_MEMCHECK=1 watches the memory of pipelines and shaders
++ * (pipeline_suballoc: their draw states, which CP_SET_DRAW_STATE points the CP at, and the
++ * shader binaries). A background thread takes each range's contents once it is two seconds old
++ * (created by then) and compares the memory with them from then on; a change is printed with
++ * the range's GPU address, so it can be matched with a GPU fault's snapshot.
++ */
++void tu_memcheck_register(const void *owner, const char *kind, struct tu_suballoc_bo *bo);
++void tu_memcheck_unregister(const void *owner);
++
++#endif /* TU_MEMCHECK_H */
+diff --git a/src/freedreno/vulkan/tu_pipeline.cc b/src/freedreno/vulkan/tu_pipeline.cc
+index 100c32c1e99..2177a3c995c 100644
+--- a/src/freedreno/vulkan/tu_pipeline.cc
++++ b/src/freedreno/vulkan/tu_pipeline.cc
+@@ -25,6 +25,7 @@
+ #include "ir3/ir3_nir.h"
+ #include "tu_cmd_buffer.h"
+ #include "tu_cs.h"
++#include "tu_memcheck.h"
+ #include "tu_device.h"
+ #include "tu_formats.h"
+ #include "tu_knl.h"
+@@ -1502,6 +1503,7 @@ tu_pipeline_allocate_cs(struct tu_device *dev,
+ 
+    TU_RMV(cmd_buffer_suballoc_bo_create, dev, &pipeline->bo);
+    tu_cs_init_suballoc(&pipeline->cs, dev, &pipeline->bo);
++   tu_memcheck_register(pipeline, "pipeline", &pipeline->bo);
+ 
+    return VK_SUCCESS;
+ }
+@@ -4452,6 +4454,7 @@ tu_pipeline_finish(struct tu_pipeline *pipeline,
+ {
+    tu_cs_finish(&pipeline->cs);
+    TU_RMV(resource_destroy, dev, &pipeline->bo);
++   tu_memcheck_unregister(pipeline);
+ 
+    mtx_lock(&dev->pipeline_mutex);
+    tu_suballoc_bo_free(&dev->pipeline_suballoc, &pipeline->bo);
+diff --git a/src/freedreno/vulkan/tu_shader.cc b/src/freedreno/vulkan/tu_shader.cc
+index 983a92c64b3..fbac2e33033 100644
+--- a/src/freedreno/vulkan/tu_shader.cc
++++ b/src/freedreno/vulkan/tu_shader.cc
+@@ -21,6 +21,7 @@
+ #include "tu_descriptor_set.h"
+ #include "tu_device.h"
+ #include "tu_lrz.h"
++#include "tu_memcheck.h"
+ #include "tu_pipeline.h"
+ #include "tu_rmv.h"
+ #include "tu_sampler.h"
+@@ -2991,6 +2992,7 @@ tu_upload_shader(struct tu_device *dev,
+ 
+    TU_RMV(cmd_buffer_suballoc_bo_create, dev, &shader->bo);
+    tu_cs_init_suballoc(&shader->cs, dev, &shader->bo);
++   tu_memcheck_register(shader, "shader", &shader->bo);
+ 
+    uint64_t iova = tu_upload_variant(&shader->cs, v);
+    uint64_t binning_iova = tu_upload_variant(&shader->cs, binning);
+@@ -3821,6 +3823,7 @@ tu_empty_shader_create(struct tu_device *dev,
+ 
+    TU_RMV(cmd_buffer_suballoc_bo_create, dev, &shader->bo);
+    tu_cs_init_suballoc(&shader->cs, dev, &shader->bo);
++   tu_memcheck_register(shader, "shader", &shader->bo);
+ 
+    struct tu_pvtmem_config pvtmem_config = { };
+ 
+@@ -3922,6 +3925,7 @@ tu_shader_destroy(struct tu_device *dev,
+ {
+    tu_cs_finish(&shader->cs);
+    TU_RMV(resource_destroy, dev, &shader->bo);
++   tu_memcheck_unregister(shader);
+ 
+    pthread_mutex_lock(&dev->pipeline_mutex);
+    tu_suballoc_bo_free(&dev->pipeline_suballoc, &shader->bo);
+-- 
+2.43.0
+

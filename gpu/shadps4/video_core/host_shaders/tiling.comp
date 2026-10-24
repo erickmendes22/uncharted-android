@@ -104,6 +104,7 @@ layout (set = 0, binding = 2, scalar) uniform TilingInfo {
     uint num_slices;
     uint num_mips;
     MipInfo mips[16];
+    uint num_groups; // g2-arm64: workgroups of the dispatch (rows of them past the device limit)
 } info;
 
 uint32_t ComputePixelIndexWithinMicroTile(uint32_t x, uint32_t y, uint32_t z) {
@@ -425,7 +426,13 @@ uint GetMipLevel(inout uint texel) {
 }
 
 void main() {
-    uint texel = gl_GlobalInvocationID.x;
+    // g2-arm64: groups numbered row by row; a 2D dispatch has some past the end.
+    const uint group = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+    if (group >= info.num_groups) {
+        return;
+    }
+    const uint linear_index = group * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+    uint texel = linear_index;
     uint mip = GetMipLevel(texel);
     uint pitch = info.mips[mip].pitch;
     uint height = info.mips[mip].height;
@@ -441,8 +448,8 @@ void main() {
 #endif
 
     if (IS_TILER != 0) {
-        tiled_data[tiled_offset / BYTES_PER_PIXEL] = linear_data[gl_GlobalInvocationID.x];
+        tiled_data[tiled_offset / BYTES_PER_PIXEL] = linear_data[linear_index];
     } else {
-        linear_data[gl_GlobalInvocationID.x] = tiled_data[tiled_offset / BYTES_PER_PIXEL];
+        linear_data[linear_index] = tiled_data[tiled_offset / BYTES_PER_PIXEL];
     }
 }

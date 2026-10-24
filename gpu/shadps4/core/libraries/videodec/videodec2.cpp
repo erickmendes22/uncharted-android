@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <atomic>
+#include <chrono>
+#include <cstdio>
 #include "common/alignment.h"
 #include "common/assert.h"
 #include "common/logging/log.h"
@@ -203,13 +206,27 @@ s32 PS4_SYSV_ABI sceVideodec2Decode(OrbisVideodec2Decoder decoder,
     }
 
     Libraries::VideoOut::NoteMovieFrame();
-    return decoder->Decode(*input_data, *frame_buffer, *output_info);
+    const s32 result = decoder->Decode(*input_data, *frame_buffer, *output_info);
+    // g2-arm64: the decode rate in the log (a movie that stops while its audio goes on).
+    static std::atomic<u32> decodes{0};
+    static auto reported = std::chrono::steady_clock::now();
+    ++decodes;
+    const auto now = std::chrono::steady_clock::now();
+    if (now - reported >= std::chrono::seconds(5)) {
+        std::printf("Videodec2: %u decodes in %.1f s, last %u bytes -> result %#x, picture %d\n",
+                    decodes.exchange(0),
+                    std::chrono::duration<double>(now - reported).count(),
+                    u32(input_data->au_size), u32(result), int(output_info->picture_count));
+        reported = now;
+    }
+    return result;
 }
 
 s32 PS4_SYSV_ABI sceVideodec2Flush(OrbisVideodec2Decoder decoder,
                                    OrbisVideodec2FrameBuffer* frame_buffer,
                                    OrbisVideodec2OutputInfo* output_info) {
     LOG_INFO(Lib_Vdec2, "called");
+    std::printf("Videodec2: flush\n"); // g2-arm64: in the log (INFO is filtered)
 
     if (!decoder) {
         LOG_ERROR(Lib_Vdec2, "Invalid decoder instance");
@@ -230,6 +247,7 @@ s32 PS4_SYSV_ABI sceVideodec2Flush(OrbisVideodec2Decoder decoder,
 
 s32 PS4_SYSV_ABI sceVideodec2Reset(OrbisVideodec2Decoder decoder) {
     LOG_INFO(Lib_Vdec2, "called");
+    std::printf("Videodec2: reset\n"); // g2-arm64: in the log (INFO is filtered)
 
     if (!decoder) {
         LOG_ERROR(Lib_Vdec2, "Invalid decoder instance");

@@ -108,6 +108,7 @@ bool Inst::MayHaveSideEffects() const noexcept {
     case Opcode::SharedAtomicXor64:
     case Opcode::SharedAtomicCmpSwap32:
     case Opcode::SharedAtomicCmpSwap64:
+    case Opcode::ImageTableIndex: // g2-arm64: read by the image emitters, no uses in the IR
     case Opcode::ImageWrite:
     case Opcode::ImageAtomicIAdd32:
     case Opcode::ImageAtomicSMin32:

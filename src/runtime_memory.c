@@ -845,6 +845,7 @@ void runtime_memory_gpu_protect(uintptr_t address, uint64_t size, int read, int 
         int guest=host_prot(vmas[i].prot);
         int want=(read ? PROT_READ : 0)|(write ? PROT_WRITE|PROT_READ : 0)|(guest & PROT_EXEC);
         host_protect(a,b-a,guest & want);
+        ++protects; /* g2-arm64: the Memory line prints the rate */
     }
     read_unlock();
 }
@@ -857,6 +858,8 @@ int runtime_memory_is_mapped(uintptr_t address, uint64_t size) {
     read_unlock();
     return result;
 }
+/* g2-arm64: how many host_protect calls so far (the Memory line prints the rate). */
+size_t runtime_memory_protect_count(void) { return protects; }
 void runtime_memory_report(void) {
     printf("Runtime: direct memory allocations=%zu, maps=%zu, live=%" PRIu64 ", budget=%" PRIu64 "\n",
            allocations, maps, live_bytes, POOL_SIZE);

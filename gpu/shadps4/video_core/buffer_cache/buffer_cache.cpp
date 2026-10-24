@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <magic_enum/magic_enum.hpp>
 #include "bbport_copy.h"
+#include "bbport_owner_wait.h"
 #include "bbport_toggles.h"
 #include "common/alignment.h"
 #include "core/memory.h"
@@ -28,6 +29,13 @@
 #include <cstdio>
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <pthread.h>
+namespace Vulkan {
+// g2-arm64 diagnosis (BB_ARENA_LOG): who changes residency outside the GPU thread.
+void PrintHostBacktrace(const char* prefix); // vk_semaphore.cpp
+}
+using Vulkan::PrintHostBacktrace;
 #endif
 
 namespace Vulkan {
@@ -391,7 +399,15 @@ void BufferCache::InvalidateMemory(VAddr device_addr, u64 size, bool assume_lock
             NoteFault(page, length, frames, gpu_write, gpu_use, 3);
         };
         if (assume_locks) {
+            // g2-arm64: not while a helper thread runs owner work during this thread's wait
+            // for it (bbport_owner_wait.h).
+            std::scoped_lock lk{BbOwnerWait::mutex};
             resolve();
+        } else if (BbOwnerWait::helper_thread) {
+            // g2-arm64: the owner may be waiting for this thread (bbport_owner_wait.h).
+            BbOwnerWait::RunFromHelper(std::move(resolve), [this](auto&& command) {
+                liverpool->SendCommand(std::forward<decltype(command)>(command));
+            });
         } else {
             liverpool->SendCommand<true>(std::move(resolve));
         }
@@ -780,12 +796,17 @@ static bool ClobberCheckEnabled() {
 static void ReportClobber(const char* path, VAddr address, u64 size, VAddr binding, u64 binding_size,
                           bool is_written) {
     static std::atomic<u32> reports{0};
-    if (reports.fetch_add(1, std::memory_order_relaxed) < 300) {
+    const u32 n = reports.fetch_add(1, std::memory_order_relaxed);
+    if (n < 300) {
         std::printf("Clobber check: %s %#llx (%llu bytes) over GPU-written data, binding %#llx "
                     "(%llu bytes, %s)\n",
                     path, static_cast<unsigned long long>(address),
                     static_cast<unsigned long long>(size), static_cast<unsigned long long>(binding),
                     static_cast<unsigned long long>(binding_size), is_written ? "written" : "read");
+    }
+    // g2-arm64: a running total every 100 past the lines, so two builds compare by the rate.
+    if ((n + 1) % 100 == 0) {
+        std::printf("Clobber check: %u uploads over GPU-written data so far\n", n + 1);
     }
 }
 
@@ -944,6 +965,9 @@ void BufferCache::SynchronizeDmaBuffers() {
 const Buffer* BufferCache::GetArena(u64 first_block, u64 last_block) {
     const u64 first_page = first_block >> blocks_per_arena_page_shift;
     const u64 last_page = last_block >> blocks_per_arena_page_shift;
+    ASSERT_MSG(last_page < num_arena_pages,
+               "Guest GPU memory 0x{:x}-0x{:x} beyond the buffer cache's {}-bit address space",
+               first_block << block_shift, (last_block + 1) << block_shift, ADDRESS_SPACE_BITS);
     ASSERT_MSG(last_page - first_page <= 1,
                "Buffer request cannot span more than two VA arena pages");
 
@@ -1008,6 +1032,24 @@ void BufferCache::EnsureResident(const Buffer* arena, u64 first_block, u64 last_
     if (bind_ranges.Empty()) {
         return;
     }
+    // g2-arm64 diagnosis: BB_SPARSE_FLUSH=1 waits for the commands recorded so far before the
+    // first bind of a batch (=2: submits them without waiting), so the submission that waits
+    // for the bind holds only commands recorded after it.
+    static const int sparse_flush = [] {
+        const char* env = std::getenv("BB_SPARSE_FLUSH");
+        return env ? std::atoi(env) : 0;
+    }();
+    if (sparse_flush && pending_binds.empty()) {
+        if (sparse_flush == 1) {
+            scheduler.Finish();
+        } else {
+            scheduler.Flush();
+        }
+        std::printf("Arena: %s before binding guest 0x%llx-0x%llx\n",
+                    sparse_flush == 1 ? "finished" : "flushed",
+                    static_cast<unsigned long long>(first_block << block_shift),
+                    static_cast<unsigned long long>((last_block + 1) << block_shift));
+    }
     BbStats::Timer timer{BbStats::t_resident};
 
     const vk::MemoryAllocateInfo alloc_info = {
@@ -1015,6 +1057,8 @@ void BufferCache::EnsureResident(const Buffer* arena, u64 first_block, u64 last_
         .memoryTypeIndex = arena_memory_type_index,
     };
     const auto device_memory = Vulkan::Check(instance.GetDevice().allocateMemory(alloc_info));
+    BbStats::arena_bytes += alloc_info.allocationSize;
+    ++BbStats::arena_allocations;
     static const bool arena_log = [] {
         const char* env = std::getenv("BB_ARENA_LOG");
         return env && env[0] == '1';
@@ -1028,6 +1072,8 @@ void BufferCache::EnsureResident(const Buffer* arena, u64 first_block, u64 last_
                                 nullptr);
             LocalFree(description);
         }
+#else
+        pthread_getname_np(pthread_self(), thread_name, sizeof(thread_name));
 #endif
         std::printf("Arena: thread '%s'\n", thread_name);
         std::printf("Arena: memory 0x%llx (%u blocks) for guest 0x%llx-0x%llx, arena 0x%llx, %s, "
@@ -1039,6 +1085,11 @@ void BufferCache::EnsureResident(const Buffer* arena, u64 first_block, u64 last_
                     static_cast<unsigned long long>(arena->cpu_addr),
                     AmdGpu::Liverpool::OnProcessorThread() ? "GPU thread" : "OTHER THREAD",
                     pending_binds.size());
+#ifndef _WIN32
+        if (!AmdGpu::Liverpool::OnProcessorThread()) {
+            PrintHostBacktrace("Arena:");
+        }
+#endif
     }
 
     boost::container::small_vector<vk::BufferCopy, 8> copies;
@@ -1325,34 +1376,6 @@ void BufferCache::SubmitPendingArenaBinds(Vulkan::SubmitInfo& info) {
         return;
     }
 
-    std::vector<vk::SparseBufferMemoryBindInfo> buffer_binds;
-    buffer_binds.reserve(pending_binds.size());
-
-    for (const auto& binds : pending_binds) {
-        buffer_binds.emplace_back(vk::SparseBufferMemoryBindInfo{
-            .buffer = binds.arena->Handle(),
-            .bindCount = static_cast<u32>(binds.binds.size()),
-            .pBinds = binds.binds.data(),
-        });
-    }
-
-    const u64 signal_tick = memory_semaphore.NextTick();
-    const auto signal_sema = memory_semaphore.Handle();
-
-    const vk::TimelineSemaphoreSubmitInfo timeline_si = {
-        .signalSemaphoreValueCount = 1u,
-        .pSignalSemaphoreValues = &signal_tick,
-    };
-
-    const vk::BindSparseInfo sparse_info = {
-        .pNext = &timeline_si,
-        .bufferBindCount = static_cast<u32>(buffer_binds.size()),
-        .pBufferBinds = buffer_binds.data(),
-        .signalSemaphoreCount = 1u,
-        .pSignalSemaphores = &signal_sema,
-    };
-
-    info.AddWait(signal_sema, signal_tick);
     // bbport: BB_SPARSE_IDLE=1: the arena's page mappings change only while the GPU runs none of
     // the work submitted before (diagnosis of device-lost faults in freshly bound memory).
     static const bool sparse_idle = [] {
@@ -1363,20 +1386,66 @@ void BufferCache::SubmitPendingArenaBinds(Vulkan::SubmitInfo& info) {
         // Called inside Scheduler::SubmitExecution (queue lock held), so the queue is ours.
         (void)instance.GetGraphicsQueue().waitIdle();
     }
-    auto submit_result = instance.GetGraphicsQueue().bindSparse(sparse_info);
-    if (submit_result == vk::Result::eErrorDeviceLost) {
-        std::printf("Device lost during a sparse bind\n");
-        Vulkan::DeviceLost(instance.GetDevice());
-    }
     static const bool arena_log = [] {
         const char* env = std::getenv("BB_ARENA_LOG");
         return env && env[0] == '1';
     }();
-    if (arena_log) {
+
+    // g2-arm64 experiment: one bind operation per arena (BB_SPARSE_SPLIT=1) or per range (=2),
+    // each waiting for the one before (the timeline semaphore orders them).
+    static const int sparse_split = [] {
+        const char* env = std::getenv("BB_SPARSE_SPLIT");
+        return env ? std::atoi(env) : 0;
+    }();
+    if (sparse_split == 0) {
+        std::vector<vk::SparseBufferMemoryBindInfo> buffer_binds;
+        buffer_binds.reserve(pending_binds.size());
+        for (const auto& binds : pending_binds) {
+            buffer_binds.emplace_back(vk::SparseBufferMemoryBindInfo{
+                .buffer = binds.arena->Handle(),
+                .bindCount = static_cast<u32>(binds.binds.size()),
+                .pBinds = binds.binds.data(),
+            });
+        }
+        const u64 signal_tick = memory_semaphore.NextTick();
+        const auto signal_sema = memory_semaphore.Handle();
+        const vk::TimelineSemaphoreSubmitInfo timeline_si = {
+            .signalSemaphoreValueCount = 1u,
+            .pSignalSemaphoreValues = &signal_tick,
+        };
+        const vk::BindSparseInfo sparse_info = {
+            .pNext = &timeline_si,
+            .bufferBindCount = static_cast<u32>(buffer_binds.size()),
+            .pBufferBinds = buffer_binds.data(),
+            .signalSemaphoreCount = 1u,
+            .pSignalSemaphores = &signal_sema,
+        };
+        info.AddWait(signal_sema, signal_tick);
+        const auto submit_result = instance.GetGraphicsQueue().bindSparse(sparse_info);
+        if (submit_result == vk::Result::eErrorDeviceLost) {
+            std::printf("Device lost during a sparse bind\n");
+            Vulkan::DeviceLost(instance.GetDevice());
+        }
+        // g2-arm64 diagnosis: BB_SPARSE_CHECK=1 waits for the bind itself (does it break the
+        // queue, or the work after it?).
+        static const bool sparse_check = std::getenv("BB_SPARSE_CHECK") != nullptr;
+        if (sparse_check) {
+            const auto idle_result = instance.GetGraphicsQueue().waitIdle();
+            std::printf("Arena: bind tick %llu done: %s\n",
+                        static_cast<unsigned long long>(signal_tick),
+                        vk::to_string(idle_result).c_str());
+            if (idle_result == vk::Result::eErrorDeviceLost) {
+                std::printf("Device lost by a sparse bind\n");
+                Vulkan::DeviceLost(instance.GetDevice());
+            }
+        }
         for (const auto& binds : pending_binds) {
             for (const auto& bind : binds.binds) {
-                std::printf("Arena: bound memory 0x%llx+0x%llx at arena 0x%llx offset 0x%llx size 0x%llx "
-                            "(tick %llu, %s)\n",
+                if (!arena_log) {
+                    break;
+                }
+                std::printf("Arena: bound memory 0x%llx+0x%llx at arena 0x%llx offset 0x%llx size "
+                            "0x%llx (tick %llu, %s)\n",
                             static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(
                                 static_cast<VkDeviceMemory>(bind.memory))),
                             static_cast<unsigned long long>(bind.memoryOffset),
@@ -1387,7 +1456,72 @@ void BufferCache::SubmitPendingArenaBinds(Vulkan::SubmitInfo& info) {
                             vk::to_string(submit_result).c_str());
             }
         }
+        pending_binds.clear();
+        return;
     }
+    const auto signal_sema = memory_semaphore.Handle();
+    u64 wait_tick = 0;
+    struct Op {
+        const ArenaBinds* binds;
+        u32 first, count;
+    };
+    std::vector<Op> ops;
+    for (const auto& binds : pending_binds) {
+        if (sparse_split == 1) {
+            ops.push_back({&binds, 0, static_cast<u32>(binds.binds.size())});
+            continue;
+        }
+        for (u32 i = 0; i < binds.binds.size(); ++i) {
+            ops.push_back({&binds, i, 1});
+        }
+    }
+    for (const auto& op : ops) {
+        const auto& binds = *op.binds;
+        const vk::SparseBufferMemoryBindInfo buffer_bind = {
+            .buffer = binds.arena->Handle(),
+            .bindCount = op.count,
+            .pBinds = binds.binds.data() + op.first,
+        };
+        const u64 signal_tick = memory_semaphore.NextTick();
+        const vk::TimelineSemaphoreSubmitInfo timeline_si = {
+            .waitSemaphoreValueCount = wait_tick ? 1u : 0u,
+            .pWaitSemaphoreValues = &wait_tick,
+            .signalSemaphoreValueCount = 1u,
+            .pSignalSemaphoreValues = &signal_tick,
+        };
+        const vk::BindSparseInfo sparse_info = {
+            .pNext = &timeline_si,
+            .waitSemaphoreCount = wait_tick ? 1u : 0u,
+            .pWaitSemaphores = &signal_sema,
+            .bufferBindCount = 1u,
+            .pBufferBinds = &buffer_bind,
+            .signalSemaphoreCount = 1u,
+            .pSignalSemaphores = &signal_sema,
+        };
+        const auto submit_result = instance.GetGraphicsQueue().bindSparse(sparse_info);
+        if (submit_result == vk::Result::eErrorDeviceLost) {
+            std::printf("Device lost during a sparse bind\n");
+            Vulkan::DeviceLost(instance.GetDevice());
+        }
+        wait_tick = signal_tick;
+        for (u32 i = op.first; i < op.first + op.count; ++i) {
+            const auto& bind = binds.binds[i];
+            if (!arena_log) {
+                break;
+            }
+            std::printf("Arena: bound memory 0x%llx+0x%llx at arena 0x%llx offset 0x%llx size 0x%llx "
+                        "(tick %llu, %s)\n",
+                        static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(
+                            static_cast<VkDeviceMemory>(bind.memory))),
+                        static_cast<unsigned long long>(bind.memoryOffset),
+                        static_cast<unsigned long long>(binds.arena->cpu_addr),
+                        static_cast<unsigned long long>(bind.resourceOffset),
+                        static_cast<unsigned long long>(bind.size),
+                        static_cast<unsigned long long>(signal_tick),
+                        vk::to_string(submit_result).c_str());
+        }
+    }
+    info.AddWait(signal_sema, wait_tick);
 
     pending_binds.clear();
 }

@@ -26,14 +26,40 @@
 #include <magic_enum/magic_enum.hpp>
 #include <vk_mem_alloc.h>
 
+namespace Vulkan {
+vk::Buffer GpuMarkerBuffer(); // vk_rasterizer.cpp (BB_GPU_CHECKPOINTS=marker)
+u64 LatestCheckpoint();
+} // namespace Vulkan
+
 namespace VideoCore {
+
+// g2-arm64 diagnosis: tiling dispatches numbered for the GPU marker (word 1 of the buffer).
+static std::atomic<u32> tiling_seq{0};
+static void NoteTiling(const ImageInfo& info, bool tiler, u32 groups) {
+    if (!Vulkan::GpuMarkerBuffer()) {
+        return;
+    }
+    std::printf("Tiling #%u: %s %s %ux%u layers %u guest 0x%llx+0x%llx, %u groups, after checkpoint "
+                "#%llu\n",
+                tiling_seq.load() + 1, std::string(magic_enum::enum_name(info.tile_mode)).c_str(),
+                tiler ? "tiler" : "detiler", info.size.width, info.size.height,
+                info.resources.layers, static_cast<unsigned long long>(info.guest_address),
+                static_cast<unsigned long long>(info.guest_size), groups,
+                static_cast<unsigned long long>(Vulkan::LatestCheckpoint()));
+}
 
 struct TilingInfo {
     u32 bank_swizzle;
     u32 num_slices;
     u32 num_mips;
     std::array<ImageInfo::MipInfo, 16> mips;
+    u32 num_groups; // g2-arm64: workgroups of the dispatch (it may be 2D, see tiling.comp)
 };
+
+// g2-arm64: one workgroup per 64 texels.
+static u32 TilingGroups(const ImageInfo& info) {
+    return static_cast<u32>((info.guest_size / (info.num_bits / 8)) / 64);
+}
 
 TileManager::TileManager(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
                          Vulkan::Runtime& runtime_, StreamBuffer& stream_buffer_)
@@ -196,8 +222,29 @@ vk::Pipeline TileManager::GetTilingPipeline(const ImageInfo& info, bool is_tiler
 void TileManager::RecordTilingDispatch(vk::Pipeline pipeline, const vk::DescriptorBufferInfo& tiled,
                                        const vk::DescriptorBufferInfo& linear,
                                        const vk::DescriptorBufferInfo& params, u32 dim_x) {
-    scheduler.Record([pipeline, layout = *pl_layout, tiled, linear, params,
-                      dim_x](vk::CommandBuffer cmdbuf) {
+    // g2-arm64: one group per 64 texels exceeds maxComputeWorkGroupCount[0] for images of
+    // 16 MiB and more at 32 bits on drivers with the minimum limit (Adreno: 65535). Such
+    // dispatches go out as rows of max_groups (tiling.comp numbers the groups row by row and
+    // skips those past TilingInfo::num_groups).
+    const u32 max_groups = instance.GetMaxComputeWorkGroupCount()[0];
+    const vk::Buffer marker = Vulkan::GpuMarkerBuffer();
+    const u32 marker_seq = marker ? ++tiling_seq : 0;
+    scheduler.Record([pipeline, layout = *pl_layout, tiled, linear, params, dim_x, max_groups,
+                      marker, marker_seq](vk::CommandBuffer cmdbuf) {
+        const auto write_marker = [&] {
+            if (!marker) {
+                return;
+            }
+            const vk::MemoryBarrier2 barrier = {
+                .srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+                .srcAccessMask = vk::AccessFlagBits2::eMemoryWrite,
+                .dstStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+                .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            };
+            cmdbuf.pipelineBarrier2(vk::DependencyInfo{.memoryBarrierCount = 1,
+                                                       .pMemoryBarriers = &barrier});
+            cmdbuf.fillBuffer(marker, 4, sizeof(u32), marker_seq);
+        };
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
         const std::array<vk::WriteDescriptorSet, 3> set_writes = {{
             {
@@ -220,7 +267,12 @@ void TileManager::RecordTilingDispatch(vk::Pipeline pipeline, const vk::Descript
             },
         }};
         cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, layout, 0, set_writes);
-        cmdbuf.dispatch(dim_x, 1, 1);
+        if (dim_x <= max_groups) {
+            cmdbuf.dispatch(dim_x, 1, 1);
+        } else {
+            cmdbuf.dispatch(max_groups, (dim_x + max_groups - 1) / max_groups, 1);
+        }
+        write_marker();
     });
 }
 
@@ -243,6 +295,7 @@ std::pair<const Buffer*, u64> TileManager::DetileImage(const VideoCore::Buffer* 
         }
     }
 
+    params.num_groups = TilingGroups(info);
     const vk::DescriptorBufferInfo params_buffer_info{
         .buffer = stream_buffer.Handle(),
         .offset = stream_buffer.Copy(&params, sizeof(params), instance.UniformMinAlignment()),
@@ -264,8 +317,9 @@ std::pair<const Buffer*, u64> TileManager::DetileImage(const VideoCore::Buffer* 
         .offset = staging.offset,
         .range = info.guest_size,
     };
-    const auto dim_x = static_cast<u32>((info.guest_size / (info.num_bits / 8)) / 64);
+    const auto dim_x = params.num_groups;
     // bbport: recorded with copies of the descriptor infos (threaded recording).
+    NoteTiling(info, false, dim_x);
     RecordTilingDispatch(GetTilingPipeline(info, false), tiled_buffer_info, linear_buffer_info,
                          params_buffer_info, dim_x);
 
@@ -300,6 +354,7 @@ void TileManager::TileImage(Image& in_image, std::span<vk::BufferImageCopy> buff
         }
     }
 
+    params.num_groups = TilingGroups(info);
     const vk::DescriptorBufferInfo params_buffer_info{
         .buffer = stream_buffer.Handle(),
         .offset = stream_buffer.Copy(&params, sizeof(params), instance.UniformMinAlignment()),
@@ -324,8 +379,9 @@ void TileManager::TileImage(Image& in_image, std::span<vk::BufferImageCopy> buff
         .offset = staging.offset,
         .range = info.guest_size,
     };
-    const auto dim_x = static_cast<u32>((info.guest_size / (info.num_bits / 8)) / 64);
+    const auto dim_x = params.num_groups;
     // bbport: recorded with copies of the descriptor infos (threaded recording).
+    NoteTiling(info, true, dim_x);
     RecordTilingDispatch(GetTilingPipeline(info, true), tiled_buffer_info, linear_buffer_info,
                          params_buffer_info, dim_x);
 

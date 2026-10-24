@@ -1,0 +1,40 @@
+From b0c782cfbf4d0c3a7300579e23634468f3a73c3b Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip: TU_CS_FILL_NOP=1 fills new command BOs with CP_NOP
+ (A735 stale IB fetch experiment)
+
+---
+ src/freedreno/vulkan/tu_cs.cc | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/src/freedreno/vulkan/tu_cs.cc b/src/freedreno/vulkan/tu_cs.cc
+index 37a40dc1762..89246aa6c64 100644
+--- a/src/freedreno/vulkan/tu_cs.cc
++++ b/src/freedreno/vulkan/tu_cs.cc
+@@ -285,6 +285,23 @@ tu_cs_add_bo(struct tu_cs *cs, uint32_t size)
+ 
+    TU_RMV(cmd_buffer_bo_create, cs->device, new_bo);
+ 
++   /* uncharted-android experiment: TU_CS_FILL_NOP=1 fills a new command BO with 1-dword CP_NOPs
++    * instead of the kernel's zeros. If the A735 CP sometimes executes a stale copy of IB memory
++    * fetched before it was written, the faults then change from opcode 0 to stream fragments. */
++   static int fill_nop = -1;
++   if (fill_nop < 0) {
++      const char *env = getenv("TU_CS_FILL_NOP");
++      fill_nop = env && env[0] == '1';
++      if (fill_nop)
++         fprintf(stderr, "tu: new command BOs filled with CP_NOP (TU_CS_FILL_NOP)\n");
++   }
++   if (fill_nop) {
++      uint32_t *map = (uint32_t *) new_bo->map;
++      const uint32_t nop = pm4_pkt7_hdr(CP_NOP, 0);
++      for (uint32_t i = 0; i < size; i++)
++         map[i] = nop;
++   }
++
+    bos->bos[bos->bo_count++] = new_bo;
+ 
+    cs->start = cs->cur = cs->reserved_end = (uint32_t *) new_bo->map;
+-- 
+2.43.0
+

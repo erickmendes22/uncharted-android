@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <cstdlib>
+#include <span>
+
 #include "shader_recompiler/profile.h"
 #include "shader_recompiler/runtime_info.h"
 #include "video_core/renderer_vulkan/vk_common.h"
@@ -15,6 +18,26 @@ struct PushData;
 } // namespace Shader
 
 namespace Vulkan {
+
+/// g2-arm64: whether the pipeline must run with 64-wide subgroups (GCN's wave64). Only shaders
+/// that see other lanes (lane id, shuffles/swizzles/readlane, ballots) depend on it; for the rest
+/// the driver picks (Adreno: 128-wide waves for fragment shaders, else they ran half-wide).
+/// Measured neutral on the G2 (U1 water room, 2026-10-19): off unless BB_SUBGROUP_AUTO=1.
+inline bool NeedsWave64(std::span<const Shader::Info* const> infos) {
+    static const bool all = [] {
+        const char* env = std::getenv("BB_SUBGROUP_AUTO");
+        return !(env && env[0] == '1');
+    }();
+    if (all) {
+        return true;
+    }
+    for (const auto* info : infos) {
+        if (info && (info->uses_lane_id || info->uses_group_shuffle || info->uses_group_ballot)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 static constexpr auto AllGraphicsStageBits =
     vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eTessellationControl |

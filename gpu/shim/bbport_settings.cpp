@@ -60,6 +60,16 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.debug_view = std::clamp(i, 0, DebugViewCount - 1);
     } else if (key == "show_fps") {
         v.show_fps = i != 0;
+    } else if (key == "fps_limit") {
+        v.fps_limit = value == "auto" ? -1 : std::clamp(i, 0, 1000);
+    } else if (key == "touch_pad") {
+        v.touch_pad = value == "auto" ? 2 : std::clamp(i, 0, 2);
+    } else if (key == "touch_pad_alpha") {
+        v.touch_pad_alpha = Clamp(f, 0.1f, 1.0f);
+    } else if (key == "touch_pad_scale") {
+        v.touch_pad_scale = Clamp(f, 0.6f, 1.6f);
+    } else if (key == "touch_pad_look") {
+        v.touch_pad_look = Clamp(f, 0.25f, 4.0f);
     } else if (key == "fsr4_auto_exposure") {
         v.fsr4_auto_exposure = i != 0;
     } else if (key == "fsr4_invert_jitter") {
@@ -122,6 +132,9 @@ void Load() {
         {"BB_REACTIVE_THRESHOLD", "reactive_threshold"}, {"BB_REACTIVE_MAX", "reactive_max"},
         {"BB_UPSCALE_PRESET", "preset"},            {"BB_OBJECT_MOTION", "object_motion"},
         {"BB_FRAME_GEN", "frame_gen"},              {"BB_FRAME_GEN_MULTIPLIER", "frame_gen_multiplier"},
+        {"BB_SHOW_FPS", "show_fps"}, // g2-arm64: the FPS counter without the menu
+        {"BB_FPS_LIMIT", "fps_limit"}, // g2-arm64: 0 none; unset: the port's own rule
+        {"BB_TOUCH_PAD", "touch_pad"}, // g2-arm64: the on-screen gamepad: 0, 1, auto
     };
     for (const auto& [env, key] : env_keys) {
         if (const char* value = std::getenv(env)) {
@@ -215,8 +228,38 @@ void Save() {
     // Read by run.sh at start.
     std::fprintf(file, "live_resolution=%s\n", v.live_resolution < 0 ? "auto"
                                                   : v.live_resolution ? "1" : "0");
+    if (v.fps_limit < 0) {
+        std::fprintf(file, "fps_limit=auto\n");
+    } else {
+        std::fprintf(file, "fps_limit=%d\n", v.fps_limit.load());
+    }
+    std::fprintf(file, "touch_pad=%s\ntouch_pad_alpha=%.2f\ntouch_pad_scale=%.2f\n"
+                       "touch_pad_look=%.2f\n",
+                 v.touch_pad == 2 ? "auto" : v.touch_pad ? "1" : "0", v.touch_pad_alpha.load(),
+                 v.touch_pad_scale.load(), v.touch_pad_look.load());
     std::fclose(file);
 }
+
+int FrameLimitSetting() {
+    return Get().fps_limit.load();
+}
+
+} // namespace BbSettings
+
+// The present thread's view of it (core/emulator_settings.h).
+int BbFrameLimitSetting() {
+    return BbSettings::Get().fps_limit.load();
+}
+
+// The game's display buffer size, from sceVideoOutRegisterBuffers (core/emulator_settings.h).
+void BbNoteGameDisplaySize(unsigned width, unsigned height) {
+    if (width != 0 && height != 0) {
+        BbSettings::Get().game_display_width = int(width);
+        BbSettings::Get().game_display_height = int(height);
+    }
+}
+
+namespace BbSettings {
 
 float PresetScale(int preset) {
     static constexpr float scales[PresetCount] = {1.0f, 1.5f, 1.7f, 2.0f, 3.0f};

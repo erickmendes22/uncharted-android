@@ -1,7 +1,8 @@
 /* Guest threads on host pthreads. Each guest thread owns a FreeBSD-style TCB
  * (variant II: static TLS below the TCB). The loader rewrites the eboot's
  * `mov rax, fs:[0]` into `mov rax, gs:[0]`, so GS base = guest TCB while glibc
- * keeps FS. Priorities/affinity are recorded, not enforced by a PS4 scheduler.
+ * keeps FS. Affinity is recorded, not enforced by a PS4 scheduler; priorities below the default
+ * become host nice values on Linux (apply_priority).
  * Windows: GS is the TEB and cannot be moved. The guest TCB lives in a TLS slot of the TEB
  * instead, and the loader rewrites the load to `mov rax, gs:[0x1480+8*slot]` (TlsSlots),
  * the same 9-byte instruction with another displacement. */
@@ -20,7 +21,10 @@
 #else
 #include <sys/syscall.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
+#if defined(__x86_64__)
 #include <asm/prctl.h>
+#endif
 #endif
 #define ERR(n) ((int32_t)(UINT32_C(0x80020000)|(n)))
 #define ATTR_MAGIC UINT32_C(0x41545452)
@@ -28,6 +32,8 @@
 #define MIN_STACK (64*1024)
 #define DEFAULT_STACK (1024*1024)
 #define DEFAULT_PRIO 700
+#define LOWEST_PRIO 767
+#define NICE_UNSET 100
 
 typedef void *(ABI *GuestEntry)(void *);
 typedef struct ThreadAttr {
@@ -51,6 +57,8 @@ typedef struct GuestThread {
 #else
     jmp_buf exit_jump;
 #endif
+    void *guest_stack_top; /* ARM64: guest stack of this thread (host stacks are separate) */
+    int tid, nice; /* g2-arm64: host thread id once running, nice value set for it */
     struct GuestThread *next;
 } GuestThread;
 
@@ -60,9 +68,12 @@ static GuestThread *threads;
 static _Thread_local GuestThread *current;
 static _Thread_local int32_t guest_errno;
 static void apply_affinity(GuestThread *t,int current_thread);
+static void apply_name_nice(GuestThread *t);
+static void apply_priority(GuestThread *t);
 static const unsigned char *tls_template;
 static uint64_t tls_filesz, tls_memsz, tls_align=16;
 static size_t created, joined_count, exited;
+static int base_nice; /* g2-arm64: the main thread's nice value (apply_priority) */
 
 void runtime_set_main_tls(const void *data,uint64_t filesz,uint64_t memsz,uint64_t align) {
     tls_template=data; tls_filesz=filesz; tls_memsz=memsz; tls_align=align ? align : 16;
@@ -85,7 +96,11 @@ static void set_gs(void *base) {
 #define tls_block_alloc(size) _aligned_malloc(size,64)
 #else
 static void set_gs(void *base) {
+#if defined(__x86_64__)
     if (syscall(SYS_arch_prctl,ARCH_SET_GS,(unsigned long)base)) { perror("STOP: arch_prctl(ARCH_SET_GS)"); exit(21); }
+#else
+    guest_set_gs_base((uint64_t)(uintptr_t)base); /* GS base of this thread's guest context */
+#endif
 }
 #define tls_block_alloc(size) aligned_alloc(64,size)
 #endif
@@ -110,6 +125,7 @@ static GuestThread *new_thread(void) {
     GuestThread *t=calloc(1,sizeof(*t));
     if (!t) return NULL;
     t->attr=(ThreadAttr){.magic=ATTR_MAGIC,.policy=1,.prio=DEFAULT_PRIO,.stack=DEFAULT_STACK,.affinity=0x7f};
+    t->nice=NICE_UNSET;
     return t;
 }
 static void publish(GuestThread *t) {
@@ -135,6 +151,11 @@ void runtime_thread_attach_host(const char *name) {
 void runtime_thread_attach_main(void) {
     GuestThread *t=runtime_thread_current();
     snprintf(t->name,sizeof(t->name),"main");
+#if defined(__linux__)
+    errno=0;
+    int n=getpriority(PRIO_PROCESS,0);
+    if (!errno) base_nice=n;
+#endif
 }
 static GuestThread *find_thread(void *handle) {
     GuestThread *found=NULL;
@@ -274,18 +295,31 @@ void runtime_set_guest_fpu(void) {
         once=1;
     }
     if (!value) return;
+#if defined(__x86_64__)
     uint32_t mxcsr=value;
     uint16_t fpucw=0x037f;
     __asm__ volatile("ldmxcsr %0" : : "m"(mxcsr));
     __asm__ volatile("fldcw %0" : : "m"(fpucw));
+#else
+    /* TODO(g2-arm64): MXCSR 0x9fc0 / FCW 0x037f in the guest context (guest_cpu). */
+#endif
 }
 static void *host_start(void *p) {
     GuestThread *t=p;
+#if !defined(__x86_64__)
+    guest_set_stack(t->guest_stack_top);
+#endif
     attach(t);
     set_host_name(t->name);
     runtime_set_guest_fpu();
     if (t->attr.affinity!=0x7f) apply_affinity(t,1);
-    if (!exit_setjmp(t)) t->result=t->entry(t->argument);
+#if defined(__linux__)
+    /* g2-arm64: also undoes the nice value a new thread inherits from its creator. */
+    pthread_mutex_lock(&lock); t->tid=(int)syscall(SYS_gettid); pthread_mutex_unlock(&lock);
+    apply_priority(t);
+    apply_name_nice(t);
+#endif
+    if (!exit_setjmp(t)) t->result=(void *)(uintptr_t)GUEST_CALL(t->entry,(uint64_t)(uintptr_t)t->argument);
     runtime_thread_keys_cleanup();
     pthread_mutex_lock(&lock); t->finished=1; ++exited; pthread_mutex_unlock(&lock);
     return t->result;
@@ -310,8 +344,14 @@ static int32_t create(GuestThread **out,ThreadAttr **attr_slot,GuestEntry entry,
     pthread_attr_setstacksize(&host,stack_bytes);
 #else
     void *stack_memory=runtime_low_map(stack_bytes,PROT_READ|PROT_WRITE);
+#if defined(__x86_64__)
     if (stack_memory) pthread_attr_setstack(&host,stack_memory,stack_bytes);
     else pthread_attr_setstacksize(&host,stack_bytes);
+#else
+    /* ARM64: the low mapping is the guest stack (guest_set_stack); the host thread keeps its own. */
+    if (!stack_memory) { fprintf(stderr,"STOP: cannot map a guest stack\n"); exit(21); }
+    t->guest_stack_top=(unsigned char *)stack_memory+stack_bytes;
+#endif
 #endif
     publish(t);
     /* Publish the handle before the thread can run and inspect itself. */
@@ -361,7 +401,96 @@ static ABI int32_t thread_get_prio(GuestThread *t,int *prio) {
 }
 static ABI int32_t thread_set_prio(GuestThread *t,int prio) {
     if (!find_thread(t)) return ERR(3);
-    t->attr.prio=prio; return 0;
+    t->attr.prio=prio;
+    apply_priority(t);
+    return 0;
+}
+/* g2-arm64: PS4 priorities below the default (701..767, 767 the lowest) as host nice values, linear
+ * from the main thread's nice (Android: -4, SDL's THREAD_PRIORITY_DISPLAY, which all threads
+ * inherit) up to BB_THREAD_NICE at 767; the default and higher priorities keep the main thread's.
+ * Uncharted's job workers wait for work spinning at 767 (PS4 gives the core to any other thread
+ * first); at equal host priority they took the cores from the port's GPU threads, which then
+ * waited 14-40% of the time for a core (BB_THREAD_NICE=19: U2 museum 28 -> 34 FPS). Off by
+ * default (0) while a crash of U2's job @0x779950 seen with it is not understood. */
+static int nice_lowest(void) {
+    static int value=-1;
+    if (value<0) {
+        const char *env=getenv("BB_THREAD_NICE");
+        int n=env ? atoi(env) : 0;
+        value=n<0 ? 0 : n>19 ? 19 : n;
+    }
+    return value;
+}
+static void apply_priority(GuestThread *t) {
+#if defined(__linux__)
+    int lowest=nice_lowest();
+    if (!lowest) return;
+    pthread_mutex_lock(&lock);
+    int prio=t->attr.prio, old=t->nice;
+    if (lowest<base_nice) lowest=base_nice;
+    int nice=prio<=DEFAULT_PRIO ? base_nice : prio>=LOWEST_PRIO ? lowest
+            : base_nice+((prio-DEFAULT_PRIO)*(lowest-base_nice)+33)/(LOWEST_PRIO-DEFAULT_PRIO);
+    int changed=t->tid && nice!=old, failed=0;
+    if (changed && setpriority(PRIO_PROCESS,(id_t)t->tid,nice)) failed=errno;
+    else if (changed) t->nice=nice;
+    pthread_mutex_unlock(&lock);
+    if (failed) fprintf(stderr,"Runtime: thread '%s' (prio %d): setpriority(%d) failed: %s\n",t->name,prio,nice,strerror(failed));
+    else if (changed && (nice!=base_nice || (old!=NICE_UNSET && old!=base_nice)))
+        printf("Runtime: thread '%s' (prio %d) at nice %d\n",t->name,prio,nice);
+#else
+    (void)t;
+#endif
+}
+/* g2-arm64: BB_NICE=<name prefix>:<nice>,...: the threads whose names start with a prefix (the first
+ * that matches) at that nice value, over the mapping above - for experiments (U3's job workers above
+ * the port's GPU threads, which all inherit the main thread's -4). */
+static void apply_name_nice(GuestThread *t) {
+#if defined(__linux__)
+    const char *env=getenv("BB_NICE");
+    if (!env || !*env) return;
+    for (const char *p=env; *p;) {
+        const char *end=strchr(p,','), *colon=strchr(p,':');
+        if (!end) end=p+strlen(p);
+        if (colon && colon<end && !strncmp(t->name,p,(size_t)(colon-p))) {
+            const int nice=atoi(colon+1);
+            pthread_mutex_lock(&lock);
+            const int failed=setpriority(PRIO_PROCESS,(id_t)t->tid,nice) ? errno : 0;
+            if (!failed) t->nice=nice;
+            pthread_mutex_unlock(&lock);
+            if (failed) fprintf(stderr,"Runtime: thread '%s': setpriority(%d) failed: %s\n",t->name,nice,strerror(failed));
+            else printf("Runtime: thread '%s' at nice %d (BB_NICE)\n",t->name,nice);
+            return;
+        }
+        p=*end ? end+1 : end;
+    }
+#else
+    (void)t;
+#endif
+}
+/* A new thread inherits its creator's nice value: AAudio's callback thread, started when a job
+ * worker opened an audio port, ran at nice 19. Returns whether the calling thread's was changed. */
+int runtime_thread_system_priority_begin(void) {
+#if defined(__linux__)
+    GuestThread *t=current;
+    if (!t || !nice_lowest()) return 0;
+    pthread_mutex_lock(&lock);
+    int changed=t->tid && t->nice!=NICE_UNSET && t->nice!=base_nice && !setpriority(PRIO_PROCESS,(id_t)t->tid,base_nice);
+    pthread_mutex_unlock(&lock);
+    return changed;
+#else
+    return 0;
+#endif
+}
+void runtime_thread_system_priority_end(int changed) {
+#if defined(__linux__)
+    if (!changed) return;
+    GuestThread *t=current;
+    pthread_mutex_lock(&lock);
+    setpriority(PRIO_PROCESS,(id_t)t->tid,t->nice); /* the latest value, scePthreadSetprio may have come between */
+    pthread_mutex_unlock(&lock);
+#else
+    (void)changed;
+#endif
 }
 /* BB_AFFINITY=1: the guest's core masks are applied, PS4 core i on host logical processor 2*i
  * (one per physical core where SMT pairs neighbour). Off by default: the PS4 scheduler's
@@ -371,6 +500,58 @@ static int affinity_enabled(void) {
     if (value<0) { const char *env=getenv("BB_AFFINITY"); value=env && env[0]=='1'; }
     return value;
 }
+#if defined(__linux__) && !defined(_WIN32)
+static uint64_t affinity_map[7]; /* host CPUs (bits) of each PS4 core */
+static int affinity_mapped;
+/* BB_AFFINITY_THREADS=<prefix>,<prefix>,-<prefix>...: the threads whose names start with a listed
+ * prefix (all if only exclusions are listed), minus those starting with a "-" prefix. */
+static const char *affinity_threads;
+static int affinity_selected(const char *name) {
+    if (!affinity_threads) return 1;
+    int any_positive=0, positive=0;
+    for (const char *p=affinity_threads; *p;) {
+        const char *end=strchr(p,',');
+        size_t n=end ? (size_t)(end-p) : strlen(p);
+        int exclude=*p=='-';
+        const char *prefix=p+exclude;
+        size_t len=n-(size_t)exclude;
+        if (len) {
+            int match=!strncmp(name,prefix,len);
+            if (exclude && match) return 0;
+            if (!exclude) { any_positive=1; positive|=match; }
+        }
+        p+=n+(end ? 1 : 0);
+    }
+    return any_positive ? positive : 1;
+}
+static pthread_once_t affinity_map_once=PTHREAD_ONCE_INIT;
+static void parse_affinity_map(void) {
+    affinity_threads=getenv("BB_AFFINITY_THREADS");
+    if (affinity_threads && !*affinity_threads) affinity_threads=NULL;
+    /* an entry per PS4 core: a host CPU, a range "a-b", or several joined by "+" ("0+3-7") */
+    const char *p=getenv("BB_AFFINITY_MAP");
+    for (int i=0;p && *p && i<7;++i) {
+        uint64_t cpus=0;
+        for (;;) {
+            char *end;
+            const long first=strtol(p,&end,10);
+            long last=first;
+            if (end==p || first<0 || first>=64) return;
+            if (*end=='-') {
+                p=end+1; last=strtol(p,&end,10);
+                if (end==p || last<first || last>=64) return;
+            }
+            for (long cpu=first;cpu<=last;++cpu) cpus|=1ull<<cpu;
+            p=end;
+            if (*p!='+') break;
+            ++p;
+        }
+        affinity_map[i]=cpus; affinity_mapped=1;
+        if (*p!=',') break;
+        ++p;
+    }
+}
+#endif
 static void apply_affinity(GuestThread *t,int current_thread) {
 #ifdef _WIN32
     if (!affinity_enabled()) return;
@@ -381,6 +562,34 @@ static void apply_affinity(GuestThread *t,int current_thread) {
     DWORD_PTR previous=handle ? SetThreadAffinityMask(handle,host) : 0;
     printf("Runtime: thread '%s' on PS4 cores 0x%llx (host mask 0x%llx)%s\n",t->name,
            (unsigned long long)t->attr.affinity,(unsigned long long)host,previous ? "" : " failed");
+#elif defined(__linux__)
+    /* g2-arm64: BB_AFFINITY_MAP=<host CPUs of PS4 core 0>,...,<core 6>: the guest's core masks on
+     * those host CPUs (sched_setaffinity); BB_AFFINITY_THREADS (name prefixes, "-" excludes)
+     * limits it to some threads. Without a map the masks are only logged: the game's own
+     * placement, to choose a map from (the port's GPU threads have BB_RENDER_CPUS). */
+    pthread_once(&affinity_map_once,parse_affinity_map);
+    char cpus[64]=""; size_t used=0;
+    cpu_set_t set; CPU_ZERO(&set);
+    for (int i=0;i<7;++i)
+        if (t->attr.affinity>>i&1)
+            for (int cpu=0;cpu<64;++cpu)
+                if (affinity_map[i]>>cpu&1 && !CPU_ISSET(cpu,&set)) {
+                    CPU_SET(cpu,&set);
+                    used+=(size_t)snprintf(cpus+used,sizeof(cpus)-used,"%s%d",used ? "," : "",cpu);
+                    if (used>=sizeof(cpus)) used=sizeof(cpus)-1;
+                }
+    if (!affinity_mapped || !CPU_COUNT(&set) ||
+        !affinity_selected(t->name)) {
+        static int logged; /* the loaders come and go (U3: ~120 DCLoader threads in 3 min) */
+        if (__atomic_fetch_add(&logged,1,__ATOMIC_RELAXED)<64)
+            printf("Runtime: thread '%s' asks for PS4 cores 0x%llx (not applied)\n",t->name,(unsigned long long)t->attr.affinity);
+        return;
+    }
+    const pid_t tid=current_thread ? 0 : (pid_t)t->tid;
+    if (!current_thread && !tid) return; /* not running yet: host_start applies it */
+    const int failed=sched_setaffinity(tid,sizeof(set),&set) ? errno : 0;
+    printf("Runtime: thread '%s' on PS4 cores 0x%llx: host CPUs %s%s\n",t->name,(unsigned long long)t->attr.affinity,
+           cpus,failed ? " (failed)" : "");
 #else
     (void)t; (void)current_thread;
 #endif

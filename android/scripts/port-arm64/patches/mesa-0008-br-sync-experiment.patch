@@ -1,0 +1,97 @@
+From 79c7725ab718655bf03797db3a26df0f7489beca Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip: TU_BR_SYNC=1: BV waits for BR at each switch to BR
+ without concurrent binning (A735 experiment)
+
+---
+ src/freedreno/vulkan/tu_cmd_buffer.cc | 30 ++++++++++++++++++++-------
+ 1 file changed, 23 insertions(+), 7 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
+index b04617d3a5b..3956eac9315 100644
+--- a/src/freedreno/vulkan/tu_cmd_buffer.cc
++++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
+@@ -452,6 +452,22 @@ tu_add_cb_barrier_info(struct tu_cmd_buffer *cmd_buffer)
+    util_dynarray_append(&cmd_buffer->cb_control_points, barrier_info);
+ }
+ 
++/* uncharted-android: TU_BR_SYNC=1: every switch to BR with concurrent binning disabled also makes
++ * BV wait for BR (SYNC_THREADS), so BV cannot run ahead of BR across sysmem render passes (A735 CP
++ * faults experiment: in the fault snapshots BV is far ahead, BR reads zeros from its IB). */
++static uint32_t
++tu7_br_sync_bit(void)
++{
++   static int on = -1;
++   if (on < 0) {
++      const char *env = getenv("TU_BR_SYNC");
++      on = env && env[0] == '1';
++      if (on)
++         fprintf(stderr, "tu: BV waits for BR at each switch to BR (TU_BR_SYNC)\n");
++   }
++   return on ? CP_THREAD_CONTROL_0_SYNC_THREADS : 0;
++}
++
+ void
+ tu7_set_thread_br_patchpoint(struct tu_cmd_buffer *cmd,
+                              struct tu_cs *cs,
+@@ -465,13 +481,13 @@ tu7_set_thread_br_patchpoint(struct tu_cmd_buffer *cmd,
+          .patchpoint = cs->cur,
+          .patch_value = CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR),
+          .original_value = CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR) |
+-                           CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE,
++                           CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE | tu7_br_sync_bit(),
+       };
+       util_dynarray_append(&cmd->cb_control_points, info);
+    }
+ 
+    tu_cs_emit(cs, CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR) |
+-                     CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE);
++                     CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE | tu7_br_sync_bit());
+ }
+ 
+ void
+@@ -485,12 +501,12 @@ tu7_set_thread_both_patchpoint(struct tu_cmd_buffer *cmd,
+       .patchpoint = cs->cur,
+       .patch_value = CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BOTH),
+       .original_value = CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR) |
+-                        CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE,
++                        CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE | tu7_br_sync_bit(),
+    };
+    util_dynarray_append(&cmd->cb_control_points, info);
+ 
+    tu_cs_emit(cs, CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR) |
+-                     CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE);
++                     CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE | tu7_br_sync_bit());
+ }
+ 
+ /* "Normal" cache flushes outside the renderpass, that don't require any special handling */
+@@ -3115,7 +3131,7 @@ tu7_emit_concurrent_binning_start(struct tu_cmd_buffer *cmd,
+                              "globally disabled")) {
+      tu_cs_emit_pkt7(cs, CP_THREAD_CONTROL, 1);
+      tu_cs_emit(cs, CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR) |
+-                    CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE);
++                    CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE | tu7_br_sync_bit());
+      tu7_set_pred_bit(cs, TU_PREDICATE_CB_ENABLED, false);
+      cmd->state.renderpass_cb_disabled = true;
+ 
+@@ -3203,7 +3219,7 @@ tu7_emit_concurrent_binning_sysmem(struct tu_cmd_buffer *cmd,
+    {
+       tu_cs_emit_pkt7(cs, CP_THREAD_CONTROL, 1);
+       tu_cs_emit(cs, CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR) |
+-                        CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE);
++                        CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE | tu7_br_sync_bit());
+       tu7_set_pred_bit(cs, TU_PREDICATE_CB_ENABLED, false);
+       tu_lrz_sysmem_begin<CHIP>(cmd, cs);
+    }
+@@ -3471,7 +3487,7 @@ tu7_emit_concurrent_binning_gmem(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
+    } /* else */ {
+       tu_cs_emit_pkt7(cs, CP_THREAD_CONTROL, 1);
+       tu_cs_emit(cs, CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR) |
+-                     CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE);
++                     CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE | tu7_br_sync_bit());
+    }
+ 
+    return true;
+-- 
+2.43.0
+

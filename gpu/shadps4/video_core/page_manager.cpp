@@ -35,9 +35,8 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
-#else
-#include "common/spin_lock.h"
 #endif
+#include "common/spin_lock.h" // g2-arm64: bionic has no PTHREAD_ADAPTIVE_MUTEX_INITIALIZER_NP
 
 namespace VideoCore {
 
@@ -299,10 +298,14 @@ public:
 
         // Guest memory is a shared memfd mapping: write-protection there needs the shmem
         // feature, and unpopulated pages must be protectable too.
+        // g2-arm64: asked for as a fixed set, the handshake fails with EINVAL on kernels that
+        // lack one of them (the G2's Android 15 kernel is 6.1: WP_UNPOPULATED came in 6.4, and
+        // it concerns anonymous memory; shmem keeps unpopulated pages protectable through its
+        // PTE markers since 5.19). So the supported set is read first (a handshake with no
+        // features), then the wanted ones among them are requested on a fresh descriptor (a
+        // descriptor answers the handshake once).
         uffdio_api api{};
         api.api = UFFD_API;
-        api.features =
-            UFFD_FEATURE_THREAD_ID | UFFD_FEATURE_WP_HUGETLBFS_SHMEM | UFFD_FEATURE_WP_UNPOPULATED;
         if (ioctl(uffd, UFFDIO_API, &api) != 0) {
             LOG_ERROR(Common_Memory,
                       "uffdio_api call failed: {}, falling back to signal implementation",
@@ -310,6 +313,39 @@ public:
             close(uffd);
             throw std::runtime_error("uffdio_api");
         }
+        const u64 supported = api.features;
+        const u64 wanted =
+            UFFD_FEATURE_THREAD_ID | UFFD_FEATURE_WP_HUGETLBFS_SHMEM | UFFD_FEATURE_WP_UNPOPULATED;
+        if (!(supported & UFFD_FEATURE_WP_HUGETLBFS_SHMEM)) {
+            LOG_ERROR(Common_Memory,
+                      "userfaultfd has no shmem write-protection (features {:#x}), falling back "
+                      "to signal implementation",
+                      supported);
+            close(uffd);
+            throw std::runtime_error("uffdio_api");
+        }
+        close(uffd);
+        uffd = syscall(SYS_userfaultfd, O_CLOEXEC | O_NONBLOCK | UFFD_USER_MODE_ONLY);
+        if (uffd == -1) {
+            LOG_ERROR(Common_Memory, "userfaultfd syscall failed: {}, falling back to signal "
+                      "implementation", Common::GetLastErrorMsg());
+            throw std::runtime_error("userfaultfd");
+        }
+        api = {};
+        api.api = UFFD_API;
+        api.features = wanted & supported;
+        if (ioctl(uffd, UFFDIO_API, &api) != 0) {
+            LOG_ERROR(Common_Memory,
+                      "uffdio_api call failed with features {:#x}: {}, falling back to signal "
+                      "implementation",
+                      wanted & supported, Common::GetLastErrorMsg());
+            close(uffd);
+            throw std::runtime_error("uffdio_api");
+        }
+        std::printf("GPU: userfaultfd features %#llx (wanted %#llx, kernel %#llx)\n",
+                    static_cast<unsigned long long>(wanted & supported),
+                    static_cast<unsigned long long>(wanted),
+                    static_cast<unsigned long long>(supported));
 
         // Read faults (readbacks) still arrive as signals.
         Core::Signals::Instance()->RegisterAccessViolationHandler(

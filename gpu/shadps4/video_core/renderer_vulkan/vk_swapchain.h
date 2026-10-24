@@ -31,6 +31,17 @@ public:
     /// Acquires the next image in the swapchain.
     bool AcquireNextImage();
 
+    /// g2-arm64 (Android): whether there is a surface to present to now: not while the app is in
+    /// the background or Android has no window for it; after it gave a new window, a new surface
+    /// and swapchain. Elsewhere always true.
+    bool SurfaceReady();
+
+    /// g2-arm64: the last AcquireNextImage timed out (the compositor took no buffer): skip the
+    /// frame rather than recreate the swapchain.
+    bool AcquireTimedOut() const {
+        return acquire_timed_out;
+    }
+
     /// Presents the current image and move to the next one
     bool Present();
 
@@ -70,8 +81,21 @@ public:
         return frame_index;
     }
 
+    /// g2-arm64: with pre-rotation, the image size in the display's orientation; the frame's
+    /// (logical) size is LogicalExtent().
     vk::Extent2D GetExtent() const {
         return extent;
+    }
+
+    /// g2-arm64: Android pre-rotation: clockwise quarter turns the presenter applies to the frame
+    /// (the surface's transform), 0 when the compositor rotates.
+    u32 QuarterTurns() const {
+        return quarter_turns;
+    }
+
+    /// The extent in the frame's orientation (landscape on the G2).
+    vk::Extent2D LogicalExtent() const {
+        return quarter_turns & 1 ? vk::Extent2D{extent.height, extent.width} : extent;
     }
 
     [[nodiscard]] vk::Semaphore GetImageAcquiredSemaphore() const {
@@ -99,8 +123,9 @@ private:
     /// Selects the best available present mode
     void FindPresentMode();
 
-    /// Sets the surface properties according to device capabilities
-    void SetSurfaceProperties();
+    /// Sets the surface properties according to device capabilities (g2-arm64: false when the
+    /// surface is gone on Android)
+    bool SetSurfaceProperties();
 
     /// Destroys current swapchain resources
     void Destroy();
@@ -121,6 +146,7 @@ private:
     vk::PresentModeKHR present_mode;
     vk::Extent2D extent;
     vk::SurfaceTransformFlagBitsKHR transform;
+    u32 quarter_turns = 0; ///< g2-arm64: pre-rotation applied by the presenter
     vk::CompositeAlphaFlagBitsKHR composite_alpha;
     std::vector<vk::Image> images;
     std::vector<vk::ImageView> images_view;
@@ -132,6 +158,9 @@ private:
     u32 image_index = 0;
     u32 frame_index = 0;
     bool needs_recreation = true;
+    void* surface_window = nullptr; ///< g2-arm64: the native window the surface was made from
+    bool surface_lost = false;      ///< g2-arm64: no usable surface or swapchain until a new one
+    bool acquire_timed_out = false;
     bool needs_hdr = false;    // The game requested HDR swapchain
     bool supports_hdr = false; // SC supports HDR output
 };

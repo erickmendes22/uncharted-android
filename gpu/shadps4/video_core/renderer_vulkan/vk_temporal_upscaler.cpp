@@ -328,8 +328,12 @@ bool TemporalUpscaler::OnFrameStart() {
         render_width = scene_targets.Size().width;
         render_height = scene_targets.Size().height;
     }
-    BbSettings::Get().active_render_width = Scaled() ? render_width : scene_targets.Size().width;
-    BbSettings::Get().active_render_height = Scaled() ? render_height : scene_targets.Size().height;
+    // g2-arm64: a reduced or explicitly scaled session knows its size here; otherwise the
+    // scene handed to EnsureResources is the game's own (patched) size.
+    if (Scaled() || scene_targets.Reduced()) {
+        BbSettings::Get().active_render_width = Scaled() ? render_width : scene_targets.Size().width;
+        BbSettings::Get().active_render_height = Scaled() ? render_height : scene_targets.Size().height;
+    }
     if (changed || !dispatched_last_frame) reset = true;
     if (changed) jitter_index = 0;
     applied_preset = preset;
@@ -398,6 +402,17 @@ bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
     // DLSS, like FSR 4, has its own context: no portable FSR 3 context is made.
     const bool use_fsr4 = UseFsr4() || UseDlss();
     const bool use_taa = BbSettings::Get().upscaler == BbSettings::UpscalerTaa;
+    if (!Scaled() && !scene_targets.Reduced()) {
+        BbSettings::Get().active_render_width = int(w);
+        BbSettings::Get().active_render_height = int(h);
+    }
+    // g2-arm64: the sizes in the log, once per change (the scene is the game's patched size).
+    static u32 said_w = 0, said_h = 0, said_ow = 0, said_oh = 0;
+    if (w != said_w || h != said_h || ow != said_ow || oh != said_oh) {
+        said_w = w; said_h = h; said_ow = ow; said_oh = oh;
+        std::printf("Upscaler: scene %ux%u -> output %ux%u (%s)\n", w, h, ow, oh,
+                    use_taa ? "TAA" : use_fsr4 ? "FSR 4/DLSS" : "FSR 3.1");
+    }
     if (use_taa && (w != ow || h != oh)) {
         std::printf("TAA: remove BB_RENDER_RES to use native-resolution TAA\n");
         return false;
@@ -1035,6 +1050,15 @@ void TemporalUpscaler::Run() {
     if (color.info.pixel_format != vk::Format::eR16G16B16A16Sfloat ||
         depth.info.size.width != ow || depth.info.size.height != oh ||
         !(color.usage_flags & vk::ImageUsageFlagBits::eStorage)) {
+        // g2-arm64: say why the upscaler stays out (once per scene size).
+        static u32 said_w = 0, said_h = 0;
+        if (ow != said_w || oh != said_h) {
+            said_w = ow; said_h = oh;
+            std::printf("Upscaler: not run on this scene: color %ux%u format %u usage %#x, depth "
+                        "%ux%u\n", ow, oh, u32(color.info.pixel_format),
+                        u32(VkImageUsageFlags(color.usage_flags)), depth.info.size.width,
+                        depth.info.size.height);
+        }
         return;
     }
     if (!EnsureResources(w, h, ow, oh, true)) {

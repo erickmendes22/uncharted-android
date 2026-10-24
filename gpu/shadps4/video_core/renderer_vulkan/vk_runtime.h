@@ -96,6 +96,10 @@ public:
                           bool check_read_access = false);
 
     void FlushBarriers();
+    /// g2-arm64: image barriers are waiting for the next FlushBarriers.
+    [[nodiscard]] bool HasImageBarriers() const noexcept {
+        return !image_barriers.empty();
+    }
 
     /// bbport: runs before this thread changes image state (layouts, pending image
     /// barriers): the rasterizer joins its texture binding helper there (BindHelper).

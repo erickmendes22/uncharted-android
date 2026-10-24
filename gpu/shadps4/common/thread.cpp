@@ -4,7 +4,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <ctime>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
 #include <string>
+#if defined(__linux__)
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
 #include <thread>
 
 
@@ -183,6 +190,91 @@ void SetThreadName(void* thread, const char* name) {
 
 #else // !_WIN32, so must be POSIX threads
 
+#if defined(__linux__)
+namespace {
+/// bbport: BB_RENDER_CPUS=<cpu list, e.g. 3-7 or 3,5-7>: the host GPU threads (command
+/// processor, draw recording and preparation, Vulkan recorder, presentation) run on these CPUs
+/// only. On the Retroid Pocket G2 the scheduler put the draw recorder and the Vulkan recorder
+/// mostly on the slow A520 cores (0-2) while the guest's job workers, idling in WFE spin loops
+/// that count as busy, held the A720/X4 cores.
+void ApplyRenderAffinity(const std::string& name) {
+    static const char* const prefixes[] = {"shadPS4:GpuCom", "bb:Draw",
+                                           "bb:VkRecorder", "bb:Present", "shadPS4:Present"};
+    bool render = false;
+    for (const char* prefix : prefixes) {
+        render = render || name.rfind(prefix, 0) == 0;
+    }
+    if (!render) {
+        return;
+    }
+    static const cpu_set_t* const set = []() -> const cpu_set_t* {
+        const char* env = std::getenv("BB_RENDER_CPUS");
+        if (!env || !*env) {
+            return nullptr;
+        }
+        static cpu_set_t cpus;
+        CPU_ZERO(&cpus);
+        for (const char* p = env; *p;) {
+            char* end;
+            const long first = std::strtol(p, &end, 10);
+            long last = first;
+            if (end == p) {
+                break;
+            }
+            if (*end == '-') {
+                p = end + 1;
+                last = std::strtol(p, &end, 10);
+            }
+            for (long cpu = first; cpu <= last && cpu < CPU_SETSIZE; ++cpu) {
+                CPU_SET(cpu, &cpus);
+            }
+            p = *end == ',' ? end + 1 : end;
+            if (*end != ',' && *end) {
+                break;
+            }
+        }
+        return CPU_COUNT(&cpus) ? &cpus : nullptr;
+    }();
+    if (set && sched_setaffinity(0, sizeof(*set), set) == 0) {
+        std::printf("Thread %s: CPUs %s\n", name.c_str(), std::getenv("BB_RENDER_CPUS"));
+    }
+}
+
+/// g2-arm64: BB_HOST_NICE=<thread name prefix>=<nice>,...: the nice level of the port's own
+/// threads by name (e.g. bb:VkRecorder=-10,bb:DrawRec=-6). Every thread of the process runs at
+/// the guest's display priority (nice -4) otherwise, and the stage that submits to the GPU
+/// waits in the run queue behind the game's job workers (12% of its time in U3's pub).
+void ApplyHostNice(const std::string& name) {
+    static const char* const env = std::getenv("BB_HOST_NICE");
+    if (!env || !*env) {
+        return;
+    }
+    for (const char* p = env; *p;) {
+        const char* eq = std::strchr(p, '=');
+        if (!eq) {
+            break;
+        }
+        const char* end = std::strchr(eq, ',');
+        const std::string prefix(p, eq);
+        const long nice = std::strtol(eq + 1, nullptr, 10);
+        if (!prefix.empty() && name.rfind(prefix, 0) == 0) {
+            if (setpriority(PRIO_PROCESS, static_cast<id_t>(gettid()), static_cast<int>(nice)) == 0) {
+                std::printf("Thread %s: nice %ld\n", name.c_str(), nice);
+            } else {
+                std::printf("Thread %s: nice %ld refused: %s\n", name.c_str(), nice,
+                            GetLastErrorMsg().c_str());
+            }
+            return;
+        }
+        if (!end) {
+            break;
+        }
+        p = end + 1;
+    }
+}
+} // namespace
+#endif
+
 // MinGW with the POSIX threading model does not support pthread_setname_np
 #if !defined(_WIN32) || defined(_MSC_VER)
 void SetCurrentThreadName(const char* name) {
@@ -201,6 +293,8 @@ void SetCurrentThreadName(const char* name) {
         errno = e;
         LOG_ERROR(Common, "Failed to set thread name to '{}': {}", truncated, GetLastErrorMsg());
     }
+    ApplyRenderAffinity(truncated);
+    ApplyHostNice(name);
 #else
     pthread_setname_np(pthread_self(), name);
 #endif

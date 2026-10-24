@@ -8,6 +8,8 @@
 #include "common/types.h"
 
 u32 BbDisplayRefreshHz(); // bbgpu.cpp: primary display refresh rate, 60 when unknown
+int BbFrameLimitSetting(); // bbport_settings.cpp: the frame limit chosen (-1: the rule below)
+void BbNoteGameDisplaySize(unsigned width, unsigned height); // bbport_settings.cpp: videoout buffers
 
 enum GpuReadbacksMode : int { Disabled, Relaxed, Precise };
 
@@ -42,14 +44,15 @@ public:
         }();
         return value;
     }
-    /// Frames per second the present thread lets through; 0 = no limit. BB_FPS_LIMIT overrides.
+    /// Frames per second the present thread lets through; 0 = no limit. g2-arm64: a live
+    /// setting (bbport.ini fps_limit, BB_FPS_LIMIT at start, the in-game panel); without one,
+    /// the display's rate (at most 120) when vblank is uncapped, else none.
     u32 GetFrameLimit() {
-        static const u32 value = [] {
-            const long limit = Number("BB_FPS_LIMIT", -1);
-            if (limit >= 0) return u32(limit);
+        static const u32 automatic = [] {
             return Number("BB_VBLANK_HZ", 60) > 0 ? 0u : std::min<u32>(BbDisplayRefreshHz(), 120);
         }();
-        return value;
+        const int chosen = BbFrameLimitSetting();
+        return chosen >= 0 ? u32(chosen) : automatic;
     }
     bool IsCopyGpuBuffers() { static const auto value = Flag("BB_COPY_GPU_BUFFERS", false); return value; }
     bool IsDirectMemoryAccessEnabled() { static const auto value = Flag("BB_DIRECT_MEMORY_ACCESS", false); return value; }
@@ -57,7 +60,7 @@ public:
     bool IsFsrEnabled() { static const auto value = Flag("BB_FSR1", false); return value; }
     bool IsHdrAllowed() { static const auto value = Flag("BB_HDR", false); return value; }
     bool IsNullGPU() { static const auto value = Flag("BB_NULL_GPU", false); return value; }
-    bool IsPatchShaders() { return false; }
+    bool IsPatchShaders() { static const auto value = Flag("BB_PATCH_SHADERS", false); return value; }
     bool IsPipelineCacheArchived() { return false; }
     bool IsPipelineCacheEnabled() { static const auto value = Flag("BB_PIPELINE_CACHE", true); return value; }
     bool IsRcasEnabled() { static const auto value = Flag("BB_RCAS", true); return value; }

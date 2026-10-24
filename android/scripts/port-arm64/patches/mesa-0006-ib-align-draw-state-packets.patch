@@ -1,0 +1,100 @@
+From 0c65ad7f08aca5309051213173462ad48215bce4 Mon Sep 17 00:00:00 2001
+From: revvv991 <345025393+revvv991@users.noreply.github.com>
+Subject: [PATCH] turnip: TU_IB_ALIGN=<bytes> keeps CP_SET_DRAW_STATE and
+ register bunch packets within aligned blocks (A735 workaround experiment)
+
+---
+ src/freedreno/vulkan/tu_cs.cc | 40 +++++++++++++++++++++++++++++++++++
+ src/freedreno/vulkan/tu_cs.h  | 11 ++++++++++
+ 2 files changed, 51 insertions(+)
+
+diff --git a/src/freedreno/vulkan/tu_cs.cc b/src/freedreno/vulkan/tu_cs.cc
+index 53ded3ce455..528fcf3542e 100644
+--- a/src/freedreno/vulkan/tu_cs.cc
++++ b/src/freedreno/vulkan/tu_cs.cc
+@@ -178,6 +178,46 @@ tu_cs_avoid_page_cross(struct tu_cs *cs, uint32_t dwords)
+    return tu_cs_reserve_space(cs, skip + dwords);
+ }
+ 
++static uint32_t
++tu_ib_align(void)
++{
++   static int align = -1;
++   if (align < 0) {
++      const char *env = getenv("TU_IB_ALIGN");
++      const unsigned v = env ? strtoul(env, NULL, 0) : 0;
++      align = (v >= 64 && v <= 4096 && !(v & (v - 1))) ? (int) v : 0;
++      if (align)
++         fprintf(stderr, "tu: draw state and register bunch packets kept within %d-byte blocks "
++                         "(TU_IB_ALIGN)\n", align);
++   }
++   return align;
++}
++
++void
++tu_cs_pad_packet(struct tu_cs *cs, uint32_t dwords)
++{
++   const uint32_t align = tu_ib_align();
++   if (!align || cs->mode != TU_CS_MODE_GROW || dwords < 2 || dwords * 4 > align ||
++       unlikely(cs->status != VK_SUCCESS))
++      return;
++   /* Where the packet would land (its own reservation may start a new BO). */
++   tu_cs_reserve(cs, dwords);
++   if (unlikely(cs->status != VK_SUCCESS))
++      return;
++   const uint32_t in_block = tu_cs_get_cur_iova(cs) & (align - 1);
++   if (in_block + dwords * 4 <= align)
++      return;
++   const uint32_t pad = (align - in_block) / 4;
++   /* The padding never moves the stream to a new BO: a caller may have reserved room for a
++    * region it patches as a whole (tu_cs_patchable_start), so keep a margin too. */
++   if (tu_cs_get_space(cs) < pad + dwords + 256)
++      return;
++   tu_cs_reserve(cs, pad + dwords);
++   tu_cs_emit(cs, pm4_pkt7_hdr(CP_NOP, pad - 1));
++   for (uint32_t i = 1; i < pad; i++)
++      tu_cs_emit(cs, 0);
++}
++
+ /**
+  * Get the iova for the next dword to be emitted. Useful after
+  * tu_cs_reserve_space() to create a patch point that can be overwritten on
+diff --git a/src/freedreno/vulkan/tu_cs.h b/src/freedreno/vulkan/tu_cs.h
+index 25b0eb544e2..76885d1cb4a 100644
+--- a/src/freedreno/vulkan/tu_cs.h
++++ b/src/freedreno/vulkan/tu_cs.h
+@@ -221,6 +221,13 @@ tu_ds_no_cross_allowance(uint32_t dwords);
+ VkResult
+ tu_cs_avoid_page_cross(struct tu_cs *cs, uint32_t dwords);
+ 
++/* uncharted-android: TU_IB_ALIGN=<bytes> (power of two, e.g. 2048): CP_SET_DRAW_STATE and
++ * CP_(NON_)CONTEXT_REG_BUNCH packets in growable streams (IB1/IB2) do not cross a multiple of it;
++ * CP_NOP fills up to the boundary. A735 firmware sometimes mis-reads an entry of these packets
++ * that is split across a 2 KiB fetch boundary (the CP faults on that very entry). */
++void
++tu_cs_pad_packet(struct tu_cs *cs, uint32_t dwords);
++
+ static inline struct tu_draw_state
+ tu_cs_draw_state(struct tu_cs *sub_cs, struct tu_cs *cs, uint32_t size)
+ {
+@@ -397,6 +404,8 @@ tu_cs_emit_pkt7(struct tu_cs *cs, uint8_t opcode, uint16_t cnt)
+    tu_cs_emit_sync_breadcrumb(cs, opcode, cnt + 1);
+ #endif
+ 
++   if (opcode == CP_SET_DRAW_STATE)
++      tu_cs_pad_packet(cs, cnt + 1);
+    tu_cs_reserve(cs, cnt + 1);
+    tu_cs_emit(cs, pm4_pkt7_hdr(opcode, cnt));
+ }
+@@ -724,6 +733,8 @@ struct tu_pkt {
+    tu_pkt(tu_cs *cs, enum adreno_pm4_type3_packets pkt, unsigned ndwords)
+        : cs(cs), pkt(pkt)
+    {
++      if (ndwords && (pkt == CP_CONTEXT_REG_BUNCH || pkt == CP_NON_CONTEXT_REG_BUNCH))
++         tu_cs_pad_packet(cs, ndwords + 1);
+       tu_cs_reserve(cs, ndwords + 1);
+       start = cs->cur;
+       cs->cur++; /* Leave a slot for the packet header when we're done. */
+-- 
+2.43.0
+

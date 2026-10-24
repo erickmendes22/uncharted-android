@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <mutex>
 #include <chrono>
 #include <cstdio>
 #include <string>
@@ -22,7 +23,12 @@ class Instance;
 class Scheduler;
 
 class GpuProfiler {
+    std::recursive_mutex mutex;
+
 public:
+    /// g2-arm64: the label of the GPU's wait between two submissions (Scheduler::SubmitExecution).
+    static constexpr u64 IdleKey = 0x5B317ull;
+
     /// The profiler when BB_GPU_PROFILE=1, else null.
     static GpuProfiler* Get() noexcept {
         return instance_ptr;
@@ -32,6 +38,7 @@ public:
     /// Starts a segment labelled `key`; `describe` names it the first time the key is seen.
     template <typename Describe>
     void Mark(u64 key, Describe&& describe) {
+        std::scoped_lock lock{mutex};
         if (!described.contains(key)) {
             described.emplace(key, describe());
         }
@@ -58,10 +65,13 @@ public:
 private:
     GpuProfiler(const Instance& instance, Scheduler& scheduler);
     void WriteTimestamp(u64 key);
+    /// g2-arm64: on the thread recording the command buffer, in stream order.
+    void Stamp(vk::CommandBuffer cmdbuf, u64 key);
+    void NextSlice(vk::CommandBuffer cmdbuf, u64 label);
     void Collect(u32 slice);
     void Print();
 
-    static constexpr u32 NumSlices = 4;
+    static constexpr u32 NumSlices = 8; // g2-arm64: two profiler frames a guest frame (U1)
     static constexpr u32 SliceQueries = 4096;
     static inline GpuProfiler* instance_ptr = nullptr;
 
@@ -79,9 +89,22 @@ private:
         u64 segments = 0;
     };
     std::unordered_map<u64, Total> totals;
+    /// g2-arm64: idle gaps between submissions by length (ms bounds below), and the longest
+    /// gaps of the last collected frame with the labels around them (where the GPU waits).
+    static constexpr std::array<double, 6> IdleBounds{0.05, 0.2, 0.5, 1.0, 2.0, 4.0};
+    std::array<Total, IdleBounds.size() + 1> idle_lengths{};
+    struct Gap {
+        double ms;
+        u64 before, after;
+        u32 index; ///< the gap's place among the frame's gaps
+    };
+    std::vector<Gap> last_gaps;
+    u32 last_gap_count = 0;
     u64 frames = 0;
     u64 current = 0;
+    u64 skipped = 0, out_of_order = 0; // g2-arm64
     std::chrono::steady_clock::time_point window = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point window_start = std::chrono::steady_clock::now();
 };
 
 } // namespace Vulkan

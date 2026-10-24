@@ -30,7 +30,10 @@ void UpdateTextInput(SDL_Window* window);
 bool Visible();
 
 /// Present thread: draws into `view` (layout ColorAttachmentOptimal).
-void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent);
+/// g2-arm64: `quarter_turns` (Android pre-rotation): the UI is laid out in the frame's
+/// orientation and turned clockwise into the image (`extent` is the image's).
+void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent,
+            unsigned quarter_turns = 0);
 /// Every presented frame (FPS readout; BB_FPS_LOG=1 prints the rate every 5 seconds).
 void NotePresent();
 

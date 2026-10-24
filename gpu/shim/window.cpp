@@ -1,4 +1,5 @@
 // bbport: SDL3 window for the Vulkan swapchain (X11 or Wayland).
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <SDL3/SDL.h>
@@ -6,6 +7,8 @@
 #include "common/logging/log.h"
 #include "sdl_window.h"
 #include "bbport_overlay.h"
+
+extern "C" void runtime_audio_background(int background); // g2-arm64: src/runtime_audio.c
 
 namespace {
 // bbport: mouse input for runtime_pad.c (keyboard and mouse controls). The window thread adds
@@ -74,6 +77,13 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}
         window_info.render_surface = SDL_GetPointerProperty(wp, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
     } else
 #endif
+#ifdef __ANDROID__
+    if (driver && !std::strcmp(driver, "android")) {
+        // g2-arm64: the SDLActivity surface (ANativeWindow*).
+        window_info.type = WindowSystemType::Android;
+        window_info.render_surface = SDL_GetPointerProperty(wp, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr);
+    } else
+#endif
     if (driver && !std::strcmp(driver, "x11")) {
         window_info.type = WindowSystemType::X11;
         window_info.display_connection = SDL_GetPointerProperty(wp, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
@@ -90,6 +100,7 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}
     width = w;
     height = h;
     LOG_INFO(Frontend, "Window {}x{} on {}", w, h, driver);
+    SDL_AddEventWatch(&WindowSDL::OnAppEvent, this); // g2-arm64
 }
 
 WindowSDL::~WindowSDL() {
@@ -115,6 +126,44 @@ void WindowSDL::UpdateTextTitle() {
                                           : base_title;
     SDL_SetWindowTitle(window, title.c_str());
     BbOverlay::SetTextEntry(text_active, text_prompt, text);
+}
+
+// g2-arm64: Android's app lifecycle. On the pause SDL queues these events, then blocks its event
+// pump (the window thread) until the resume; the presenter thread must stop presenting at once:
+// with the screen off the compositor stops taking buffers and an acquire would wait forever (the
+// game hung after the sleep button), and the window is destroyed under the surface.
+bool WindowSDL::OnAppEvent(void* userdata, SDL_Event* event) {
+    auto* self = static_cast<WindowSDL*>(userdata);
+    switch (event->type) {
+    case SDL_EVENT_WILL_ENTER_BACKGROUND:
+    case SDL_EVENT_DID_ENTER_BACKGROUND:
+        if (!self->background.exchange(true, std::memory_order_acq_rel)) {
+            std::printf("Window: the app went to the background: presenting stops\n");
+            runtime_audio_background(1); // SDL pauses the audio device next
+        }
+        break;
+    case SDL_EVENT_WILL_ENTER_FOREGROUND:
+    case SDL_EVENT_DID_ENTER_FOREGROUND:
+        if (self->background.exchange(false, std::memory_order_acq_rel)) {
+            std::printf("Window: the app is back in the foreground\n");
+            runtime_audio_background(0);
+        }
+        break;
+    default:
+        break;
+    }
+    return true;
+}
+
+WindowSystemInfo WindowSDL::CurrentWindowInfo() const {
+    WindowSystemInfo info = window_info;
+#ifdef __ANDROID__
+    if (info.type == WindowSystemType::Android) {
+        info.render_surface = SDL_GetPointerProperty(
+            SDL_GetWindowProperties(window), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr);
+    }
+#endif
+    return info;
 }
 
 bool WindowSDL::PollEvents() {
@@ -178,6 +227,11 @@ bool WindowSDL::PollEvents() {
         }
         switch (event.type) {
         case SDL_EVENT_MOUSE_MOTION:
+            // g2-arm64: SDL makes mouse events from touches; fingers are the on-screen gamepad's
+            // (the left mouse button is R2 in the bindings: every touch fired).
+            if (event.motion.which == SDL_TOUCH_MOUSEID) {
+                break;
+            }
             if (mouse_captured) {
                 std::scoped_lock lock{mouse_mutex};
                 mouse_dx += event.motion.xrel;
@@ -186,6 +240,9 @@ bool WindowSDL::PollEvents() {
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP: {
+            if (event.button.which == SDL_TOUCH_MOUSEID) {
+                break; // g2-arm64: see SDL_EVENT_MOUSE_MOTION
+            }
             std::scoped_lock lock{mouse_mutex};
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && !BbOverlay::CapturesInput()) {
                 mouse_buttons |= MouseBit(event.button.button);

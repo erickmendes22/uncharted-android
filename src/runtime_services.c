@@ -6,6 +6,7 @@
  * Every entry here is an explicit contract; unknown functions still stop. */
 #define _GNU_SOURCE
 #include "runtime.h"
+#include <unistd.h>
 #include "gpu/bbgpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -99,7 +100,9 @@ static ABI int32_t system_event(void *event) { (void)event; return SYSTEM_NO_EVE
 static ABI int32_t hide_splash(void) { note("SystemService: splash screen hidden"); return 0; }
 /* The game replaces itself with another executable of its package (the collection menu
  * starting another game). The request is written to BB_LOADEXEC_FILE (guest path, then one
- * argument per line) and the process ends with RUNTIME_LOADEXEC_EXIT; run.py starts it. */
+ * argument per line) and the process ends with RUNTIME_LOADEXEC_EXIT; run.py starts it.
+ * g2-arm64: in the Android app (libmain.so) the app restarts itself instead and GameActivity
+ * boots the executable from that file. */
 #define RUNTIME_LOADEXEC_EXIT 101
 static ABI int32_t load_exec(const char *path, char *const *argv) {
     if (!path) return SYSTEM_PARAMETER;
@@ -113,6 +116,9 @@ static ABI int32_t load_exec(const char *path, char *const *argv) {
     for (int i=0;argv && argv[i] && i<32;++i) fprintf(f,"%s\n",argv[i]);
     fclose(f);
     fflush(NULL);
+#ifdef BB_SDL_MAIN
+    runtime_restart();
+#endif
     _exit(RUNTIME_LOADEXEC_EXIT);
 }
 static ABI int32_t launch_browser(void) { note("SystemService: web browser request ignored (offline)"); return 0; }

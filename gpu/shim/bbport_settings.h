@@ -69,10 +69,25 @@ struct Values {
     std::atomic<float> reactive_max{0.9f};
     std::atomic<int> debug_view{DebugNone};
     std::atomic<bool> show_fps{false};
+    /// g2-arm64: frames per second the present thread lets through: 0 none, -1 the port's own
+    /// rule (the display's rate, at most 120, when vblank is uncapped; else none). Live.
+    std::atomic<int> fps_limit{-1};
+    /// g2-arm64: the on-screen gamepad (bbport_touchpad.h): 0 off, 1 on, 2 while no physical
+    /// gamepad is connected (phones); its opacity and size.
+    std::atomic<int> touch_pad{2};
+    std::atomic<float> touch_pad_alpha{0.55f};
+    std::atomic<float> touch_pad_scale{1.0f};
+    std::atomic<float> touch_pad_look{1.0f}; ///< the camera drag's sensitivity
     // FSR 4 checks (menu): the provider's auto exposure, the jitter sign it is given.
     std::atomic<bool> fsr4_auto_exposure{true};
     std::atomic<bool> fsr4_invert_jitter{false};
-    std::atomic<int> active_render_width{1920}, active_render_height{1080};
+    /// The scene size the upscaler is given (0 until a scene has been rendered). g2-arm64: in
+    /// Uncharted's velocity mode this is the game's own size, patched at start (1280x720), not
+    /// the output size; the panel shows it and SceneMipBias follows it.
+    std::atomic<int> active_render_width{0}, active_render_height{0};
+    /// g2-arm64: the game's display buffer size (sceVideoOutRegisterBuffers): 1920x1080, or the
+    /// size its resolution patch set. The scene search compares the game's targets with it.
+    std::atomic<int> game_display_width{1920}, game_display_height{1080};
     /// Applied at start (patches.py); the menu shows when a restart is needed.
     std::atomic<bool> effects[EffectCount]{};
     std::atomic<int> model_lod{0}; ///< -2 highest .. 2 lowest, 0 the game's
@@ -117,6 +132,8 @@ int RenderPreset();
 bool ResolutionNeedsRestart();
 /// Writes the file (menu changes).
 void Save();
+/// g2-arm64: the frame limit setting as stored (-1: the port's own rule).
+int FrameLimitSetting();
 
 /// Render resolution divisor of a preset (1.0 native, 1.5 quality, ...).
 float PresetScale(int preset);

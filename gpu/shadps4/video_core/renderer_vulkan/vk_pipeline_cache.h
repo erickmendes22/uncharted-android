@@ -143,7 +143,15 @@ public:
         return used_prepared;
     }
 
-    const ComputePipeline* GetComputePipeline();
+    /// g2-arm64: direct = a direct dispatch (it may run split, BB_CS_SPLIT).
+    const ComputePipeline* GetComputePipeline(bool direct = false);
+
+    /// g2-arm64: BB_CS_SPLIT=<size>[:<hash>,...]: direct dispatches of one-dimensional compute
+    /// workgroups larger than <size> (of these shaders, or all) run as workgroups of <size>
+    /// invocations when the shader allows it (Info::cs_split_safe). U1: GPU skinning (cs
+    /// 8f067540) is ~300 dispatches a frame of one 1024-invocation workgroup, one shader core.
+    /// Returns the requested factor (1 = none).
+    static u32 CsSplitRequest(u64 hash, const AmdGpu::ComputeProgram& cs_pgm);
 
     using Result = std::tuple<const Shader::Info*, vk::ShaderModule,
                               std::optional<Shader::Gcn::FetchShaderData>, u64>;
@@ -174,6 +182,8 @@ private:
                                    Shader::Backend::Bindings& binding);
     const Shader::RuntimeInfo& BuildRuntimeInfo(PipelineSelection& sel, Shader::HwStage stage,
                                                 Shader::SwStage l_stage);
+    bool compute_direct = false; // g2-arm64: BB_CS_SPLIT
+    u32 compute_split = 1;
 
     [[nodiscard]] bool IsPipelineCacheDirty() const {
         return num_new_pipelines > 0;

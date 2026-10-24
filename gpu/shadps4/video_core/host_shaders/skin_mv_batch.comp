@@ -1,0 +1,383 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// g2-arm64: Uncharted 2's GPU skinning with motion vectors (cs 7d7e7206) for a batch of its
+// dispatches at once (vk_skin_batch.cpp), as skin_batch.comp does for U1's cs 8f067540. U2
+// dispatches it ~95 times a frame (4 workgroups of 1024 threads each, a few thousand vertices):
+// on the G2 those were 5-8% of the GPU's time, mostly state changes and idle shader cores.
+//
+// The arithmetic is the translated guest shader's operation for operation (its IR names are kept
+// as vNNN), the order of the multiplies and adds included. Loads outside a buffer's bound range
+// read zero and stores there are dropped, as robust buffer access does for the descriptors of the
+// translated shader.
+//
+// Guest buffers of a job (the shader's V# order):
+//   0  per vertex: influence count, byte offset of its first influence in buffer 4
+//   1  position, float3
+//   2  normal, half4
+//   3  tangent, half4 (w: handedness)
+//   4  influences: matrix index (bits 22..31), weight (bits 0..21, of 4194303)
+//   5  bone matrices of this frame, 3x4 rows
+//   6  a matrix applied to the previous frame's ones (rows of 4 dwords, the first 3 used)
+//   7  bone matrices of the previous frame, 3x4 rows
+//   8  out: position float3, 36-byte vertices
+//   9  out: normal half4 (12 bytes in)
+//  10  out: tangent half4 (20 bytes in)
+//  11  out: motion half4 (28 bytes in): this frame's position minus the previous one, scaled,
+//      kept only where it points against the normal
+// The vertex count and the motion scale come from the dispatch's user data (flattened words 64
+// and 65, read by the batch code).
+#version 460
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_spirv_intrinsics : require
+
+// As the translated shader: 32-bit denormals flushed, signed zeros, infinities and NaNs kept.
+spirv_execution_mode(capabilities = [4465], 4460, 32); // DenormFlushToZero
+spirv_execution_mode(capabilities = [4466], 4461, 32); // SignedZeroInfNanPreserve
+
+layout(local_size_x = 64) in;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Dword {
+    uint value;
+};
+
+struct Job {
+    uint64_t address[12]; // guest buffers 0..11 (0: none)
+    uint size[12];        // their bound bytes
+    uint count;           // vertices: min(the guest's vertex count, its invocations)
+    uint first_group;     // the job's first workgroup in this dispatch
+    uint scale;           // the motion scale (float bits)
+    uint pad;
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 8) readonly buffer JobTable {
+    Job jobs[];
+};
+
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer GroupTable {
+    uint job_of_group[];
+};
+
+layout(push_constant) uniform Push {
+    JobTable job_table;
+    GroupTable group_table;
+    uint num_groups;
+} push;
+
+uint Load(uint64_t base, uint size, uint dword) {
+    if (dword >= (size >> 2u)) {
+        return 0u;
+    }
+    return Dword(base + uint64_t(dword) * 4ul).value;
+}
+
+void Store(uint64_t base, uint size, uint dword, uint value) {
+    if (dword >= (size >> 2u)) {
+        return;
+    }
+    Dword(base + uint64_t(dword) * 4ul).value = value;
+}
+
+float LoadF(uint64_t base, uint size, uint dword) {
+    return uintBitsToFloat(Load(base, size, dword));
+}
+
+// Dwords [dword, dword + n) with one bounds check (the per-dword checks only where the range
+// crosses the end of the buffer): the address arithmetic once, the offsets in the loads.
+vec4 Load4F(uint64_t base, uint size, uint dword) {
+    if (dword + 4u > (size >> 2u)) {
+        return vec4(LoadF(base, size, dword), LoadF(base, size, dword + 1u),
+                    LoadF(base, size, dword + 2u), LoadF(base, size, dword + 3u));
+    }
+    const uint64_t p = base + uint64_t(dword) * 4ul;
+    return uintBitsToFloat(uvec4(Dword(p).value, Dword(p + 4ul).value, Dword(p + 8ul).value,
+                                 Dword(p + 12ul).value));
+}
+
+uvec2 Load2(uint64_t base, uint size, uint dword) {
+    if (dword + 2u > (size >> 2u)) {
+        return uvec2(Load(base, size, dword), Load(base, size, dword + 1u));
+    }
+    const uint64_t p = base + uint64_t(dword) * 4ul;
+    return uvec2(Dword(p).value, Dword(p + 4ul).value);
+}
+
+vec3 Load3F(uint64_t base, uint size, uint dword) {
+    if (dword + 3u > (size >> 2u)) {
+        return vec3(LoadF(base, size, dword), LoadF(base, size, dword + 1u),
+                    LoadF(base, size, dword + 2u));
+    }
+    const uint64_t p = base + uint64_t(dword) * 4ul;
+    return uintBitsToFloat(uvec3(Dword(p).value, Dword(p + 4ul).value, Dword(p + 8ul).value));
+}
+
+// The workgroup's output vertices, 9 dwords each, for the row stores.
+shared uint rows_out[64 * 9];
+
+void main() {
+    const uint group = gl_WorkGroupID.x;
+    if (group >= push.num_groups) {
+        return;
+    }
+    const uint job_index = push.group_table.job_of_group[group];
+    const Job job = push.job_table.jobs[job_index];
+    const uint local = gl_LocalInvocationID.x;
+    const uint vertex = (group - job.first_group) * 64u + local;
+    const uint64_t a0 = job.address[0], a1 = job.address[1], a2 = job.address[2];
+    const uint64_t a3 = job.address[3], a4 = job.address[4], a5 = job.address[5];
+    const uint64_t a6 = job.address[6], a7 = job.address[7], a8 = job.address[8];
+    const uint64_t a9 = job.address[9], a10 = job.address[10], a11 = job.address[11];
+    const uint s0 = job.size[0], s1 = job.size[1], s2 = job.size[2], s3 = job.size[3];
+    const uint s4 = job.size[4], s5 = job.size[5], s6 = job.size[6], s7 = job.size[7];
+    const uint s8 = job.size[8], s9 = job.size[9], s10 = job.size[10], s11 = job.size[11];
+    // g2-arm64: interleaved outputs (normal +12, tangent +20, motion +28, the same size): the
+    // workgroup stores its 36-byte vertices through shared memory as whole rows, as in
+    // skin_batch.comp; every lane takes part, one past the count computes the last vertex.
+    const bool rows = a9 == a8 + 12ul && a10 == a8 + 20ul && a11 == a8 + 28ul &&
+                      s9 == s8 && s10 == s8 && s11 == s8;
+    if (!rows && !(job.count > vertex)) {
+        return;
+    }
+    const uint v17 = rows ? min(vertex, job.count - 1u) : vertex;
+
+    // Block 1: the vertex, and the position its first influence's matrix gives.
+    const uvec2 v21 = Load2(a0, s0, v17 * 2u);
+    const uint v22 = v21.x, v23 = v21.y;
+    const vec3 v25 = Load3F(a1, s1, v17 * 3u);
+    const float v32 = v25.x, v33 = v25.y, v34 = v25.z;
+    const uvec2 v36 = Load2(a2, s2, v17 * 2u);
+    const vec2 v38 = unpackHalf2x16(v36.x);
+    const vec2 v40 = unpackHalf2x16(v36.y);
+    const float v49 = v38.x, v50 = v38.y, v51 = v40.x;
+    const uvec2 v53 = Load2(a3, s3, v17 * 2u);
+    const vec2 v55 = unpackHalf2x16(v53.x);
+    const vec2 v57 = unpackHalf2x16(v53.y);
+    const float v66 = v55.x, v67 = v55.y, v68 = v57.x, v69 = v57.y;
+
+    const uint v71 = Load(a4, s4, v23 >> 2u);
+    const uint v73 = (v71 >> 22u) * 48u;
+    const uint q0 = v73 >> 2u, q1 = (v73 + 16u) >> 2u, q2 = (v73 + 32u) >> 2u;
+    const vec4 v75 = Load4F(a5, s5, q0), v82 = Load4F(a5, s5, q1), v89 = Load4F(a5, s5, q2);
+    const float v94 = v75.x, v106 = v75.y, v115 = v75.z, v95 = v75.w;
+    const float v98 = v82.x, v109 = v82.y, v118 = v82.z, v99 = v82.w;
+    const float v102 = v89.x, v112 = v89.y, v121 = v89.z, v103 = v89.w;
+    const float v97 = v94 * v32 + v95;
+    const float v101 = v98 * v32 + v99;
+    const float v105 = v32 * v102 + v103;
+    const float v108 = v33 * v106 + v97;
+    const float v111 = v109 * v33 + v101;
+    const float v114 = v33 * v112 + v105;
+    const float v117 = v115 * v34 + v108;
+    const float v120 = v34 * v118 + v111;
+    const float v123 = v121 * v34 + v114;
+
+    // The loop over the influences (blocks 2-5).
+    float v130 = 0.0, v132 = 0.0, v134 = 0.0, v136 = 0.0, v138 = 0.0, v140 = 0.0;
+    float v142 = 0.0, v144 = 0.0, v146 = 0.0, v148 = 0.0, v150 = 0.0, v152 = 0.0;
+    uint v128 = v23;
+    const float weight_scale = uintBitsToFloat(0x34800002u); // 1 / 4194303
+    // The guest loads buffer 6 in every iteration; it holds the same values in all of them.
+    const vec3 v159 = Load3F(a6, s6, 0u), v163 = Load3F(a6, s6, 12u);
+    const vec3 v167 = Load3F(a6, s6, 4u), v171 = Load3F(a6, s6, 8u);
+    const float v208 = v159.x, v212 = v159.y, v216 = v159.z;
+    const float v209 = v163.x, v213 = v163.y, v217 = v163.z;
+    const float v222 = v167.x, v226 = v167.y, v229 = v167.z;
+    const float v235 = v171.x, v239 = v171.y, v242 = v171.z;
+    for (uint v124 = 0u; v124 < v22; ++v124) {
+        const uint v158 = Load(a4, s4, v128 >> 2u);
+        v128 += 4u;
+        const uint v176 = (v158 >> 22u) * 48u;
+        const uint r0 = v176 >> 2u, r1 = (v176 + 16u) >> 2u, r2 = (v176 + 32u) >> 2u;
+        // The previous frame's matrix of this influence (buffer 7).
+        const vec4 v178 = Load4F(a7, s7, r0), v185 = Load4F(a7, s7, r1), v192 = Load4F(a7, s7, r2);
+        const float v220 = v178.x, v250 = v178.y, v248 = v178.z, v207 = v178.w;
+        const float v232 = v185.x, v252 = v185.y, v260 = v185.z, v223 = v185.w;
+        const float v245 = v192.x, v257 = v192.y, v269 = v192.z, v236 = v192.w;
+        const float v199 = weight_scale * float(v158 & 0x3FFFFFu);
+        // This frame's matrix, row 1 (buffer 5).
+        const vec4 v202 = Load4F(a5, s5, r1);
+        const float v263 = v202.x, v272 = v202.y, v277 = v202.z, v264 = v202.w;
+
+        const float v211 = v207 * v208 + v209;
+        const float v215 = v212 * v207 + v213;
+        const float v219 = v216 * v207 + v217;
+        const float v221 = v220 * v216;
+        const float v225 = v222 * v223 + v211;
+        const float v228 = v223 * v226 + v215;
+        const float v231 = v223 * v229 + v219;
+        const float v234 = v229 * v232 + v221;
+        const float v238 = v235 * v236 + v225;
+        const float v241 = v236 * v239 + v228;
+        const float v244 = v242 * v236 + v231;
+        const float v247 = v242 * v245 + v234;
+        const float v249 = v248 * v216;
+        const float v251 = v250 * v216;
+        const float v254 = v229 * v252 + v251;
+        const float v256 = v247 * v32 + v244;
+        const float v259 = v242 * v257 + v254;
+        const float v262 = v229 * v260 + v249;
+        const float v266 = v32 * v263 + v264;
+        const float v268 = v259 * v33 + v256;
+        const float v271 = v242 * v269 + v262;
+        const float v274 = v33 * v272 + v266;
+        const float v276 = v271 * v34 + v268;
+        const float v279 = v34 * v277 + v274;
+        const float v280 = v276 - v123;
+        const float v281 = v279 - v120;
+        const float v282 = v250 * v212;
+        const float v283 = v250 * v208;
+        const float v285 = v226 * v252 + v282;
+        const float v287 = v252 * v222 + v283;
+        const float v288 = v248 * v208;
+        const float v290 = v235 * v257 + v287;
+        const float v292 = v222 * v260 + v288;
+        const float v294 = v239 * v257 + v285;
+        const float v295 = v220 * v212;
+        const float v297 = v226 * v232 + v295;
+        const float v299 = v239 * v245 + v297;
+        const float v301 = v299 * v32 + v241;
+        const float v303 = v235 * v269 + v292;
+        const float v305 = v294 * v33 + v301;
+        v130 = v280 * v199 + v130;
+        const float v309 = v220 * v208;
+        const float v311 = v222 * v232 + v309;
+        const float v313 = v235 * v245 + v311;
+        const float v314 = v248 * v212;
+        const float v316 = v313 * v32 + v238;
+        const float v318 = v260 * v226 + v314;
+        const float v320 = v290 * v33 + v316;
+        const float v322 = v239 * v269 + v318;
+        const float v324 = v303 * v34 + v320;
+        const float v326 = v322 * v34 + v305;
+        const float v327 = v324 - v117;
+        const float v328 = v326 - v120;
+        v132 = v327 * v199 + v132;
+        v134 = v328 * v199 + v134;
+        v136 = v281 * v199 + v136;
+        const float v338 = v263 * v49;
+        const float v339 = v263 * v66;
+        const float v341 = v67 * v272 + v339;
+        const float v343 = v50 * v272 + v338;
+        const float v345 = v68 * v277 + v341;
+        const float v347 = v51 * v277 + v343;
+        v138 = v345 * v199 + v138;
+        v140 = v347 * v199 + v140;
+        // This frame's matrix, rows 0 and 2 (buffer 5).
+        const vec4 v355 = Load4F(a5, s5, r0), v362 = Load4F(a5, s5, r2);
+        const float v367 = v355.x, v371 = v355.y, v375 = v355.z, v368 = v355.w;
+        const float v389 = v362.x, v393 = v362.y, v397 = v362.z, v390 = v362.w;
+        const float v370 = v32 * v367 + v368;
+        const float v373 = v33 * v371 + v370;
+        const float v374 = v367 * v49;
+        const float v377 = v34 * v375 + v373;
+        const float v379 = v50 * v371 + v374;
+        const float v380 = v377 - v117;
+        const float v382 = v51 * v375 + v379;
+        v142 = v380 * v199 + v142;
+        const float v386 = v367 * v66;
+        const float v388 = v67 * v371 + v386;
+        const float v392 = v32 * v389 + v390;
+        const float v395 = v33 * v393 + v392;
+        const float v396 = v389 * v66;
+        const float v399 = v34 * v397 + v395;
+        const float v401 = v67 * v393 + v396;
+        const float v402 = v399 - v123;
+        const float v404 = v68 * v375 + v388;
+        const float v406 = v68 * v397 + v401;
+        v144 = v402 * v199 + v144;
+        const float v410 = v389 * v49;
+        const float v412 = v50 * v393 + v410;
+        const float v414 = v51 * v397 + v412;
+        v146 = v404 * v199 + v146;
+        v148 = v406 * v199 + v148;
+        v150 = v382 * v199 + v150;
+        v152 = v414 * v199 + v152;
+    }
+
+    // Block 6: the normal (normalized), the tangent made orthogonal to it (normalized), the
+    // positions, and the motion kept where it points against the normal.
+    const float v428 = v150;
+    const float v430 = v140;
+    const float v433 = v152;
+    const float v432 = v430 * v430 + v428 * v428;
+    const float v435 = v433 * v433 + v432;
+    const float v436 = inversesqrt(v435);
+    const float v473 = uintBitsToFloat(job.scale);
+    const float v439 = v436 * v433;
+    const float v440 = v436 * v428;
+    const float v441 = v146;
+    const float v442 = v441 * v439;
+    const float v444 = v142 + v117;
+    const float v445 = v436 * v430;
+    const float v446 = v148;
+    const float v449 = v440 * -v446 + v442;
+    const float v450 = v138;
+    const float v451 = v450 * v440;
+    const float v453 = v132 + v117;
+    const float v455 = v136 + v120;
+    const float v456 = v449 * v439;
+    const float v459 = v445 * -v441 + v451;
+    const float v460 = v446 * v445;
+    const float v461 = v444 - v453;
+    const float v463 = v134 + v120;
+    const float v465 = v144 + v123;
+    const float v468 = v445 * -v459 + v456;
+    const float v469 = v459 * v440;
+    const float v472 = v439 * -v450 + v460;
+    const float v474 = v473 * v461;
+    const float v475 = v455 - v463;
+    const float v477 = v130 + v123;
+    const float v478 = v468 * v468;
+    const float v481 = v439 * -v472 + v469;
+    const float v482 = v472 * v445;
+    const float v483 = v440 * v474;
+    const float v484 = v473 * v475;
+    const float v485 = v465 - v477;
+    const float v487 = v481 * v481 + v478;
+    const float v490 = v440 * -v449 + v482;
+    const float v492 = v484 * v445 + v483;
+    const float v493 = v473 * v485;
+    const float v495 = v490 * v490 + v487;
+    const float v497 = v493 * v439 + v492;
+    const float v498 = inversesqrt(v495);
+    const bool v499 = 0.0 > v497;
+    const float v500 = v498 * v468;
+    const float v501 = v498 * v481;
+    const float v502 = v498 * v490;
+    const float v503 = v499 ? v474 : 0.0;
+    const float v504 = v499 ? v484 : 0.0;
+    const float v505 = v499 ? v493 : 0.0;
+
+    const uint o = v17 * 9u;
+    if (rows) {
+        const uint w = local * 9u;
+        rows_out[w] = floatBitsToUint(v444);
+        rows_out[w + 1u] = floatBitsToUint(v455);
+        rows_out[w + 2u] = floatBitsToUint(v465);
+        rows_out[w + 3u] = packHalf2x16(vec2(v440, v445));
+        rows_out[w + 4u] = packHalf2x16(vec2(v439, 0.0));
+        rows_out[w + 5u] = packHalf2x16(vec2(v500, v501));
+        rows_out[w + 6u] = packHalf2x16(vec2(v502, v69));
+        rows_out[w + 7u] = packHalf2x16(vec2(v503, v504));
+        rows_out[w + 8u] = packHalf2x16(vec2(v505, 0.0));
+        memoryBarrierShared();
+        barrier();
+        const uint first = (group - job.first_group) * (64u * 9u);
+        const uint end = min(job.count * 9u, s8 >> 2u);
+        for (uint k = 0u; k < 9u; ++k) {
+            const uint i = local + k * 64u;
+            if (first + i < end) {
+                Dword(a8 + uint64_t(first + i) * 4ul).value = rows_out[i];
+            }
+        }
+        return;
+    }
+    Store(a8, s8, o, floatBitsToUint(v444));
+    Store(a8, s8, o + 1u, floatBitsToUint(v455));
+    Store(a8, s8, o + 2u, floatBitsToUint(v465));
+    Store(a9, s9, o, packHalf2x16(vec2(v440, v445)));
+    Store(a9, s9, o + 1u, packHalf2x16(vec2(v439, 0.0)));
+    Store(a10, s10, o, packHalf2x16(vec2(v500, v501)));
+    Store(a10, s10, o + 1u, packHalf2x16(vec2(v502, v69)));
+    Store(a11, s11, o, packHalf2x16(vec2(v503, v504)));
+    Store(a11, s11, o + 1u, packHalf2x16(vec2(v505, 0.0)));
+}
