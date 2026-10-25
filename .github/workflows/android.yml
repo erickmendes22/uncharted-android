@@ -29,6 +29,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - name: Install native build tools and SDK
         shell: bash
         run: |
@@ -76,6 +79,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-build-logs
+          include-hidden-files: true
           path: |
             .android-work/*.log
             .android-work/deps/build/*.log
