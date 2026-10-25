@@ -256,6 +256,13 @@ void BbNoteGameDisplaySize(unsigned width, unsigned height) {
     if (width != 0 && height != 0) {
         BbSettings::Get().game_display_width = int(width);
         BbSettings::Get().game_display_height = int(height);
+        // g2-arm64: the render size in the log, once per change (a bug report's first question).
+        static unsigned said_w = 0, said_h = 0;
+        if (width != said_w || height != said_h) {
+            said_w = width;
+            said_h = height;
+            std::printf("Game: display buffers %ux%u\n", width, height);
+        }
     }
 }
 

@@ -721,7 +721,9 @@ public class Launcher extends Activity {
         return out;
     }
 
-    /** The CPUs of every cluster but the slowest (the port's GPU threads: BB_RENDER_CPUS). */
+    /** The CPUs of every cluster but the slowest (the port's GPU threads: BB_RENDER_CPUS), when
+     *  the slowest is little cores (under 3/4 of the fastest clock; the G2's run at 0.68). Else
+     *  none: on a Snapdragon 8 Elite (2 + 6 big cores, 0.79) it put them all on two (issue #8). */
     private static String fastCpus() {
         List<Integer> cpus = new ArrayList<>();
         List<Long> freqs = new ArrayList<>();
@@ -735,15 +737,18 @@ public class Launcher extends Activity {
             freqs.add(Long.parseLong(f));
         }
         if (cpus.isEmpty()) return null;
-        long slowest = Long.MAX_VALUE;
-        for (long f : freqs) slowest = Math.min(slowest, f);
+        long slowest = Long.MAX_VALUE, fastest = 0;
+        for (long f : freqs) {
+            slowest = Math.min(slowest, f);
+            fastest = Math.max(fastest, f);
+        }
+        if (slowest * 4 >= fastest * 3) return null;
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < cpus.size(); i++)
             if (freqs.get(i) > slowest) b.append(b.length() > 0 ? "," : "").append(cpus.get(i));
         return b.length() > 0 ? b.toString() : null;
     }
 
-    /** The frame rate limit to offer first: the display's rate when it is 120 Hz, else 60. */
     /** 60 whatever the display does: at 120 a phone's GPU falls behind and the game runs
      *  ahead of it (issue #5); 120 stays a choice. */
     private String defaultFpsLimit() {

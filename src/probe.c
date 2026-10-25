@@ -699,7 +699,8 @@ static void apply_patches(const char *path, Segment *segments, uint64_t ns, cons
     }
     if (fgetc(f)!=EOF) fail("trailing data in patch file");
     fclose(f);
-    printf("Patches: %" PRIu64 " writes, %" PRIu64 " bytes applied, %" PRIu64 " pointers rebased\n",count,bytes,rebased);
+    const char *name=strrchr(path,'/'); /* g2-arm64: the file names the size (u1-960x540.bin) */
+    printf("Patches: %" PRIu64 " writes, %" PRIu64 " bytes applied, %" PRIu64 " pointers rebased from %s\n",count,bytes,rebased,name ? name+1 : path);
 }
 /* BB_GUEST_HOOKS="offset:bytes,...,START-END": diagnostic call counters on guest functions.
  * The first `bytes` (>= 5, whole position-independent instructions) at each image offset move
