@@ -870,6 +870,69 @@ void NoteStreamCopy(VAddr address, const u8* copy, u64 size) {
 }
 } // namespace
 
+// g2-arm64: the collection's blur (vs 4f38cbc0: 13 taps at +-1 and +-2 steps, the step (du, dv)
+// in its buffer 1) steps by texels of its target. The bloom's targets and those of the menus'
+// depth of field are fractions of the render size, which the resolution patch makes smaller:
+// below 1080p the same texel steps blur 1.5x (720p) to 3x (360p) the screen distance of the
+// PS4's 1080p (issue #7). Their step is scaled by height / 1080; the square chains (256x256
+// down to 16x16) do not follow the render size and keep theirs.
+// BB_BLUR_SCALE=0: as before.
+float Rasterizer::PostBlurScale(const Shader::Info& stage) const {
+    if (u32(stage.pgm_hash) != 0x4f38cbc0u) {
+        return 0.0f;
+    }
+    static const bool off = [] {
+        const char* env = std::getenv("BB_BLUR_SCALE");
+        return env && env[0] == '0';
+    }();
+    const s64 display_w = BbSettings::Get().game_display_width.load();
+    const s64 display_h = BbSettings::Get().game_display_height.load();
+    const auto target = CbExtent(0);
+    if (off || display_h <= 0 || display_h >= 1080 || !target.Valid()) {
+        return 0.0f;
+    }
+    // The render size's proportions, within a row of rounding (40x22 of 960x540).
+    if (std::abs(s64(target.width) * display_h - s64(target.height) * display_w) > display_w) {
+        return 0.0f;
+    }
+    static bool said = false;
+    if (!said) {
+        said = true;
+        std::printf("Post blur: steps of vs 4f38cbc0 scaled by %.3f (render %lldx%lld)\n",
+                    double(display_h) / 1080.0, static_cast<long long>(display_w),
+                    static_cast<long long>(display_h));
+    }
+    return float(display_h) / 1080.0f;
+}
+
+// g2-arm64: the gameplay depth of field (aiming, cutscenes) is a separable blur of a target half
+// the render size: cs 8b10b4cb (rows) and cs 1c3672c5 (columns) take the taps 0..6 texels away,
+// weighted max(0, c_k - (1 - CoC)) by the profile c_0..c_6 in dwords 32..38 of their buffer 0
+// (1.0 ... 0.105 in U2). The 6 texels are fixed in the shaders, so below 1080p the blur reaches
+// twice (540p) the PS4's screen distance (issue #7); the profile is compressed instead:
+// c'_k = c(k * 1080 / height), linear between taps, 0 from tap 7 on. BB_BLUR_SCALE=0: as before.
+float Rasterizer::DofBlurScale(const Shader::Info& stage) const {
+    const u32 hash = u32(stage.pgm_hash);
+    if (hash != 0x8b10b4cbu && hash != 0x1c3672c5u) {
+        return 0.0f;
+    }
+    static const bool off = [] {
+        const char* env = std::getenv("BB_BLUR_SCALE");
+        return env && env[0] == '0';
+    }();
+    const int display_h = BbSettings::Get().game_display_height.load();
+    if (off || display_h <= 0 || display_h >= 1080) {
+        return 0.0f;
+    }
+    static bool said = false;
+    if (!said) {
+        said = true;
+        std::printf("Depth of field: blur profile compressed by %.3f (render height %d)\n",
+                    double(display_h) / 1080.0, display_h);
+    }
+    return float(display_h) / 1080.0f;
+}
+
 void Rasterizer::CollectRingBindings(const Shader::Info& stage, const PreparedDraw* prepared,
                            boost::container::static_vector<RingBinding, Shader::NUM_BUFFERS>& out) {
     const PreparedStage* prepared_stage = nullptr;
@@ -885,10 +948,13 @@ void Rasterizer::CollectRingBindings(const Shader::Info& stage, const PreparedDr
     }
     const u64 alignment = std::max<u64>(instance.StorageMinAlignment(),
                                         instance.UniformMinAlignment());
-    const auto copy = [&](u32 index, const void* source, VAddr address, u64 size) {
+    const float blur_scale = PostBlurScale(stage);
+    const float dof_scale = DofBlurScale(stage);
+    const auto copy = [&](u32 index, const void* source, VAddr address, u64 size,
+                          bool dedupe = true) {
         StreamDedupe::Entry* entry = nullptr;
         u64 hash = 0;
-        if (!source && StreamDedupeEnabled() && memory->IsHostMapped(address, size)) {
+        if (!source && dedupe && StreamDedupeEnabled() && memory->IsHostMapped(address, size)) {
             hash = XXH3_64bits(reinterpret_cast<const void*>(address), size);
             entry = &g_stream_dedupe.Slot(address, size);
             if (entry->address == address && entry->size == size && entry->hash == hash &&
@@ -968,6 +1034,35 @@ void Rasterizer::CollectRingBindings(const Shader::Info& stage, const PreparedDr
         // written by the GPU (now or by work still queued for the recording thread).
         if (size == 0 || size > VideoCore::BufferCache::STREAM_THRESHOLD ||
             buffer_cache.IsRegionGpuModified(address, size) || PendingWriteOverlaps(address, size)) {
+            continue;
+        }
+        if (dof_scale != 0.0f && index == 0 && size >= 39 * sizeof(u32)) {
+            // g2-arm64: the depth of field profile, in a copy of its own.
+            copy(index, nullptr, address, size, false);
+            if (!out.empty() && out.back().index == index) {
+                auto* c = reinterpret_cast<float*>(constant_ring->Data(out.back().offset)) + 32;
+                std::array<float, 8> profile{};
+                std::copy_n(c, 7, profile.begin());
+                for (u32 k = 1; k < 7; ++k) {
+                    const float x = float(k) / dof_scale;
+                    const u32 i = u32(x);
+                    c[k] = i >= 7 ? 0.0f
+                                  : profile[i] + (profile[i + 1] - profile[i]) * (x - float(i));
+                }
+                constant_ring->Flush(out.back().offset + 32 * sizeof(u32), 7 * sizeof(u32));
+            }
+            continue;
+        }
+        if (blur_scale != 0.0f && index == 1 && size >= 2 * sizeof(float)) {
+            // g2-arm64: the blur's step, in a copy of its own (a shared one would be scaled
+            // again by the next draw that binds it).
+            copy(index, nullptr, address, size, false);
+            if (!out.empty() && out.back().index == index) {
+                auto* step = reinterpret_cast<float*>(constant_ring->Data(out.back().offset));
+                step[0] *= blur_scale;
+                step[1] *= blur_scale;
+                constant_ring->Flush(out.back().offset, 2 * sizeof(float));
+            }
             continue;
         }
         copy(index, nullptr, address, size);
@@ -3467,9 +3562,14 @@ void Rasterizer::BindBuffers(const Shader::Info& stage, const PreparedStage* pre
                             static_cast<unsigned long long>(v.base_address), u32(v.GetStride()),
                             u32(v.num_records), u32(v.GetDataFmt()), u32(v.GetNumberFmt()),
                             int(stage.buffers[i].is_written));
-                if (v.base_address && memory->IsValidGpuMapping(v.base_address, 64)) {
+                // g2-arm64: BB_TRACE_WORDS=<n> words (15 by default).
+                static const u32 trace_words = [] {
+                    const char* env = std::getenv("BB_TRACE_WORDS");
+                    return env ? std::max(1u, u32(std::strtoul(env, nullptr, 10))) : 15u;
+                }();
+                if (v.base_address && memory->IsValidGpuMapping(v.base_address, trace_words * 4)) {
                     const auto* words = reinterpret_cast<const u32*>(v.base_address);
-                    for (u32 w = 0; w < 15; ++w) {
+                    for (u32 w = 0; w < trace_words; ++w) {
                         std::printf(" %08x", words[w]);
                     }
                 }

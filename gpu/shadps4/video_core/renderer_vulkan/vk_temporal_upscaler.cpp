@@ -466,10 +466,16 @@ bool TemporalUpscaler::EnsureResources(u32 w, u32 h, u32 ow, u32 oh, bool hdr) {
             created != FFX_VK_PORTABLE_OK) {
             std::printf("Upscaler: FSR 3 context creation failed (%d) for %ux%u -> %ux%u\n",
                         int(created), w, h, ow, oh);
+            // g2-arm64: the counter and the panel say so (issue #13: the picture stayed the
+            // same and nothing told why).
+            BbSettings::Get().upscaler_problem =
+                "FSR 3.1 could not start with this GPU driver (the log has the error): the "
+                "picture is the game's own";
             context = nullptr;
             return false;
         }
     }
+    BbSettings::Get().upscaler_problem = nullptr;
 
     const auto allocator = instance.GetAllocator();
     motion_view.reset();

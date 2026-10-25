@@ -263,6 +263,10 @@ private:
     const AmdGpu::ComputeProgram& CsRegs() const;
     static void RunDrawPacket(void* rasterizer, const u8* packet, u32 size);
     struct RingBinding;
+    /// g2-arm64: the factor for the step of the collection's blur drawn now, 0 for none.
+    float PostBlurScale(const Shader::Info& stage) const;
+    /// g2-arm64: the factor for the profile of the depth of field blur dispatched now, 0 for none.
+    float DofBlurScale(const Shader::Info& stage) const;
     void CollectRingBindings(const Shader::Info& stage, const PreparedDraw* prepared,
                              boost::container::static_vector<RingBinding, Shader::NUM_BUFFERS>& out);
     void PrintPipeStats();

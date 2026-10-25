@@ -13,3 +13,9 @@ patches here to its working tree when they are not applied yet:
   of them (a KGSL buffer object each on Android): the process reached the kernel's mapping
   limit after a few minutes and crashed in the overlay (g2-arm64, 2026-10-25). The Android build
   (`android/scripts/port-arm64/build_gpu_android.sh`) applies these patches too.
+- `0004-...`: the FFX Vulkan backend takes a host-visible device-local memory type when no
+  other device-local type fits. It skipped them all for device-local requests (a guard for
+  the small host-visible heap of discrete GPUs), and every device-local type of Turnip is
+  host-visible: no FSR 3.1 resource could be allocated, the FSR 3.1 context failed with
+  `FFX_ERROR_BACKEND_API_ERROR` (-7 from the portable API) at every size, and FSR 3.1 never
+  ran on Android with Turnip (g2-arm64, 2026-10-25, issue #13).

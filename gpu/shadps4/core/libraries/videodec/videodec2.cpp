@@ -207,15 +207,19 @@ s32 PS4_SYSV_ABI sceVideodec2Decode(OrbisVideodec2Decoder decoder,
 
     Libraries::VideoOut::NoteMovieFrame();
     const s32 result = decoder->Decode(*input_data, *frame_buffer, *output_info);
-    // g2-arm64: the decode rate in the log (a movie that stops while its audio goes on).
+    // g2-arm64: the decode rate in the log (a movie that stops while its audio goes on), and
+    // where the decoder's time went: a movie falls behind its audio once that nears the frame
+    // time (issue #6).
     static std::atomic<u32> decodes{0};
     static auto reported = std::chrono::steady_clock::now();
     ++decodes;
     const auto now = std::chrono::steady_clock::now();
     if (now - reported >= std::chrono::seconds(5)) {
-        std::printf("Videodec2: %u decodes in %.1f s, last %u bytes -> result %#x, picture %d\n",
-                    decodes.exchange(0),
-                    std::chrono::duration<double>(now - reported).count(),
+        const VdecStageTimes t = TakeVdecStageTimes();
+        std::printf("Videodec2: %u decodes in %.1f s: decoding %.2f s (slowest %.1f ms), "
+                    "converting %.2f s, copying %.2f s; last %u bytes -> result %#x, picture %d\n",
+                    decodes.exchange(0), std::chrono::duration<double>(now - reported).count(),
+                    t.decode_s, t.slowest_decode_ms, t.convert_s, t.copy_s,
                     u32(input_data->au_size), u32(result), int(output_info->picture_count));
         reported = now;
     }

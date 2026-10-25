@@ -11,11 +11,38 @@
 
 #include "common/support/avdec.h"
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#if defined(__aarch64__)
+#include <arm_neon.h>
+#endif
 
 namespace Libraries::Videodec2 {
+
+namespace {
+std::atomic<u64> g_decode_ns{0}, g_slowest_decode_ns{0}, g_convert_ns{0}, g_copy_ns{0};
+
+u64 NowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+void AddDecodeNs(u64 ns) {
+    g_decode_ns += ns;
+    if (ns > g_slowest_decode_ns.load(std::memory_order_relaxed)) {
+        g_slowest_decode_ns = ns; // one decode thread: no lost maximum worth a CAS loop
+    }
+}
+} // namespace
+
+VdecStageTimes TakeVdecStageTimes() {
+    return {g_decode_ns.exchange(0) / 1e9, g_slowest_decode_ns.exchange(0) / 1e6,
+            g_convert_ns.exchange(0) / 1e9, g_copy_ns.exchange(0) / 1e9};
+}
 
 VdecDecoder::VdecDecoder(const OrbisVideodec2DecoderConfigInfo& config_info,
                          const OrbisVideodec2DecoderMemoryInfo& memory_info) {
@@ -31,6 +58,16 @@ VdecDecoder::VdecDecoder(const OrbisVideodec2DecoderConfigInfo& config_info,
     m_max_width = config_info.max_frame_width;
     m_max_height = config_info.max_frame_height;
     m_codec_context->flags |= AV_CODEC_FLAG_COPY_OPAQUE;
+    // g2-arm64: four decoding threads (BB_VDEC_THREADS=<n>; 1: on the game's own thread, as
+    // before). One thread took 9 ms of the 16.7 a 60 FPS movie frame has on the G2: a phone that
+    // throttles fell behind the movie's audio (issue #6). The first picture comes n-1 decodes
+    // later; the game asks for it, and flushes the rest at the end.
+    const char* threads_env = std::getenv("BB_VDEC_THREADS");
+    const int threads = threads_env && std::atoi(threads_env) > 0 ? std::atoi(threads_env) : 4;
+    if (threads > 1) {
+        m_codec_context->thread_count = threads;
+        m_codec_context->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
+    }
 
     avcodec_open2(m_codec_context, codec, nullptr);
 }
@@ -38,6 +75,7 @@ VdecDecoder::VdecDecoder(const OrbisVideodec2DecoderConfigInfo& config_info,
 VdecDecoder::~VdecDecoder() {
     avcodec_free_context(&m_codec_context);
     sws_freeContext(m_sws_context);
+    av_frame_free(&m_nv12_frame);
 }
 
 
@@ -81,6 +119,161 @@ bool EnvContentSize(s32& width, s32& height) {
     width = size.first;
     height = size.second;
     return width > 0;
+}
+
+#if defined(__aarch64__)
+/// g2-arm64: an area filter for the exact ratios below 1080p, 16 output pixels at a time.
+struct Wide {
+    uint16x8_t lo, hi;
+};
+
+/// 2 * major + minor, widened.
+inline Wide Weigh21(uint8x16_t major, uint8x16_t minor) {
+    return {vaddw_u8(vshll_n_u8(vget_low_u8(major), 1), vget_low_u8(minor)),
+            vaddw_high_u8(vshll_high_n_u8(major, 1), minor)};
+}
+
+inline Wide Weigh21(Wide major, Wide minor) {
+    return {vaddq_u16(vshlq_n_u16(major.lo, 1), minor.lo),
+            vaddq_u16(vshlq_n_u16(major.hi, 1), minor.hi)};
+}
+
+/// x / 9, rounded (x <= 9 * 255): (x * 7282 + 2^15) >> 16 by the doubling multiply.
+inline uint8x16_t Div9(Wide x) {
+    return vcombine_u8(vqmovun_s16(vqrdmulhq_n_s16(vreinterpretq_s16_u16(x.lo), 3641)),
+                       vqmovun_s16(vqrdmulhq_n_s16(vreinterpretq_s16_u16(x.hi), 3641)));
+}
+
+/// 3:2 - 16 groups of 3 pixels in 3 rows: 2 rows of 2 pixels each. An output pixel covers one
+/// source pixel and half of the next on each axis (weights 2 and 1, sum / 9).
+inline void Area32(const u8* r0, const u8* r1, const u8* r2, uint8x16x2_t& top,
+                   uint8x16x2_t& bottom) {
+    const uint8x16x3_t a = vld3q_u8(r0), b = vld3q_u8(r1), c = vld3q_u8(r2);
+    Wide up[3], down[3];
+    for (int k = 0; k < 3; ++k) {
+        up[k] = Weigh21(a.val[k], b.val[k]);
+        down[k] = Weigh21(c.val[k], b.val[k]);
+    }
+    top.val[0] = Div9(Weigh21(up[0], up[1]));
+    top.val[1] = Div9(Weigh21(up[2], up[1]));
+    bottom.val[0] = Div9(Weigh21(down[0], down[1]));
+    bottom.val[1] = Div9(Weigh21(down[2], down[1]));
+}
+
+/// 2:1 - 16 pairs of pixels in 2 rows: the mean of each 2x2.
+inline uint8x16_t Area21(const u8* r0, const u8* r1) {
+    const uint8x16x2_t a = vld2q_u8(r0), b = vld2q_u8(r1);
+    const uint16x8_t lo = vaddq_u16(vaddl_u8(vget_low_u8(a.val[0]), vget_low_u8(a.val[1])),
+                                    vaddl_u8(vget_low_u8(b.val[0]), vget_low_u8(b.val[1])));
+    const uint16x8_t hi =
+        vaddq_u16(vaddl_high_u8(a.val[0], a.val[1]), vaddl_high_u8(b.val[0], b.val[1]));
+    return vcombine_u8(vrshrn_n_u16(lo, 2), vrshrn_n_u16(hi, 2));
+}
+
+/// 3:1 - 16 groups of 3 pixels in 3 rows: the mean of each 3x3.
+inline uint8x16_t Area31(const u8* r0, const u8* r1, const u8* r2) {
+    const uint8x16x3_t rows[3] = {vld3q_u8(r0), vld3q_u8(r1), vld3q_u8(r2)};
+    Wide sum{vdupq_n_u16(0), vdupq_n_u16(0)};
+    for (const uint8x16x3_t& row : rows) {
+        for (int k = 0; k < 3; ++k) {
+            sum.lo = vaddw_u8(sum.lo, vget_low_u8(row.val[k]));
+            sum.hi = vaddw_high_u8(sum.hi, row.val[k]);
+        }
+    }
+    return Div9(sum);
+}
+#endif
+
+/// g2-arm64: the decoder's 4:2:0 picture (src) into the NV12 frame's top-left width x height,
+/// made smaller by an exact 3:2, 2:1 or 3:1 (1080p into 720p, 540p, 360p) with an area filter.
+/// sws_scale's bilinear filter took 8 ms of the 16.7 a 60 FPS movie frame has for 720p on the
+/// G2 (issue #6). False for another format, ratio or size: the caller scales with sws then.
+bool AreaDownscale(const AVFrame& src, AVFrame& dst, s32 width, s32 height) {
+#if defined(__aarch64__)
+    if (src.format != AV_PIX_FMT_YUV420P) {
+        return false;
+    }
+    const s32 w = src.width, h = src.height;
+    const int ratio = width * 3 == w * 2 && height * 3 == h * 2 ? 32
+                      : width * 2 == w && height * 2 == h       ? 21
+                      : width * 3 == w && height * 3 == h       ? 31
+                                                                : 0;
+    const s32 block = ratio == 21 ? 32 : 48, rows = ratio == 21 ? 2 : 3;
+    if (!ratio || w % (2 * block) || h % (2 * rows)) {
+        return false; // whole blocks in the chroma planes too
+    }
+    const u8* const y_plane = src.data[0];
+    const u8* const u_plane = src.data[1];
+    const u8* const v_plane = src.data[2];
+    const s32 ys = src.linesize[0], us = src.linesize[1], vs = src.linesize[2];
+    u8* const luma = dst.data[0];
+    u8* const chroma = dst.data[1];
+    const s32 ls = dst.linesize[0], cs = dst.linesize[1];
+    if (ratio == 32) {
+        for (s32 y = 0; y < h; y += 3) {
+            const u8* r = y_plane + y * ys;
+            u8* d = luma + (y / 3 * 2) * ls;
+            for (s32 x = 0; x < w; x += 48) {
+                uint8x16x2_t top, bottom;
+                Area32(r + x, r + ys + x, r + 2 * ys + x, top, bottom);
+                vst2q_u8(d + x / 3 * 2, top);
+                vst2q_u8(d + ls + x / 3 * 2, bottom);
+            }
+        }
+        for (s32 y = 0; y < h / 2; y += 3) {
+            const u8* u = u_plane + y * us;
+            const u8* v = v_plane + y * vs;
+            u8* d = chroma + (y / 3 * 2) * cs;
+            for (s32 x = 0; x < w / 2; x += 48) {
+                uint8x16x2_t ut, ub, vt, vb;
+                Area32(u + x, u + us + x, u + 2 * us + x, ut, ub);
+                Area32(v + x, v + vs + x, v + 2 * vs + x, vt, vb);
+                vst4q_u8(d + x / 3 * 4,
+                         (uint8x16x4_t{{ut.val[0], vt.val[0], ut.val[1], vt.val[1]}}));
+                vst4q_u8(d + cs + x / 3 * 4,
+                         (uint8x16x4_t{{ub.val[0], vb.val[0], ub.val[1], vb.val[1]}}));
+            }
+        }
+    } else if (ratio == 21) {
+        for (s32 y = 0; y < h; y += 2) {
+            const u8* r = y_plane + y * ys;
+            u8* d = luma + (y / 2) * ls;
+            for (s32 x = 0; x < w; x += 32) {
+                vst1q_u8(d + x / 2, Area21(r + x, r + ys + x));
+            }
+        }
+        for (s32 y = 0; y < h / 2; y += 2) {
+            const u8* u = u_plane + y * us;
+            const u8* v = v_plane + y * vs;
+            u8* d = chroma + (y / 2) * cs;
+            for (s32 x = 0; x < w / 2; x += 32) {
+                vst2q_u8(d + x,
+                         (uint8x16x2_t{{Area21(u + x, u + us + x), Area21(v + x, v + vs + x)}}));
+            }
+        }
+    } else {
+        for (s32 y = 0; y < h; y += 3) {
+            const u8* r = y_plane + y * ys;
+            u8* d = luma + (y / 3) * ls;
+            for (s32 x = 0; x < w; x += 48) {
+                vst1q_u8(d + x / 3, Area31(r + x, r + ys + x, r + 2 * ys + x));
+            }
+        }
+        for (s32 y = 0; y < h / 2; y += 3) {
+            const u8* u = u_plane + y * us;
+            const u8* v = v_plane + y * vs;
+            u8* d = chroma + (y / 3) * cs;
+            for (s32 x = 0; x < w / 2; x += 48) {
+                vst2q_u8(d + x / 3 * 2,
+                         (uint8x16x2_t{{Area31(u + x, u + us + x, u + 2 * us + x),
+                                        Area31(v + x, v + vs + x, v + 2 * vs + x)}}));
+            }
+        }
+    }
+    return true;
+#else
+    return false;
+#endif
 }
 } // namespace
 
@@ -139,6 +332,7 @@ s32 VdecDecoder::Decode(const OrbisVideodec2InputData& input_data,
     packet->dts = input_data.dts_data;
     packet->opaque = reinterpret_cast<void*>(input_data.attached_data);
 
+    const u64 decode_start = NowNs();
     int ret = avcodec_send_packet(m_codec_context, packet);
     if (ret == AVERROR_EOF) {
         // Attempt to flush buffers and try again.
@@ -159,6 +353,7 @@ s32 VdecDecoder::Decode(const OrbisVideodec2InputData& input_data,
     }
 
     ret = avcodec_receive_frame(m_codec_context, frame);
+    AddDecodeNs(NowNs() - decode_start);
     if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
         LOG_TRACE(Lib_Vdec2, "AVERROR_EOF or AVERROR(EAGAIN)");
         av_packet_free(&packet);
@@ -177,6 +372,7 @@ s32 VdecDecoder::Decode(const OrbisVideodec2InputData& input_data,
 
     s32 out_width, out_height, content_width, content_height;
     OutputSize(*frame, out_width, out_height, content_width, content_height);
+    const u64 convert_start = NowNs();
     if (frame->format != AV_PIX_FMT_NV12 || frame->width != content_width ||
         frame->height != content_height || content_width != out_width ||
         content_height != out_height) {
@@ -190,8 +386,11 @@ s32 VdecDecoder::Decode(const OrbisVideodec2InputData& input_data,
     const bool is_avc = m_codec_context->codec_id == AV_CODEC_ID_H264;
     const u64 info_size =
         is_avc ? sizeof(OrbisVideodec2AvcPictureInfo) : sizeof(OrbisVideodec2HevcPictureInfo);
+    const u64 copy_start = NowNs();
     Videodec::CopyNV12Data((u8*)frame_buffer.frame_buffer,
                            frame_buffer.frame_buffer_size - info_size, *frame, FrameHeightAlign);
+    g_convert_ns += copy_start - convert_start;
+    g_copy_ns += NowNs() - copy_start;
     frame_buffer.is_accepted = true;
 
     const auto width = Common::AlignUp<u32>(frame->width, 16);
@@ -354,12 +553,23 @@ s32 VdecDecoder::Reset() {
 
 AVFrame* VdecDecoder::ConvertNV12Frame(AVFrame& frame, s32 width, s32 height,
                                        s32 content_width, s32 content_height) {
-    AVFrame* nv12_frame = av_frame_alloc();
+    // g2-arm64: one NV12 frame for the decoder's life, handed out as a new reference each time;
+    // the caller has freed the previous one, so the buffer is free to write again.
+    if (!m_nv12_frame || m_nv12_frame->width != width || m_nv12_frame->height != height) {
+        av_frame_free(&m_nv12_frame);
+        m_nv12_frame = av_frame_alloc();
+        m_nv12_frame->format = AV_PIX_FMT_NV12;
+        m_nv12_frame->width = width;
+        m_nv12_frame->height = height;
+        if (av_frame_get_buffer(m_nv12_frame, 0) < 0) {
+            av_frame_free(&m_nv12_frame);
+            return nullptr;
+        }
+        m_nv12_content_width = m_nv12_content_height = 0;
+    }
+    AVFrame* nv12_frame = m_nv12_frame;
     nv12_frame->pts = frame.pts;
     nv12_frame->pkt_dts = frame.pkt_dts < 0 ? 0 : frame.pkt_dts;
-    nv12_frame->format = AV_PIX_FMT_NV12;
-    nv12_frame->width = width;
-    nv12_frame->height = height;
     nv12_frame->sample_aspect_ratio = frame.sample_aspect_ratio;
     nv12_frame->crop_top = frame.crop_top;
     nv12_frame->crop_bottom = frame.crop_bottom;
@@ -367,30 +577,40 @@ AVFrame* VdecDecoder::ConvertNV12Frame(AVFrame& frame, s32 width, s32 height,
     nv12_frame->crop_right = frame.crop_right;
     nv12_frame->opaque = frame.opaque;
 
-    av_frame_get_buffer(nv12_frame, 0);
-    if (content_width != width || content_height != height) {
-        // Black around the picture (limited range: Y 16, Cb/Cr 128).
+    if ((content_width != width || content_height != height) &&
+        (content_width != m_nv12_content_width || content_height != m_nv12_content_height)) {
+        // Black around the picture (limited range: Y 16, Cb/Cr 128), once: the picture is
+        // written into the same place every frame.
         for (s32 y = 0; y < height; ++y) {
             std::memset(nv12_frame->data[0] + y * nv12_frame->linesize[0], 16, width);
         }
         for (s32 y = 0; y < height / 2; ++y) {
             std::memset(nv12_frame->data[1] + y * nv12_frame->linesize[1], 128, width);
         }
+        m_nv12_content_width = content_width;
+        m_nv12_content_height = content_height;
     }
 
-    m_sws_context = sws_getCachedContext(m_sws_context, frame.width, frame.height,
-                                         AVPixelFormat(frame.format), content_width,
-                                         content_height, AV_PIX_FMT_NV12, SWS_BILINEAR,
-                                         nullptr, nullptr, nullptr);
-
-    const auto res = sws_scale(m_sws_context, frame.data, frame.linesize, 0, frame.height,
-                               nv12_frame->data, nv12_frame->linesize);
+    int res = 0;
+    if (!AreaDownscale(frame, *nv12_frame, content_width, content_height)) {
+        m_sws_context = sws_getCachedContext(m_sws_context, frame.width, frame.height,
+                                             AVPixelFormat(frame.format), content_width,
+                                             content_height, AV_PIX_FMT_NV12, SWS_BILINEAR,
+                                             nullptr, nullptr, nullptr);
+        res = sws_scale(m_sws_context, frame.data, frame.linesize, 0, frame.height,
+                        nv12_frame->data, nv12_frame->linesize);
+    }
     if (res < 0) {
         LOG_ERROR(Lib_Vdec2, "Could not convert to NV12: {}", av_err2str(res));
         return nullptr;
     }
 
-    return nv12_frame;
+    AVFrame* reference = av_frame_alloc();
+    if (!reference || av_frame_ref(reference, nv12_frame) < 0) {
+        av_frame_free(&reference);
+        return nullptr;
+    }
+    return reference;
 }
 
 } // namespace Libraries::Videodec2

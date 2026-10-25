@@ -15,6 +15,12 @@ extern "C" {
 
 namespace Libraries::Videodec2 {
 
+/// g2-arm64: the time decodes spent since the last call, by stage (for the decode rate line).
+struct VdecStageTimes {
+    double decode_s, slowest_decode_ms, convert_s, copy_s;
+};
+VdecStageTimes TakeVdecStageTimes();
+
 class VdecDecoder {
 public:
     VdecDecoder(const OrbisVideodec2DecoderConfigInfo& configInfo,
@@ -36,6 +42,11 @@ private:
 private:
     AVCodecContext* m_codec_context = nullptr;
     SwsContext* m_sws_context = nullptr;
+    /// g2-arm64: the converted frame, kept (ConvertNV12Frame hands out references to it), and
+    /// the picture size its black border was filled for.
+    AVFrame* m_nv12_frame = nullptr;
+    s32 m_nv12_content_width = 0;
+    s32 m_nv12_content_height = 0;
     s32 m_max_width = 0;
     s32 m_max_height = 0;
     bool m_reported = false;

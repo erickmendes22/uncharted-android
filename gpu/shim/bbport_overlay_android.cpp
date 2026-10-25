@@ -185,6 +185,12 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
                                 s.upscaler == BbSettings::UpscalerTaa ? "TAA" : "FSR 3.1",
                                 scene_w, scene_h);
         }
+        if (const char* problem = s.upscaler_problem.load();
+            problem && s.upscaler == BbSettings::UpscalerFsr3) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.55f, 0.3f, 1.0f));
+            ImGui::TextWrapped("%s", problem);
+            ImGui::PopStyleColor();
+        }
         if (!scene_is_output) {
             Note("The picture is scaled to the screen by the port; upscaling by FSR itself needs "
                  "the game's targets at the output size (not yet). A sharper picture: a bigger "

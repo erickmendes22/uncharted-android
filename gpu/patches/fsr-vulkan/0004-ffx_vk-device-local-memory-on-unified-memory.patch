@@ -1,0 +1,40 @@
+diff --git a/upstream/ffx-1.1.4/sdk/src/backends/vk/ffx_vk.cpp b/upstream/ffx-1.1.4/sdk/src/backends/vk/ffx_vk.cpp
+--- a/upstream/ffx-1.1.4/sdk/src/backends/vk/ffx_vk.cpp
++++ b/upstream/ffx-1.1.4/sdk/src/backends/vk/ffx_vk.cpp
+@@ -426,6 +426,10 @@
+     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+ 
+     uint32_t bestCandidate = UINT32_MAX;
++    // bbport: on unified memory every device-local type may be host-visible too (all of
++    // Turnip's are): the first such type is taken when there is no other.
++    uint32_t hostVisibleCandidate = UINT32_MAX;
++    VkMemoryPropertyFlags hostVisibleProperties = 0;
+ 
+     for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+         const VkMemoryPropertyFlags memoryProperties = memProperties.memoryTypes[i].propertyFlags;
+@@ -441,8 +445,13 @@
+             (memoryProperties & requestedProperties) == requestedProperties) {
+ 
+             // if just device-local memory is requested, make sure this is the invisible heap to prevent over-subscribing the local heap
+-            if (requestedProperties == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT && (memoryProperties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
++            if (requestedProperties == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT && (memoryProperties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
++                if (hostVisibleCandidate == UINT32_MAX) {
++                    hostVisibleCandidate = i;
++                    hostVisibleProperties = memoryProperties;
++                }
+                 continue;
++            }
+ 
+             bestCandidate = i;
+             outProperties = memoryProperties;
+@@ -453,6 +462,10 @@
+         }
+     }
+ 
++    if (bestCandidate == UINT32_MAX && hostVisibleCandidate != UINT32_MAX) {
++        outProperties = hostVisibleProperties;
++        return hostVisibleCandidate;
++    }
+     return bestCandidate;
+ }
+ 

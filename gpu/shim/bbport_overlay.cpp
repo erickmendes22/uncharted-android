@@ -462,7 +462,8 @@ void FpsCounter() {
     // g2-arm64: "ms", not upstream's Russian abbreviation (every user sees the counter).
     ImGui::Text("%.0f FPS  %.1f ms  %s", frame_ms_avg > 0.0f ? 1000.0f / frame_ms_avg : 0.0f,
                 frame_ms_avg,
-                s.upscaler == BbSettings::UpscalerFsr3   ? "FSR 3.1"
+                s.upscaler == BbSettings::UpscalerFsr3
+                    ? (s.upscaler_problem.load() ? "FSR 3.1 failed" : "FSR 3.1")
                 : s.upscaler == BbSettings::UpscalerFsr4 ? "FSR 4"
                 : s.upscaler == BbSettings::UpscalerFsr411 ? "FSR 4.1.1"
                 : s.upscaler == BbSettings::UpscalerTaa ? "TAA"

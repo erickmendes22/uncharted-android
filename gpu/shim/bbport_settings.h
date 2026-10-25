@@ -107,6 +107,8 @@ struct Values {
     std::atomic<int> frame_gen_multiplier{2};
     std::atomic<int> dlssg_max_multiplier{1};
     std::atomic<const char*> frame_gen_problem{nullptr};
+    /// g2-arm64: why the selected FSR 3.1 is not running (its context failed), or null.
+    std::atomic<const char*> upscaler_problem{nullptr};
 
     /// Startup settings for the explicit BB_RENDER_RES compatibility patch only.
     int startup_preset = NativeAA;
