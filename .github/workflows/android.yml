@@ -1,0 +1,83 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**/*.md']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      WORK: ${{ github.workspace }}/.android-work
+      APP_ID: com.daedalus.uncharted
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      KEYSTORE_PASS: pass:android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install native build tools and SDK
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ninja-build python3-venv bison flex pkg-config curl zip binutils glslang-tools
+          sdkmanager 'ndk;30.0.16248370' 'build-tools;35.0.1' 'platforms;android-35'
+          echo "NDK=$ANDROID_HOME/ndk/30.0.16248370" >> "$GITHUB_ENV"
+          echo "SDK=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "KEYSTORE=$RUNNER_TEMP/uncharted-development.p12" >> "$GITHUB_ENV"
+      - name: Restore pinned dependency builds
+        uses: actions/cache@v4
+        with:
+          path: .android-work
+          key: android-native-v1-${{ runner.os }}-${{ hashFiles('android/scripts/build_all.sh', 'android/scripts/port-arm64/**', '.gitmodules') }}
+      - name: Prepare development signing key
+        shell: bash
+        run: base64 --decode .github/android/development-key.base64 > "$KEYSTORE"
+      - name: Build upstream Android baseline
+        shell: bash
+        run: |
+          mkdir -p "$WORK"
+          set -o pipefail
+          bash android/scripts/build_all.sh 2>&1 | tee "$WORK/build.log"
+      - name: Verify APK and record source revision
+        shell: bash
+        run: |
+          mkdir -p dist
+          apk="$WORK/apk/uncharted-android.apk"
+          "$SDK/build-tools/35.0.1/apksigner" verify --verbose --print-certs "$apk" > dist/signature.txt
+          "$SDK/build-tools/35.0.1/aapt2" dump badging "$apk" > dist/package.txt
+          grep -q "package: name='com.daedalus.uncharted'" dist/package.txt
+          grep -q "native-code: 'arm64-v8a'" dist/package.txt
+          cp "$apk" dist/Uncharted-Daedalus-0.2.4-baseline.apk
+          git rev-parse HEAD > dist/source-commit.txt
+          sha256sum dist/*.apk > dist/SHA256SUMS
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Uncharted-Daedalus-0.2.4-baseline
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload compilation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-logs
+          path: |
+            .android-work/*.log
+            .android-work/deps/build/*.log
+          if-no-files-found: ignore
+          retention-days: 14
