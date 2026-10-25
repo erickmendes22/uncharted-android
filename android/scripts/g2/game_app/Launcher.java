@@ -835,6 +835,10 @@ public class Launcher extends Activity {
             if (g[0].equals("u1")) writeText(new File(files, "args.txt"), args.toString());
             // The movie decoder's picture size goes with a size below 1080p (port 0015).
             env[i] = preset != null && below1080 ? "BB_VDEC_CONTENT=" + width + "x" + height + "\n" : "-BB_VDEC_CONTENT\n";
+            // U2's aiming autofocus reads a 1x1 render result on the CPU: copied back for U2
+            // only, as upstream does (issue #7; it costs elsewhere). More environment overrides.
+            if (g[0].equals("u2") && !extraEnv.getText().toString().contains("BB_TINY_READBACK"))
+                env[i] += "BB_TINY_READBACK=1\n";
         }
         StringBuilder e = new StringBuilder();
         e.append("# Written by the launcher on every start; edit the settings there.\n");

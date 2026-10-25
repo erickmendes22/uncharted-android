@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <cstdlib>
 #include <xxhash.h>
 
 #include "bbport_toggles.h"
@@ -87,6 +88,31 @@ void TextureCache::ProcessDownloadImages() {
         DownloadImageMemory(image_id, true);
     }
     download_images.clear();
+    // bbport: copied with the work recorded so far and written to guest memory once the GPU
+    // has done it, without waiting here: the game reads them on the CPU a frame or more later.
+    for (const ImageId image_id : tiny_download_images) {
+        DownloadImageMemory(image_id, false);
+    }
+    tiny_download_images.clear();
+}
+
+// bbport: U2's aiming autofocus renders the depth under the crosshair down to a 1x1 R32F image
+// that the game reads on the CPU to set the depth of field. Render targets are not copied back
+// to guest memory (BB_READBACK_LINEAR=1 does it for linear images, waiting for the GPU at each
+// fence), so the CPU read a stale value: the focus sat at ~2 m and everything behind Drake was
+// blurred while aiming. Images of at most 4x4 pixels (1x1 of any tiling, else linear) the GPU
+// writes are now copied back after each use without waiting. BB_TINY_READBACK=1: on.
+bool TextureCache::TinyReadback(const Image& image) {
+    static const bool enabled = [] {
+        // On for Uncharted 2 (upstream fd15af1; g2-arm64: the launcher's env-u2.txt): its aim
+        // blur. Elsewhere it costs ~13% (upstream's measurement in U3's Cartagena square).
+        const char* env = std::getenv("BB_TINY_READBACK");
+        return env && env[0] == '1';
+    }();
+    const auto& size = image.info.size;
+    return enabled && image.info.guest_address != 0 && size.depth == 1 &&
+           size.width * size.height <= 16 &&
+           (!image.info.props.is_tiled || (size.width == 1 && size.height == 1));
 }
 
 void TextureCache::DownloadImageMemory(ImageId image_id, bool sync) {
@@ -733,6 +759,9 @@ ImageView& TextureCache::FindTexture(ImageId image_id, const ImageDesc& desc, Vi
             image.info.guest_address != 0) {
             std::unique_lock lk{download_images_mutex};
             download_images.emplace(image_id);
+        } else if (TinyReadback(image)) {
+            std::unique_lock lk{download_images_mutex};
+            tiny_download_images.emplace(image_id);
         }
     }
     if (refresh) {
@@ -760,6 +789,9 @@ ImageView& TextureCache::FindRenderTarget(ImageId image_id, const ImageDesc& des
     if (readback_linear_images && (!image.info.props.is_tiled || image.info.size.width <= 8)) {
         std::unique_lock lk{download_images_mutex};
         download_images.emplace(image_id);
+    } else if (TinyReadback(image)) {
+        std::unique_lock lk{download_images_mutex};
+        tiny_download_images.emplace(image_id);
     }
     image.usage.render_target = 1u;
     UpdateImage(image_id);
@@ -1337,6 +1369,7 @@ void TextureCache::DeleteImage(ImageId image_id) {
         if (download_images.contains(image_id)) {
             download_images.erase(image_id);
         }
+        tiny_download_images.erase(image_id);
     }
 
     // g2-arm64 experiment (BB_NO_FREE_IMAGES=1): the Vulkan images of deleted cache entries are
