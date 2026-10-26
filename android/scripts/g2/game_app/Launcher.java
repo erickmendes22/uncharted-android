@@ -68,6 +68,7 @@ public class Launcher extends Activity {
 
     /** A value of sce_sys/param.sfo as text, null if missing. */
     static native String sfoValue(String gameDir, String key);
+    static native long gpuChipId();
 
     /** The three games: id, executable, folder under files/ ("" = files/ itself), the
      *  resolution recipe asset (scripts/g2/recipe_from_preset.py). */
@@ -85,7 +86,7 @@ public class Launcher extends Activity {
         {"1920x1080", "1920x1080, the game's own (much slower)"},
     };
     private static final String[] MODULES = {"sce_module/libc.prx", "sce_module/libSceFios2.prx", "sce_sys/param.sfo"};
-    private static final int PICK_FOLDER = 1, PICK_DRIVER = 2;
+    private static final int PICK_FOLDER = 1, PICK_DRIVER = 2, PICK_LOSSLESS = 3;
     /** Where driver packages are downloaded from: the GitHub releases of the community Turnip
      *  builds (the zips the Android emulators share: meta.json and the driver library). */
     private static final String[] DRIVER_SOURCES = {
@@ -104,10 +105,12 @@ public class Launcher extends Activity {
     private LinearLayout driverList;
     private RadioGroup drivers;
     private volatile boolean busy;
+    private long gpuChip;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        gpuChip = gpuChipId();
         // The home screen icon while a game runs: back to it, not a new menu. GameActivity is a
         // task of its own (singleInstance; after a restart into U2/U3 too) and this activity
         // finishes when it starts the game, so the icon found no task of the launcher to resume.
@@ -448,6 +451,34 @@ public class Launcher extends Activity {
                  + "has the same setting with opacity and size.", 14, false);
         note(root, "In the game, swipe in from the right edge of the screen (or press L3+R3) for the settings "
                  + "panel: upscaling, sharpening, frame generation and more, applied at once.");
+        text(root, "LSFG frame generation (your own Lossless.dll):", 14, false);
+        button(root, "Import Lossless.dll", v -> {
+            Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+            pick.setType("*/*");
+            startActivityForResult(pick, PICK_LOSSLESS);
+        });
+        button(root, "Frame generation: Off / LSFG 2x / 3x / 4x", v -> {
+            String[] modes = {"Off", "LSFG 2x", "LSFG 3x", "LSFG 4x"};
+            int selected = 0;
+            if ("lsfg".equals(iniGet("frame_gen"))) {
+                try { selected = Math.max(1, Math.min(3, Integer.parseInt(iniGet("frame_gen_multiplier")) - 1)); }
+                catch (Exception ignored) { selected = 1; }
+            }
+            new android.app.AlertDialog.Builder(this).setTitle("Frame generation")
+                .setSingleChoiceItems(modes, selected, (dialog, which) -> {
+                    if (which > 0 && !new File(files, "Lossless.dll").isFile()) {
+                        status("Import your own Lossless.dll first.");
+                        dialog.dismiss();
+                        return;
+                    }
+                    iniPut("frame_gen", which == 0 ? "off" : "lsfg");
+                    if (which > 0) iniPut("frame_gen_multiplier", Integer.toString(which + 1));
+                    status("Frame generation: " + modes[which]);
+                    dialog.dismiss();
+                }).setNegativeButton("Cancel", null).show();
+        });
+        text(root, "No DLL or Lossless Scaling shaders are included. LSFG needs a compatible Vulkan driver and adds GPU and memory cost.", 14, false);
         text(root, "More environment for the port (KEY=VALUE per line, optional):", 14, false);
         extraEnv = new EditText(this);
         extraEnv.setText(prefs.getString("extra_env", ""));
@@ -494,6 +525,33 @@ public class Launcher extends Activity {
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (result != RESULT_OK || data == null || data.getData() == null) return;
+        if (request == PICK_LOSSLESS) {
+            status("Importing Lossless.dll ...");
+            new Thread(() -> {
+                File tmp = new File(files, "Lossless.dll.import");
+                try (InputStream in = getContentResolver().openInputStream(data.getData());
+                     OutputStream out = new FileOutputStream(tmp)) {
+                    if (in == null) throw new IOException("cannot open selected file");
+                    int first = in.read(), second = in.read();
+                    if (first != 'M' || second != 'Z') throw new IOException("not a Windows DLL (missing MZ header)");
+                    out.write(first); out.write(second);
+                    long total = 2;
+                    byte[] buf = new byte[65536];
+                    for (int n; (n = in.read(buf)) != -1;) {
+                        if ((total += n) > (128L << 20)) throw new IOException("DLL exceeds 128 MB");
+                        out.write(buf, 0, n);
+                    }
+                } catch (Exception ex) {
+                    tmp.delete(); status("DLL import failed: " + ex.getMessage()); return;
+                }
+                try {
+                    java.nio.file.Files.move(tmp.toPath(), new File(files, "Lossless.dll").toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                    status("Lossless.dll imported. Select LSFG to enable frame generation.");
+                } catch (Exception ex) { tmp.delete(); status("DLL import failed: " + ex.getMessage()); }
+            }, "Lossless import").start();
+            return;
+        }
         if (request == PICK_DRIVER) {
             Uri uri = data.getData();
             status("Installing the driver package ...");
@@ -851,7 +909,10 @@ public class Launcher extends Activity {
         e.append("BB_DUMP_REQUEST=").append(d).append("/dump-request\n");
         String cpus = fastCpus();
         if (cpus != null) e.append("BB_RENDER_CPUS=").append(cpus).append('\n');
+        File lossless = new File(files, "Lossless.dll");
+        if (lossless.isFile()) e.append("BB_LSFG_DLL=").append(lossless.getAbsolutePath()).append('\n');
         String driver = driver();
+        if (driver.equals("auto")) driver = automaticDriver();
         if (driver.equals("turnip")) e.append("BB_VK_DRIVER=libvulkan_freedreno.so\n");
         else if (driver.startsWith("pkg:")) {
             File pkg = new File(driversDir(), driver.substring(4));
@@ -889,8 +950,27 @@ public class Launcher extends Activity {
     /** "turnip" (the bundled Turnip), "system", or "pkg:<folder>" (an installed package). */
     private String driver() {
         String d = prefs.getString("driver", null);
-        if (d == null) d = prefs.getBoolean("turnip", new File("/dev/kgsl-3d0").exists()) ? "turnip" : "system";
+        if (d == null) d = prefs.contains("turnip") ? (prefs.getBoolean("turnip", false) ? "turnip" : "system") : "auto";
         return d;
+    }
+
+    private String automaticDriver() {
+        if ((gpuChip >>> 24) == 0x44) {
+            try {
+                File marker = new File(driversDir(), ".gen8-v37");
+                String installed = marker.isFile() ? readText(marker).trim() : "";
+                if (!installed.isEmpty() && packageLibrary(new File(driversDir(), installed)) != null) return "pkg:" + installed;
+                try (InputStream in = getAssets().open("drivers/Turnip_Gen8_V37.zip")) {
+                    installed = installDriver(in, "Turnip_Gen8_V37");
+                }
+                writeText(marker, installed);
+                return "pkg:" + installed;
+            } catch (Exception ex) {
+                status("Automatic Gen8 driver failed: " + ex.getMessage() + ". Using bundled Turnip.");
+                return "turnip";
+            }
+        }
+        return new File("/dev/kgsl-3d0").exists() ? "turnip" : "system";
     }
 
     private static JSONObject packageMeta(File dir) {
@@ -914,6 +994,7 @@ public class Launcher extends Activity {
         drivers = new RadioGroup(this);
         boolean kgsl = new File("/dev/kgsl-3d0").exists();
         List<String[]> options = new ArrayList<>();
+        options.add(new String[] {"auto", "Automatic: " + ((gpuChip >>> 24) == 0x44 ? "Turnip Gen8 V37 (Adreno 8xx)" : kgsl ? "bundled Turnip (Adreno)" : "system Vulkan driver")});
         options.add(new String[] {"turnip", "Bundled Turnip (Mesa 26.2.5 with the port's fixes; Adreno)"
                                             + (kgsl ? "" : " - no Adreno GPU (KGSL) found here")});
         options.add(new String[] {"system", "The system's Vulkan driver" + (kgsl ? " (untested with these games)" : "")});
@@ -935,7 +1016,7 @@ public class Launcher extends Activity {
             RadioButton b = g.findViewById(id);
             if (b != null) prefs.edit().putString("driver", (String) b.getTag()).apply();
         });
-        String current = driver();
+        String current = prefs.getString("driver", "auto");
         for (String[] o : options) {
             RadioButton b = new RadioButton(this);
             b.setText(o[1]);
@@ -945,7 +1026,7 @@ public class Launcher extends Activity {
             if (o[0].equals(current)) drivers.check(b.getId());
         }
         // The chosen package is gone: back to the default.
-        if (drivers.getCheckedRadioButtonId() == -1) drivers.check(drivers.getChildAt(kgsl ? 0 : 1).getId());
+        if (drivers.getCheckedRadioButtonId() == -1) drivers.check(drivers.getChildAt(0).getId());
         driverList.addView(drivers);
     }
 

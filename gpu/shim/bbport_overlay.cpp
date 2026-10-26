@@ -330,7 +330,7 @@ void Menu() {
 
     ImGui::SeparatorText("Генерация кадров");
     static const char* frame_gens[] = {"Выкл", "FSR 3 (любая видеокарта)",
-                                       "DLSS (NVIDIA RTX 40/50)"};
+                                       "DLSS (NVIDIA RTX 40/50)", "LSFG (Lossless.dll)"};
     const int frame_gen = s.frame_gen;
     if (ImGui::BeginCombo("Генерация кадров", frame_gens[frame_gen])) {
         for (int i = 0; i < BbSettings::FrameGenCount; ++i) {
@@ -350,7 +350,7 @@ void Menu() {
     Hint("Кадры между двумя кадрами игры: 60 FPS на экране становятся 120. Нужны представление "
          "Mailbox или Immediate и монитор с такой частотой. Немного добавляет задержку ввода. "
          "Меню и видеоролики не генерируются.");
-    const int max_multiplier = s.frame_gen == BbSettings::FrameGenDlss ? s.dlssg_max_multiplier.load() : 2;
+    const int max_multiplier = s.frame_gen == BbSettings::FrameGenDlss ? s.dlssg_max_multiplier.load() : s.frame_gen == BbSettings::FrameGenLsfg ? 4 : 2;
     ImGui::BeginDisabled(s.frame_gen == BbSettings::FrameGenOff || max_multiplier <= 2);
     int multiplier = std::min(s.frame_gen_multiplier.load(), max_multiplier);
     if (ImGui::SliderInt("Множитель", &multiplier, 2, std::max(max_multiplier, 2), "%dx")) {

@@ -56,3 +56,21 @@ without frame generation first, including gameplay, video, sound, controller
 reconnection and U2 autofocus. Compare LSFG only after that baseline is known.
 Do not describe bundled Adreno 8xx or Mali drivers as validated from their mere
 presence in another port.
+
+## Integration implementation (0.2.5)
+
+Implemented for the next CI APK: LSFG 2x/3x/4x in the existing presenter,
+SAF DLL import, Vulkan memory-model feature gating, Gen8 KGSL detection through
+JNI, automatic selection of the hash-pinned V37 driver on Adreno 8xx, and
+preservation of the existing bundled driver on other Adreno families. Manual
+ZIP import and system-driver selection remain available.
+
+Ported from PC: U3 player-focus recovery and U2 camera-focus/leg-IK recovery
+for 1.00/1.02, identified by unique signatures in executable segments with
+patch-length and mapping checks. The existing callbacks remain intact.
+A host test covers unique, ambiguous, truncated, invalid and absent patterns.
+The FMask store/atomic crash recovery was ported independently of mobile SRT.
+Cloth barriers and Windows memory policies were not enabled.
+
+Physical-device boot, LSFG image quality, pacing and driver stability remain
+unverified. No DLL or game data is supplied.

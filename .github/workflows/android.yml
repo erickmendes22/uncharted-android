@@ -32,6 +32,11 @@ jobs:
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
+      - name: Validate signature patch safety
+        shell: bash
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -Isrc tests/test_guest_fix_patterns.c src/runtime_guest_fixes.c -o "$RUNNER_TEMP/guest-pattern-tests"
+          "$RUNNER_TEMP/guest-pattern-tests"
       - name: Install native build tools and SDK
         shell: bash
         run: |
@@ -49,7 +54,7 @@ jobs:
       - name: Prepare development signing key
         shell: bash
         run: base64 --decode .github/android/development-key.base64 > "$KEYSTORE"
-      - name: Build upstream Android baseline
+      - name: Build Android LSFG integration
         shell: bash
         run: |
           mkdir -p "$WORK"
@@ -64,13 +69,13 @@ jobs:
           "$SDK/build-tools/35.0.1/aapt2" dump badging "$apk" > dist/package.txt
           grep -q "package: name='com.daedalus.uncharted'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.4-baseline.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.5-LSFG.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.4-baseline
+          name: Uncharted-Daedalus-0.2.5-LSFG
           path: dist/
           if-no-files-found: error
           retention-days: 30

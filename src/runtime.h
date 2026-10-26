@@ -128,4 +128,15 @@ typedef struct {
     const unsigned char *patch;
 } RuntimeGuestCallback;
 const RuntimeGuestCallback *runtime_guest_callbacks(size_t *count);
+/* Startup patches identified by a unique instruction pattern, never by guessed offsets. */
+typedef struct {
+    const char *name, *pattern;
+    size_t offset, moved;
+    void *unused_callback;
+    const unsigned char *patch;
+} RuntimeGuestFix;
+const RuntimeGuestFix *runtime_guest_fixes(size_t *count);
+size_t runtime_find_guest_fix(const unsigned char *code, size_t size, const char *pattern,
+                             size_t *found, size_t *length);
+
 #endif

@@ -46,6 +46,8 @@ public:
     bool IsStorageImageWriteWithoutFormatEnabled() const {
         return features.shaderStorageImageWriteWithoutFormat;
     }
+    bool IsVulkanMemoryModelEnabled() const { return vk12_features.vulkanMemoryModel; }
+
     bool IsShaderFloat16Enabled() const {
         return vk12_features.shaderFloat16;
     }

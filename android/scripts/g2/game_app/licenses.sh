@@ -19,10 +19,11 @@ section() { # <title> <file> [lines]
     if [ -n "${3:-}" ]; then sed -n "$3p" "$2"; else cat "$2"; fi
 }
 {
-    echo "This app: uncharted_pc for Android (uncharted-android), GNU GPL version 2 or later; it"
+    echo "This app: uncharted_pc for Android (uncharted-android), GNU GPL version 3 or later (LSFG build); it"
     echo "includes the shadPS4 video core and shader recompiler (GPL-2.0-or-later). The source code:"
     echo "the uncharted-android repository with its FEX and Mesa patches."
     section "uncharted_pc, uncharted-android, shadPS4 - GNU General Public License v2" "$PORT/LICENSE"
+    section "LSFG: Eden, lsfg-vk, ARMSX2, RedVorteX Android integration - GNU GPL v3 or later" "$PORT/LICENSE.GPL-3.0"
     section "FEXCore - MIT" "$FEX/LICENSE"
     section "fmt (FEX) - MIT" "$FEX/External/fmt/LICENSE"
     section "xxHash - BSD-2-Clause" "$FEX/External/xxhash/LICENSE"

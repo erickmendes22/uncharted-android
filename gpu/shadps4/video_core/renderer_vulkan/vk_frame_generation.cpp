@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <mutex>
 #include <string>
 
 #include <vk_mem_alloc.h>
@@ -14,6 +15,7 @@
 #include "video_core/host_shaders/frame_gen_inputs_comp.h"
 #include "video_core/host_shaders/frame_gen_ui_comp.h"
 #include "video_core/renderer_vulkan/vk_dlss.h"
+#include "video_core/renderer_vulkan/lsfg/LsfgRunner.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
@@ -105,15 +107,16 @@ FrameGenerator::FrameGenerator(const Instance& instance_, Scheduler& scheduler_)
         settings.frame_gen = BbSettings::FrameGenFsr3;
     }
     if (settings.frame_gen != BbSettings::FrameGenOff) {
-        const int max = settings.frame_gen == BbSettings::FrameGenDlss ? dlss_max + 1 : 2;
+        const int max = settings.frame_gen == BbSettings::FrameGenDlss ? dlss_max + 1 : settings.frame_gen == BbSettings::FrameGenLsfg ? 4 : 2;
         std::printf("Frame generation: %s, %dx\n",
-                    settings.frame_gen == BbSettings::FrameGenDlss ? "DLSS" : "FSR 3.1",
+                    settings.frame_gen == BbSettings::FrameGenDlss ? "DLSS" : settings.frame_gen == BbSettings::FrameGenLsfg ? "LSFG" : "FSR 3.1",
                     std::min(settings.frame_gen_multiplier.load(), max));
     }
 }
 
 FrameGenerator::~FrameGenerator() {
     DestroyFsr3();
+    lsfg.reset(); // waits for the device before its objects go
     if (Dlss* dlss = Dlss::Get()) {
         dlss->ReleaseFrameGen();
     }
@@ -346,7 +349,7 @@ vk::ImageView FrameGenerator::Hudless(vk::Format format, vk::Extent2D& size) {
     if (!hudless_captured || !captured || !hudless_image) {
         return {};
     }
-    size = {hudless_width, hudless_height};
+    size = vk::Extent2D{hudless_width, hudless_height};
     for (const auto& view : hudless_views) {
         if (view.format == format) {
             return *view.view;
@@ -441,7 +444,9 @@ u32 FrameGenerator::Generate(vk::CommandBuffer cmdbuf, vk::Image color, vk::Imag
         std::printf("Frame generation: %s\n", with_hudless ? "UI kept out of the generated frames"
                                                            : "frames without a picture before the UI");
     }
-    if (provider == BbSettings::FrameGenOff || !had_capture || outputs.empty() || !width ||
+    // LSFG works on the finished frames alone: it does not need this frame's capture.
+    if (provider == BbSettings::FrameGenOff ||
+        (!had_capture && provider != BbSettings::FrameGenLsfg) || outputs.empty() || !width ||
         !height) {
         // A frame without the game's scene (menu, movie, loading): start over afterwards.
         reset = true;
@@ -483,7 +488,19 @@ u32 FrameGenerator::Generate(vk::CommandBuffer cmdbuf, vk::Image color, vk::Imag
     }
     cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount = used, .pImageMemoryBarriers = to_write.data()});
     u32 generated = 0;
-    if (provider == BbSettings::FrameGenDlss) {
+    if (provider == BbSettings::FrameGenLsfg) {
+        // Like FSR 3.1: the picture without UI is interpolated, then this frame's UI on top.
+        // The game's own size sets the motion resolution: the scene's when this frame has one.
+        const vk::Extent2D render = had_capture ? vk::Extent2D{input_width, input_height}
+                                                : vk::Extent2D{width, height};
+        generated = GenerateLsfg(cmdbuf, with_hudless ? hudless : color, width, height, render,
+                                 outputs.first(used));
+        if (with_hudless) {
+            for (u32 i = 0; i < generated; ++i) {
+                ComposeUi(cmdbuf, color_view, hudless_view, outputs[i], width, height);
+            }
+        }
+    } else if (provider == BbSettings::FrameGenDlss) {
         const u32 count = u32(std::clamp(settings.frame_gen_multiplier.load() - 1, 1,
                                          std::min<int>(DlssMaxCount(), int(used))));
         generated = GenerateDlss(cmdbuf, color, color_view, with_hudless ? hudless : vk::Image{},
@@ -689,6 +706,52 @@ u32 FrameGenerator::GenerateDlss(vk::CommandBuffer cmdbuf, vk::Image color,
         }
     }
     return count;
+}
+
+u32 FrameGenerator::GenerateLsfg(vk::CommandBuffer cmdbuf, vk::Image color, u32 width,
+                                 u32 height, vk::Extent2D render,
+                                 std::span<const Output> outputs) {
+    auto& settings = BbSettings::Get();
+    if (!lsfg) {
+        if (!instance.IsVulkanMemoryModelEnabled()) {
+            Fail(BbSettings::FrameGenLsfg, "LSFG needs the Vulkan memory model, which this driver lacks");
+            return 0;
+        }
+        lsfg = std::make_unique<Lsfg::Runner>(Lsfg::DeviceInfo{
+            .device = instance.GetDevice(),
+            .allocator = instance.GetAllocator(),
+            .vulkan_memory_model = true,
+            .null_descriptor = true, // required by the renderer itself (vk_instance.cpp)
+            .shader_float16 = instance.IsShaderFloat16Enabled(),
+            // Only on a resolution change and at the end: queues are not to be used meanwhile.
+            .wait_idle =
+                [this] {
+                    std::scoped_lock lock{Scheduler::submit_mutex};
+                    Check(instance.GetDevice().waitIdle());
+                },
+        });
+        std::printf("Frame generation: LSFG with %s\n", settings.lsfg_dll.c_str());
+    }
+    std::array<Lsfg::Target, MaxGenerated> targets{};
+    const u32 count = std::min<u32>(u32(outputs.size()), MaxGenerated);
+    for (u32 i = 0; i < count; ++i) {
+        targets[i] = {static_cast<VkImage>(outputs[i].image), static_cast<VkImageView>(outputs[i].view)};
+    }
+    const u32 generated = lsfg->Generate(
+        static_cast<VkCommandBuffer>(cmdbuf),
+        {.dll_path = settings.lsfg_dll,
+         .multiplier = u32(settings.frame_gen_multiplier.load()),
+         .flow_scale = u32(settings.lsfg_flow_scale.load()),
+         .fp16 = settings.lsfg_fp16.load()},
+        static_cast<VkImage>(color), {width, height}, static_cast<VkFormat>(ColorFormat), static_cast<VkExtent2D>(render),
+        std::span{targets.data(), count});
+    if (const char* problem = lsfg->Problem()) {
+        static std::string reason;
+        reason = std::string{"LSFG unavailable: "} + problem;
+        Fail(BbSettings::FrameGenLsfg, reason.c_str());
+        return 0;
+    }
+    return generated;
 }
 
 void FrameGenerator::Fail(int provider, const char* reason) {

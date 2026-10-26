@@ -38,6 +38,12 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         }
     } else if (key == "frame_gen_multiplier") {
         v.frame_gen_multiplier = std::clamp(i, 2, 4);
+    } else if (key == "lsfg_dll") {
+        v.lsfg_dll = value;
+    } else if (key == "lsfg_flow_scale") {
+        v.lsfg_flow_scale = std::clamp(i, 25, 100);
+    } else if (key == "lsfg_fp16") {
+        v.lsfg_fp16 = i != 0;
     } else if (key == "preset") {
         v.preset = std::clamp(i, 0, PresetCount - 1);
     } else if (key == "sharpen") {
@@ -132,6 +138,8 @@ void Load() {
         {"BB_REACTIVE_THRESHOLD", "reactive_threshold"}, {"BB_REACTIVE_MAX", "reactive_max"},
         {"BB_UPSCALE_PRESET", "preset"},            {"BB_OBJECT_MOTION", "object_motion"},
         {"BB_FRAME_GEN", "frame_gen"},              {"BB_FRAME_GEN_MULTIPLIER", "frame_gen_multiplier"},
+        {"BB_LSFG_DLL", "lsfg_dll"}, {"BB_LSFG_FLOW_SCALE", "lsfg_flow_scale"},
+        {"BB_LSFG_FP16", "lsfg_fp16"},
         {"BB_SHOW_FPS", "show_fps"}, // g2-arm64: the FPS counter without the menu
         {"BB_FPS_LIMIT", "fps_limit"}, // g2-arm64: 0 none; unset: the port's own rule
         {"BB_TOUCH_PAD", "touch_pad"}, // g2-arm64: the on-screen gamepad: 0, 1, auto
@@ -225,6 +233,7 @@ void Save() {
                  OutputWidths[v.output_res], OutputHeights[v.output_res]);
     std::fprintf(file, "frame_gen=%s\nframe_gen_multiplier=%d\n", FrameGenName(v.frame_gen),
                  v.frame_gen_multiplier.load());
+    std::fprintf(file, "lsfg_flow_scale=%d\nlsfg_fp16=%d\n", v.lsfg_flow_scale.load(), int(v.lsfg_fp16.load()));
     // Read by run.sh at start.
     std::fprintf(file, "live_resolution=%s\n", v.live_resolution < 0 ? "auto"
                                                   : v.live_resolution ? "1" : "0");
@@ -285,7 +294,7 @@ const char* UpscalerName(int upscaler) {
 }
 
 const char* FrameGenName(int frame_gen) {
-    static constexpr const char* names[FrameGenCount] = {"off", "fsr3", "dlss"};
+    static constexpr const char* names[FrameGenCount] = {"off", "fsr3", "dlss", "lsfg"};
     return names[std::clamp(frame_gen, 0, FrameGenCount - 1)];
 }
 

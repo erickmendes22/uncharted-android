@@ -530,7 +530,7 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
         reported_fast = true;
         std::printf("Frame generation: paused while the game runs above 165 FPS\n");
     }
-    if (frame_generator->Wanted() && !frame->is_hdr && !upscaled && !fast_game) {
+    if (frame_generator->Wanted() && !frame->is_hdr && (!upscaled || BbSettings::Get().frame_gen == BbSettings::FrameGenLsfg) && !fast_game) {
         EnsureGenerated(frame);
         // The picture before the UI, composed like the frame (equal outside the UI).
         vk::Image hudless{};

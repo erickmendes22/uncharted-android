@@ -7,12 +7,16 @@
 //  - FSR 3.1 frame interpolation (FireBurn/FSR-Vulkan, native Vulkan): any GPU, 2x.
 //  - DLSS Frame Generation (bbport_dlss.dll with nvngx_dlssg.dll): GeForce RTX 40 2x,
 //    RTX 50 up to 4x.
+//  - LSFG, Lossless Scaling's frame generation (lsfg/, from Eden by way of ARMSX2): any GPU
+//    with the Vulkan memory model, up to 4x, with the shaders of the player's own Lossless.dll
+//    (lsfg_dll). It needs no depth or motion vectors: only the finished frames.
 
 #pragma once
 
 #include <array>
 #include <chrono>
 #include <deque>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -26,6 +30,9 @@ namespace Vulkan {
 
 class Instance;
 class Scheduler;
+namespace Lsfg {
+class Runner;
+}
 
 class FrameGenerator {
 public:
@@ -85,6 +92,8 @@ private:
     void ComposeUi(vk::CommandBuffer cmdbuf, vk::ImageView color, vk::ImageView hudless,
                    const Output& output, u32 width, u32 height);
     void DestroyFsr3();
+    u32 GenerateLsfg(vk::CommandBuffer cmdbuf, vk::Image color, u32 width, u32 height,
+                     vk::Extent2D render, std::span<const Output> outputs);
     /// A provider failed for good: DLSS hands over to FSR 3.1, FSR 3.1 switches it off.
     void Fail(int provider, const char* reason);
 
@@ -131,6 +140,9 @@ private:
         u64 tick;
     };
     std::deque<Pending> fsr3_pending;
+
+    // LSFG: made when first chosen, kept until the generator goes.
+    std::unique_ptr<Lsfg::Runner> lsfg;
 };
 
 } // namespace Vulkan

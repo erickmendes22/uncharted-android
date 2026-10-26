@@ -33,3 +33,25 @@ JNIEXPORT jstring JNICALL Java_dev_unchartedg2_game_Launcher_sfoValue(JNIEnv *en
     if (g) (*env)->ReleaseStringUTFChars(env, game, g);
     return found ? (*env)->NewStringUTF(env, value) : NULL;
 }
+
+/* KGSL device-info ABI, adapted from RedVorteX-TV/Uncharted-arm kgsl_chip_id.c. */
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+struct daedalus_kgsl_devinfo {
+    unsigned int device_id, chip_id, mmu_enabled;
+    unsigned long gmem_gpubaseaddr;
+    unsigned int gpu_id;
+    size_t gmem_sizebytes;
+};
+struct daedalus_kgsl_property { unsigned int type; void *value; size_t sizebytes; };
+JNIEXPORT jlong JNICALL Java_dev_unchartedg2_game_Launcher_gpuChipId(JNIEnv *env, jclass cls) {
+    (void)env; (void)cls;
+    int fd = open("/dev/kgsl-3d0", O_RDWR | O_CLOEXEC);
+    if (fd < 0) return 0;
+    struct daedalus_kgsl_devinfo info = {0};
+    struct daedalus_kgsl_property prop = {1, &info, sizeof(info)};
+    int result = ioctl(fd, _IOWR(0x09, 0x2, struct daedalus_kgsl_property), &prop);
+    close(fd);
+    return result == 0 ? (jlong)info.chip_id : 0;
+}

@@ -37,7 +37,7 @@ if [ -n "$ASSETS_DIR" ]; then cp -r "$ASSETS_DIR"/. "$W/assets/"; fi
 LINK_EXTRA+=(-A "$W/assets")
 cd "$W"
 javac -nowarn -source 11 -target 11 -classpath "$JAR" -d classes \
-    $(find "$SDLJAVA" -name '*.java') "$HERE/GameActivity.java" "$HERE/Launcher.java" 2>&1 | grep -v "^warning\|^Note:" || true
+    $(find "$SDLJAVA" -name '*.java') "$HERE/GameActivity.java" "$HERE/Launcher.java"
 "$BT/d8" --release --min-api 33 --lib "$JAR" --output . $(find classes -name '*.class')
 "$BT/aapt2" link -o base.apk -I "$JAR" --manifest "$MANIFEST" \
     --min-sdk-version 33 --target-sdk-version 35 "${LINK_EXTRA[@]}"

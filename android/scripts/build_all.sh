@@ -115,6 +115,7 @@ grep -A2 'libadrenotools not found' "$WORK/port.log" || true
 echo "== the APK"
 ASSETS=$WORK/assets
 rm -rf "$ASSETS"; mkdir -p "$ASSETS"
+bash "$HERE/fetch_gen8_driver.sh" "$ASSETS"
 PORT=$ROOT FEX=$WORK/fex MESA=$WORK/mesa ADRENOTOOLS=$WORK/libadrenotools DEPS=$WORK/deps \
     bash "$HERE/g2/game_app/licenses.sh" "$ASSETS/licenses.txt" > /dev/null
 KEYSTORE=${KEYSTORE:-$WORK/debug.keystore}

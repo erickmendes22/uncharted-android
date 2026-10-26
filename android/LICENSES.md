@@ -1,7 +1,7 @@
 # Licenses
 
 The app (the port and its Android parts in this repository) is distributed under the
-**GNU General Public License, version 2 or later** (`LICENSE` at the repository root), as
+**GNU General Public License, version 3 or later** (`LICENSE.GPL-3.0`), because the combined binary includes LSFG. The original GPL-2.0-or-later sources remain under their original licenses, as
 uncharted_pc and shadPS4 are. Its source is this repository plus the patches for FEX and Mesa in
 `scripts/port-arm64/patches/`.
 
@@ -32,3 +32,5 @@ Not part of the app and not distributed: the game and everything made from it (t
 the launcher makes the patches from the user's own files. Our patch XMLs
 (`scripts/g2/u1_extra_patches.xml`, `scripts/g2/u23_extra_patches.xml`) hold hashes of the
 original bytes too, not the bytes.
+
+LSFG sources and attribution: `gpu/shadps4/video_core/renderer_vulkan/lsfg/README.md`. No Lossless.dll or derived shader cache is distributed.
