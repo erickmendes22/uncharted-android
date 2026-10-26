@@ -24,7 +24,9 @@ final class AppLanguage {
         try(java.io.InputStream in=base.getAssets().open("translations.json")) {
             catalog=new JSONObject(new String(in.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));
         } catch(Exception ignored) {catalog=new JSONObject();}
-        Configuration cfg=new Configuration(base.getResources().getConfiguration());
+        // Override only locale. Copying the whole configuration pins orientation and
+        // screenWidthDp to startup values, even after rotating back from a dialog.
+        Configuration cfg=new Configuration();
         cfg.setLocale(Locale.forLanguageTag(selected.equals("zh")?"zh-CN":selected));
         return base.createConfigurationContext(cfg);
     }
