@@ -260,8 +260,10 @@ public class Launcher extends Activity {
         bg.setStroke(dp(1), (accent & 0x00FFFFFF) | 0x66000000);
         bg.setCornerRadius(dp(22));
         b.setBackground(new RippleDrawable(ColorStateList.valueOf((accent & 0x00FFFFFF) | 0x33000000), bg, null));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(parent.getOrientation() == LinearLayout.HORIZONTAL ? 0 : ViewGroup.LayoutParams.MATCH_PARENT,
                                                                      ViewGroup.LayoutParams.WRAP_CONTENT);
+        if (parent.getOrientation() == LinearLayout.HORIZONTAL) lp.weight = 1;
+        b.setMinWidth(0); b.setMinimumWidth(0);
         lp.topMargin = dp(8);
         lp.rightMargin = dp(8);
         parent.addView(b, lp);
