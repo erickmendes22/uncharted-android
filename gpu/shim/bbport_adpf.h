@@ -4,7 +4,7 @@
 // Android (min API 30) and the hints are silently off where the symbols are missing.
 //
 // One hint session holds the frame-critical threads: the game's main thread, the GPU command
-// processor (shadPS4:GpuComm), bb:DrawRec, bb:VkRecorder (the first two workers) and the game's
+// processor (shadPS4:GpuComm), bb:DrawRec / bb:DrawScan, bb:DrawPrep (first two), bb:VkRecorder (the first two workers) and the game's
 // GXRenderThread. Threads join by their names (Common::SetCurrentThreadName, the runtime's guest
 // thread names) as they start. Each submitted frame reports its CPU work duration; the target is
 // 1 / the frame limit (BB_FPS_LIMIT; no limit: 1/60 s). BB_ADPF=0 turns all of it off (the thermal

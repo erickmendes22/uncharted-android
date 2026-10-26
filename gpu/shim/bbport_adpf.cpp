@@ -78,7 +78,7 @@ struct State {
     std::size_t session_threads = 0; ///< threads the session has now
     std::atomic<bool> dirty{false};  ///< a thread joined since the session was made
     Probe main_probe, gpu_probe;
-    int recorders = 0;
+    int recorders = 0, preparers = 0;
     bool have_main = false, have_gpu = false, have_draw = false, have_render = false;
     i64 target_ns = 0;
     u64 last_frame_ns = 0;
@@ -343,6 +343,7 @@ void NoteThreadName(const char* name) {
     }
     // Cheap rejection before anything is loaded: only these names matter.
     const bool match = !std::strncmp(name, "shadPS4:GpuComm", 15) || !std::strcmp(name, "bb:DrawRec") ||
+                       !std::strcmp(name,"bb:DrawScan") || !std::strncmp(name,"bb:DrawPrep",11) ||
                        !std::strncmp(name, "bb:VkRecorder", 13) || !std::strncmp(name, "GXRender", 8);
     if (!match) {
         return;
@@ -360,11 +361,13 @@ void NoteThreadName(const char* name) {
             Add(tid);
             OpenProbe(s.gpu_probe, tid);
         }
-    } else if (!std::strcmp(name, "bb:DrawRec")) {
+    } else if (!std::strcmp(name,"bb:DrawRec") || !std::strcmp(name,"bb:DrawScan")) {
         if (!s.have_draw) {
             s.have_draw = true;
             Add(tid);
         }
+    } else if (!std::strncmp(name,"bb:DrawPrep",11)) {
+        if(s.preparers<2){++s.preparers;Add(tid);}
     } else if (!std::strncmp(name, "bb:VkRecorder", 13)) {
         if (s.recorders < 2) { // the first two workers
             ++s.recorders;
