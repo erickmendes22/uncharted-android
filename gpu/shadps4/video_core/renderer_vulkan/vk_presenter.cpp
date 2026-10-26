@@ -1046,7 +1046,7 @@ bool Presenter::PresentImage(Frame* frame, vk::Image image, bool last, bool orig
     {
         std::scoped_lock submit_lock{Scheduler::submit_mutex};
         if (swapchain.Present()) {
-            BbOverlay::NotePresentedFrame(original);
+            BbOverlay::NotePresentedFrame(original,!last);
         } else if (window.GetWidth() != 0 && window.GetHeight() != 0) {
             swapchain.Recreate(window.GetWidth(), window.GetHeight());
         }

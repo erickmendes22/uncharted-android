@@ -377,12 +377,9 @@ void FpsCounter() {
     ImGui::Begin("##uncharted-hud",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoFocusOnAppearing);
     ImGui::PushFont(nullptr,21*base_scale*settings.hud_scale.load());
     // Corner-anchored HUD; controls reserve this rectangle instead of pushing the HUD down.
-    if(settings.frame_gen==BbSettings::FrameGenLsfg) {
-        ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"FPS %.0f | %dx %.0f",presented_fps.real_fps,
-            settings.frame_gen_multiplier.load(),presented_fps.output_fps);
-    } else {
-        ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"FPS %.0f",presented_fps.real_fps);
-    }
+    char fps_text[96];
+    presented_fps.Format(fps_text,sizeof(fps_text),settings.frame_gen==BbSettings::FrameGenLsfg?settings.frame_gen_multiplier.load():1);
+    ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"%s",fps_text);
     if(settings.hud_mode>1){ImGui::SameLine();ImGui::Text(" · %.1f ms",frame_ms_avg);}
     if(settings.hud_mode>0){
         if(sample.gpu>=0)ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU %d%%",sample.gpu);
@@ -822,9 +819,9 @@ static void StartMemoryLog() {
     }).detach();
 }
 
-void NotePresentedFrame(bool original) {
+void NotePresentedFrame(bool original, bool generated) {
     const double now=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    presented_fps.Presented(now,original);
+    presented_fps.Presented(now,original,generated);
 }
 
 void NotePresent() {
