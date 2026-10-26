@@ -3798,5 +3798,10 @@
     }
    ]
   }
+ ],
+ "source_xml_sha256": "8c41ffc79e34b149ba452c78dffa594035806c01cea4048ca0cbe2144473e517",
+ "supported_versions": [
+  "01.00",
+  "01.02"
  ]
 }

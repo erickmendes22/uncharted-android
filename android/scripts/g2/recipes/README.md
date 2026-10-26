@@ -23,3 +23,17 @@ and only what changes:
 `when`: `below_1080p` for the resolution fields and the movie fixes (at 1920x1080 the game needs
 neither), `always` for the rest (the low-FPS assert bypass, the logo skip, the sleep mode, the
 navmesh fixes), which the launcher applies at every size, 1920x1080 included.
+
+## Versioned Bachata catalog
+
+`bachata.json` retains separate 01.00 and 01.02 batches for all three games.
+The four fixed resolution choices are 720p, 540p, 468p and 360p. Each complete
+batch is accepted only when all original-byte SHA-256 checks match. The launcher
+requires exactly one matching variant and rejects overlapping writes; SFO labels
+do not override executable compatibility. The existing recipe takes precedence
+where it matches, and the versioned catalog provides the fallback for 01.00.
+
+The supplied corrected XML was compared to all 112 catalog entries without
+removing the 01.02 entries. All 12 resolution variants for the three supplied
+01.00 executables match their original bytes. 01.02 executables were not supplied
+for direct comparison. See `android/validation/patches-1.00-1.02.json`.

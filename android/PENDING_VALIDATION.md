@@ -2,7 +2,8 @@
 
 The user explicitly requested finishing source changes without generating a build.
 Do not dispatch Actions, update main, or remove BUILD_HOLD without explicit build
-permission. The corrected XML and game eboot/ELFs are still expected for validation.
+permission. The corrected XML and three 01.00 executables were received and checked.
+Build permission remains on hold; receiving these files does not authorize a build.
 
 | Request | Source changes |
 | --- | --- |
@@ -41,6 +42,22 @@ or device validation of these changes. In particular, FSR image quality/history,
 video sizing, PKG extraction and crash recovery still require the later approved
 build and device test. Do not report those runtime results as confirmed.
 
-The existing XML/catalog was not replaced. Integrate the user's corrected XML
-only after matching its expected bytes, executable identities, version/address
-mapping, and overlap/branch targets against the supplied eboot/ELFs.
+## Corrected XML validation — 2026-10-26
+
+The supplied corrected XML matches all 112 existing catalog batches exactly:
+56 for 01.00 and 56 for 01.02. No variant was removed, retagged or duplicated.
+The catalog now records the source XML hash and supported versions.
+
+All 12 resolution batches for 01.00 (720p, 540p, 468p and 360p across U1/U2/U3)
+match the supplied executables. The other 44 optional 01.00 batches also match
+Expected bytes; this is compatibility evidence, not validation of their effects.
+All 96 movie-call rewrites across both versions retain the original call targets;
+replacement lengths, instruction decoding and push/pop balance were checked.
+The 01.02 batches remain identical to the XML, but 01.02 executables were not
+supplied for direct comparison. Runtime selects an unambiguous variant using
+original-byte hashes instead of trusting an SFO version label alone.
+
+Reproduce with `scripts/g2/validate_catalog.py` (under android/) and `--xml`,
+`--catalog`, one `--exe canonical-name=path` per executable, and `--report`.
+See `validation/patches-1.00-1.02.json` (under android/) for hashes and counts.
+No build was generated or dispatched.

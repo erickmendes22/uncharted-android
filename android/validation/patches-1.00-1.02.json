@@ -1,0 +1,52 @@
+{
+  "xml_sha256": "8c41ffc79e34b149ba452c78dffa594035806c01cea4048ca0cbe2144473e517",
+  "catalog_matches_xml": true,
+  "patches_by_version": {
+    "01.02": 56,
+    "01.00": 56
+  },
+  "movie_call_targets_preserved": 96,
+  "intra_patch_overlaps": 0,
+  "executables": [
+    {
+      "executable": "eboot.bin",
+      "sha256": "8953b6ed5cf4d1d26aa3aa4cd1e0c72817ea155f6a5774fb17f6fec7d787f953",
+      "matching_versions": {
+        "01.00": 19
+      },
+      "resolution_matches": {
+        "Resolution: 720p (performance)": "01.00",
+        "Resolution: 540p (extreme performance)": "01.00",
+        "Resolution: 468p (ultra performance)": "01.00",
+        "Resolution: 360p (maximum performance)": "01.00"
+      }
+    },
+    {
+      "executable": "big2-ps4_Shipping.elf",
+      "sha256": "61c0456314a8de2dbd32e1c426f7828092de7d25a58b83386ced1a48d7765ebe",
+      "matching_versions": {
+        "01.00": 19
+      },
+      "resolution_matches": {
+        "Resolution: 720p (performance)": "01.00",
+        "Resolution: 540p (extreme performance)": "01.00",
+        "Resolution: 468p (ultra performance)": "01.00",
+        "Resolution: 360p (maximum performance)": "01.00"
+      }
+    },
+    {
+      "executable": "big3-ps4_Shipping.elf",
+      "sha256": "acc952e5a9ac7062f8ecfc52700faa599d5f29deb1e24f9e81e6de832326d1d0",
+      "matching_versions": {
+        "01.00": 18
+      },
+      "resolution_matches": {
+        "Resolution: 720p (performance)": "01.00",
+        "Resolution: 540p (extreme performance)": "01.00",
+        "Resolution: 468p (ultra performance)": "01.00",
+        "Resolution: 360p (maximum performance)": "01.00"
+      }
+    }
+  ],
+  "limits": "01.00 binaries checked directly. 01.02 catalog preserved exactly from XML; no 01.02 executable supplied. No APK build or device test."
+}
