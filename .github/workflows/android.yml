@@ -84,6 +84,8 @@ jobs:
           "$RUNNER_TEMP/mobile-policy-test"
           g++ -std=c++20 -Igpu/shim tests/test_android_fps_meter.cpp -o "$RUNNER_TEMP/fps-meter-test"
           "$RUNNER_TEMP/fps-meter-test"
+          g++ -std=c++20 -O0 -Igpu/shim -Igpu/third_party/imgui tests/test_android_hud_text.cpp gpu/third_party/imgui/{imgui,imgui_draw,imgui_widgets,imgui_tables}.cpp -o "$RUNNER_TEMP/hud-text-test"
+          "$RUNNER_TEMP/hud-text-test"
       - name: Verify Android touch controls and menu
         shell: bash
         run: |

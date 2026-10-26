@@ -28,3 +28,6 @@ Performance varies by device and game; new performance changes await device comp
 - Refreshes the swapchain when display rotation changes from an identity transform.
 
 These fixes retain version 0.2.5. Device rotation and gameplay need confirmation on hardware.
+
+- FG uses the same `FPS 30→60 LSFG 2x` notation as Daedalus GoW3 and inFAMOUS, falling back to a single FPS value when generation is inactive.
+- HUD measures its full text before drawing; fits long FG lines within the screen, including full mode at 300%, without wrapping or a one-frame auto-size delay.

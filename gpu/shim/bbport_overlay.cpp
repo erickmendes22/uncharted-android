@@ -1,4 +1,5 @@
 #include "bbport_fps_meter.h"
+#include "bbport_hud_text.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "bbport_overlay.h"
 
@@ -370,37 +371,44 @@ void FpsCounter() {
     const bool right=pos==1||pos==3,bottom=pos>=2;
     const float gutter=pad,top=pad;
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x+(right?viewport->WorkSize.x-gutter:gutter),viewport->WorkPos.y+(bottom?viewport->WorkSize.y-pad:top)),ImGuiCond_Always,ImVec2(right?1.f:0.f,bottom?1.f:0.f));
-    ImGui::SetNextWindowBgAlpha(.52f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(12*base_scale,7*base_scale));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,6*base_scale);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0);
-    ImGui::Begin("##uncharted-hud",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoFocusOnAppearing);
-    ImGui::PushFont(nullptr,21*base_scale*settings.hud_scale.load());
-    // Corner-anchored HUD; controls reserve this rectangle instead of pushing the HUD down.
-    char fps_text[96];
+    const ImVec4 green(.55f,1.f,.14f,1),purple(.88f,.34f,1,1),cyan(.12f,.86f,1,1);
+    const ImVec4 normal=ImGui::GetStyle().Colors[ImGuiCol_Text],muted=ImGui::GetStyle().Colors[ImGuiCol_TextDisabled];
+    char fps_text[96],temp[128];
     presented_fps.Format(fps_text,sizeof(fps_text),settings.frame_gen==BbSettings::FrameGenLsfg?settings.frame_gen_multiplier.load():1);
-    ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"%s",fps_text);
-    if(settings.hud_mode>1){ImGui::SameLine();ImGui::Text(" · %.1f ms",frame_ms_avg);}
-    if(settings.hud_mode>0){
-        if(sample.gpu>=0)ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU %d%%",sample.gpu);
-        else ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU --");
-        ImGui::SameLine();ImGui::TextDisabled("·");ImGui::SameLine();
-        ImGui::TextColored(ImVec4(.12f,.86f,1,1),"CPU %.0f%%",sample.cpu_percent);
+    BbHudText::Lines lines={{{fps_text,green}}};
+    if(settings.hud_mode>1) {
+        const float real_ms=presented_fps.real_fps>0?1000.f/presented_fps.real_fps:0.f;
+        std::snprintf(temp,sizeof(temp)," · %.1f ms",real_ms);lines[0].push_back({temp,normal});
+    }
+    if(settings.hud_mode>0) {
+        if(sample.gpu>=0)std::snprintf(temp,sizeof(temp),"GPU %d%%",sample.gpu);
+        else std::snprintf(temp,sizeof(temp),"GPU --");
+        BbHudText::Line utilization={{temp,purple},{" · ",muted}};
+        std::snprintf(temp,sizeof(temp),"CPU %.0f%%",sample.cpu_percent);utilization.push_back({temp,cyan});
+        lines.push_back(std::move(utilization));
+        BbHudText::Line detail;
         if(settings.upscaler!=BbSettings::UpscalerOff) {
-            // Report the applied startup mode, not a pending launcher selection or
-            // the game's native display allocation. Every temporal preset outputs 720p.
             const char* res=std::getenv("BB_RENDER_RES");
             const char* mode=res && std::strcmp(res,"960x540")==0 ? "Quality"
                 :res && std::strcmp(res,"832x468")==0 ? "Balanced"
                 :res && std::strcmp(res,"640x360")==0 ? "Performance" : "Native AA";
-            if(settings.upscaler==BbSettings::UpscalerFsr3)ImGui::Text("FSR %s",BbLocale::Text(mode));
-            else ImGui::Text("TAA");
+            detail.push_back({settings.upscaler==BbSettings::UpscalerFsr3?std::string("FSR ")+BbLocale::Text(mode):"TAA",normal});
         }
         if(settings.hud_mode>1) {
-            if(settings.upscaler!=BbSettings::UpscalerOff)ImGui::SameLine();
-            ImGui::Text(" · RAM %.2f GB",sample.ram_mib/1024.f);
+            std::snprintf(temp,sizeof(temp),"%sRAM %.2f GB",detail.empty()?"":" · ",sample.ram_mib/1024.f);detail.push_back({temp,normal});
         }
+        if(!detail.empty())lines.push_back(std::move(detail));
     }
+    const ImVec2 padding(12*base_scale,7*base_scale);
+    const auto layout=BbHudText::Measure(lines,21*base_scale*settings.hud_scale.load(),viewport->WorkSize.x-2*pad,padding);
+    ImGui::SetNextWindowSize(layout.size,ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(.52f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,padding);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,6*base_scale);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0);
+    ImGui::Begin("##uncharted-hud",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoFocusOnAppearing);
+    ImGui::PushFont(nullptr,layout.font);
+    BbHudText::Draw(lines);
 
 #ifdef __ANDROID__
     const auto hud_pos=ImGui::GetWindowPos(),hud_size=ImGui::GetWindowSize();
