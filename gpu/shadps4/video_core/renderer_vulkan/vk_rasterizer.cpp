@@ -1833,8 +1833,8 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
                 const auto sharp=prepared_display?prepared_display->image_sharps[i]:resource.GetSharp(*display_ps);
                 if(!sharp.Address() || !memory->IsValidGpuMapping(sharp.Address(),0) ||
                    !IsKnownFormat(sharp.GetDataFmt(),sharp.GetNumberFmt()))continue;
-                const auto& entry=CachedImageDescEntry(sharp,resource);
-                const auto id=texture_cache.FindImage(entry.desc);
+                auto source_desc=CachedImageDescEntry(sharp,resource).desc;
+                const auto id=texture_cache.FindImage(source_desc);
                 const auto& image=texture_cache.GetImage(id);
                 if((image.info.pixel_format==vk::Format::eR8G8B8A8Unorm || image.info.pixel_format==vk::Format::eR8G8B8A8Srgb) &&
                    upscaler->MatchesSceneTarget(image.info.size.width,image.info.size.height) &&
