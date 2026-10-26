@@ -1,138 +1,113 @@
-# uncharted-android
+# Uncharted Daedalus
 
-Uncharted: The Nathan Drake Collection (PS4) on Android handhelds with Snapdragon (Adreno) GPUs.
-A fork of [uncharted_pc](https://github.com/Supermedo/uncharted_pc) by SuperMedo, the native port
-of the PS4 game, rebuilt for ARM64 Android.
+Android port of **Uncharted: The Nathan Drake Collection**, featuring a **Bionic runtime**,
+**FEX CPU translation** and **native Vulkan rendering**.
 
-> **Experimental, an early preview (version 0.2.4).** Tested on one device so far (Retroid Pocket G2).
-> **No game files are included.** You need your own decrypted dump of the collection.
-> This project is not affiliated with Sony Interactive Entertainment or Naughty Dog.
+**Version 0.2.5** · [Downloads](https://github.com/erickmendes22/uncharted-android/releases)
+· [Release source](https://github.com/erickmendes22/uncharted-android/tree/android-ui-runtime-pending-xml)
 
-## Status
+Includes **Drake's Fortune**, **Among Thieves** and **Drake's Deception**.
 
-Tested on one device so far: the Retroid Pocket G2 (Snapdragon G2 Gen 2, Adreno A735, 8 GB),
-at 1280x720.
+## Features
 
-- **Uncharted: Drake's Fortune**: playable, about 30-37 FPS in the places measured (GPU-bound).
-- **Uncharted 2: Among Thieves**: playable, 30 FPS in a heavy spot (Istanbul palace), 45-48 with
-  the camera up.
-- **Uncharted 3: Drake's Deception**: playable at 25-30 FPS in the first chapter's fight. It is
-  limited by the CPU: the game's job workers spin while idle, as designed for the PS4's dedicated
-  cores, and leave little CPU time for the port's renderer threads.
-- The app has a launcher: it finds your dump, makes the loader's files from it on the device and
-  writes the settings. The APK is on the
-  [Releases](https://github.com/revvv991/uncharted-android/releases) page.
+- Uncharted-themed launcher and in-game settings.
+- Redesigned touch controls with adjustable size, opacity and camera sensitivity,
+  plus physical controller support.
+- PKG installation and updates, game-folder selection, save backup/restore and
+  log export to a folder of your choice.
+- Optional Fullscreen, configurable frame limits and VSync.
+- Minimal, Compact and Full performance HUD modes, with positioning and scale
+  settings up to **300%**.
+- **LSFG 2x / 3x / 4x** using your own `Lossless.dll`. The HUD reports measured
+  original and output FPS, for example **FPS 30→60 LSFG 2x**. Text automatically
+  fits the available width to keep the complete line visible.
+- FSR 3.1 temporal reconstruction and TAA, with sharpening controls.
+- Resolution and graphics patches for supported game versions **1.00 and 1.02**,
+  checked against your executables before applying.
+- Bundled Turnip drivers, custom driver ZIP import and system-driver selection.
+- Adaptive texture-memory management, texture-cache fixes, improved frame pacing
+  and Android performance hints.
+- Android game-category and Game Mode integration.
+- Automatic game-file preparation when playing and a launcher that adapts to
+  screen rotation.
 
-## How it works
+## FSR 3.1 presets
 
-- The game's x86-64 code runs through [FEXCore](https://github.com/FEX-Emu/FEX), which translates it
-  to ARM64 inside an ordinary Android app (no Linux userland, Wine or Box64).
-- The rest of the port is native ARM64: the replacements for the PS4 system libraries and the
-  renderer derived from [shadPS4](https://github.com/shadps4-emu/shadPS4), which translates PS4 GPU
-  commands and shaders to Vulkan.
-- Vulkan driver: Turnip (Mesa), loaded with libadrenotools, with a patch for the KGSL kernel driver.
-  The stock Adreno driver hangs the GPU in this game.
-- Most changes to the port are about performance on mobile hardware: a staged GPU command pipeline,
-  batched skinning, fewer waits between the CPU and the GPU. They are marked `g2-arm64:` in the code.
+All temporal presets reconstruct to **1280 × 720**. The input resolution changes
+with the selected preset.
+
+| Preset | Internal resolution | FSR output |
+| --- | --- | --- |
+| Native AA | 1280 × 720 | 1280 × 720 |
+| Quality | 960 × 540 | 1280 × 720 |
+| Balanced | 832 × 468 | 1280 × 720 |
+| Performance | 640 × 360 | 1280 × 720 |
+
+Resolution changes apply on the next game start. With upscaling disabled, the
+manual resolution setting applies. LSFG is the available frame-generation option.
+
+## Languages
+
+English, Portuguese, Spanish, French, German, Italian, Russian, Japanese, Korean,
+Simplified Chinese, Turkish and Polish.
+
+**Automatic** follows the system language and falls back to English when it is
+unsupported. The selected language also applies to the game on its next start;
+available text and audio depend on the languages included in your game files.
 
 ## Requirements
 
-- Android 13 or later, a Snapdragon SoC with an Adreno GPU supported by Turnip, 8 GB of RAM.
-- A kernel with 4 KB memory pages (FEXCore needs them; the launcher tells when a device uses
-  16 KB pages).
-- Your own decrypted dump of the collection (CUSA02344, CUSA02320, CUSA02343). The resolution
-  recipes (sizes below 1920x1080) fit version 1.02 of the executables; the launcher checks that
-  and makes the patches from your own files.
-- "All files access" for the app: the loader reads the dump from its folder by path.
+- **Android 13 or newer** and an **ARM64** device.
+- A compatible Vulkan GPU and driver; Turnip requires a supported Adreno GPU.
+- A kernel using **4 KB memory pages**, as required by FEX.
+- Your own decrypted game files or supported game PKG.
 
-## Repository layout
+No game files, firmware or `Lossless.dll` are included. Performance depends on
+the device, driver, game and settings. Game Mode and game-dashboard availability
+also depend on the Android device.
 
-- The root is the port: upstream uncharted_pc with our work on top, one commit per release
-  (base: uncharted_pc 0.3.6).
-  The upstream README is kept as [README.uncharted_pc.md](README.uncharted_pc.md).
-- [`android/`](android/): the Android part. Build scripts, the APK and its launcher, device tools,
-  the patches for FEX and Mesa.
+## Getting started
 
-## Building
+1. Install the APK and grant storage access when prompted on the first opening.
+2. Choose your decrypted collection folder or use **Install game PKG**.
+   Use **Install update PKG** for a supported update.
+3. Select one of the three games, then choose your driver, graphics and control settings.
+4. Tap **Continue Adventure**. Required runtime files are prepared automatically.
+5. Open the in-game menu using its on-screen button, a swipe from the right edge
+   or **L3 + R3** on a controller. It includes settings, log export and **Exit game**.
 
-Linux x86-64 (we use WSL2 with Ubuntu 24.04), the Android NDK r30, the SDK's build-tools 35.0.1
-and platform 35, a JDK:
-
-    WORK=~/uncharted-android-work bash android/scripts/build_all.sh
-
-The script initializes this repository's submodules if the clone has none, fetches the pinned
-sources of FEX, Mesa (Turnip), libadrenotools, SDL3, FFmpeg and the renderer's other
-dependencies, applies our patches (`android/scripts/port-arm64/patches/`), builds
-them and this repository, and makes `WORK/apk/uncharted-android.apk`. Its header lists the tools
-it needs and its options. The resolution recipes (`android/scripts/g2/recipes/`) go into the APK
-as assets; they hold no bytes of the game. The steps one by one are the scripts in
-`android/scripts/port-arm64/` and `android/scripts/g2/game_app/build.sh`.
-
-## Using the app
-
-1. Install the APK (`uncharted-android-0.2.4.apk` from
-   [Releases](https://github.com/revvv991/uncharted-android/releases)) and open it. Allow access to
-   all files when the launcher asks: the loader reads the dump from its folder by path.
-2. **Choose folder**: the folder of your decrypted collection - with `eboot.bin` (Uncharted 1),
-   `big2-ps4_Shipping.elf` and `big3-ps4_Shipping.elf`, `sce_module/` (`libc.prx`,
-   `libSceFios2.prx`) and `sce_sys/param.sfo`. The launcher says what is missing.
-3. **Prepare**: the launcher makes the loader's files from the game's executables (as the port's
-   `scripts/prepare.py` and `link_modules.py` do on a PC), in a few seconds, into the app's
-   folder. Run it again after you replace the dump.
-4. **Settings**: the size the game renders at - 640x360, 960x540, 1280x720 (recommended) or the
-   game's own 1920x1080 (much slower); below 1080p a few byte patches, made on the device from
-   your executables, set it. The Vulkan driver: the bundled Turnip (tested, with the port's KGSL
-   fixes; keep it on Adreno), the system's driver, or a driver package you add - the zips the
-   Android emulators use (meta.json and the driver library), from a file or downloaded in the
-   app from the GitHub releases of K11MCH1, MrPurple and StevenMXZ (the Gen8 builds are for the
-   Adreno 8xx of the Snapdragon 8 Elite); they are untested with these games - on the G2 one of
-   three worked. Showing each frame at once, the frame rate counter, the frame rate limit
-   (30 / 60 / 120 / off; the panel in the game has it too), the on-screen gamepad (Auto: shown
-   while no gamepad is connected), extra environment variables for the port (for example
-   `TU_DEBUG=sysmem` for a driver package).
-5. **Play**: the collection's menu starts; Uncharted 2 and 3 are started from it (the app
-   restarts itself).
-6. **In the game**: swipe in from the right edge of the screen (or press L3+R3) for the settings
-   panel - the upscaler (FSR 3.1 and TAA: temporal anti-aliasing at the size the game renders
-   at; off: the game's own; the port scales the picture to the screen), sharpening, frame
-   generation, the frame rate limit, the FPS counter, and the output size and finer options
-   under Advanced; changes apply at once and are kept in the app's `bbport.ini`. A tap outside
-   the panel, B or Close closes it.
-7. **On a phone, without a gamepad**: the on-screen gamepad is drawn over the game (Auto, or On
-   in the settings): a finger on the left half of the screen is the left stick (it appears under
-   the finger), a drag on the right half turns the camera (the right stick), the face buttons
-   are at the bottom right, L1/L2 and R1/R2 in the top corners, the D-pad on the left, L3/R3 at
-   the bottom middle, the touch pad button and Options at the top. Several fingers at once.
-   Opacity, size and the camera drag's sensitivity are in the panel.
-
-In the game, L3+R3 opens the port's menu. The first time a place is shown its shaders are compiled
-(stutters). The saves live in the app's folder, which Android deletes with the app: **Back up
-saves** copies them to `Documents/uncharted-android`, **Restore saves** brings them back. For a bug
-report, **Copy the log** puts the game's log (`bb-probe.log`) into the same folder, since other
-apps cannot read the app's own folder on recent Android.
-
-## Authors
-
-revvv991, with Claude (an AI model by Anthropic) as co-author: much of the Android port's code and
-documentation was written by Claude.
+To use LSFG, import your own `Lossless.dll` before selecting a multiplier.
+Keep backups of your saves before uninstalling the app: Android removes app data
+during uninstallation.
 
 ## Credits
 
-- [uncharted_pc](https://github.com/Supermedo/uncharted_pc) by SuperMedo: the port this is built on.
-- [bbport / bloodborne_pc](https://github.com/deadinside28/bloodborne_pc) by deadinside28: the native
-  port uncharted_pc grew from.
-- [shadPS4](https://github.com/shadps4-emu/shadPS4): the renderer and the shader recompiler.
-- [FEX-Emu](https://github.com/FEX-Emu/FEX): FEXCore.
-- [Mesa](https://gitlab.freedesktop.org/mesa/mesa) (Turnip) and
-  [libadrenotools](https://github.com/bylaws/libadrenotools).
-- [SDL3](https://github.com/libsdl-org/SDL) and [FFmpeg](https://ffmpeg.org).
-- [Bachata S4](https://github.com/zenithblue-oss/shadps4-arm64): the resolution recipes are made
-  from the resolution patches in its patch catalog.
-- [Bloodborne-Android](https://github.com/ducvd89/Bloodborne-Android): the same idea for Bloodborne.
-- The components used by uncharted_pc are listed in [README.uncharted_pc.md](README.uncharted_pc.md#credits).
+- Android fork and modifications: [erickmendes22](https://github.com/erickmendes22) /
+  [Daedalus Emulator](https://www.youtube.com/@daedalusemulator).
+- Android base: [revvv991/uncharted-android](https://github.com/revvv991/uncharted-android).
+- Native port: [Supermedo/uncharted_pc](https://github.com/Supermedo/uncharted_pc).
+- Mobile memory and performance integrations:
+  [ducvd89/Bloodborne-Android](https://github.com/ducvd89/Bloodborne-Android).
+- Selected Android integrations:
+  [RedVorteX-TV/Uncharted-arm](https://github.com/RedVorteX-TV/Uncharted-arm).
+- Upstream cache and frame-pacing fixes:
+  [spacepepperoni/uncharted_Linux](https://github.com/spacepepperoni/uncharted_Linux).
+- GPU/runtime foundations: [shadPS4](https://github.com/shadps4-emu/shadPS4),
+  [FEX-Emu](https://github.com/FEX-Emu/FEX) and
+  [bloodborne_pc](https://github.com/deadinside28/bloodborne_pc).
+- [Mesa / Turnip](https://gitlab.freedesktop.org/mesa/mesa),
+  [libadrenotools](https://github.com/bylaws/libadrenotools),
+  [SDL3](https://github.com/libsdl-org/SDL) and [FFmpeg](https://ffmpeg.org).
+- Resolution patch foundations:
+  [Bachata S4](https://github.com/zenithblue-oss/shadps4-arm64).
 
-## License
+Thanks to all upstream contributors. See the in-app licenses,
+[LICENSE](LICENSE), [LICENSE.GPL-3.0](LICENSE.GPL-3.0) and
+[Android component licenses](android/LICENSES.md).
+Not affiliated with Sony Interactive Entertainment or Naughty Dog.
 
-GNU GPL v2 or later, like uncharted_pc ([LICENSE](LICENSE)). The patches for FEX and Mesa are under
-the MIT license of those projects. Third-party components keep their own licenses; the list of
-what the APK contains is in [android/LICENSES.md](android/LICENSES.md).
+## Development
+
+[Android build instructions](https://github.com/erickmendes22/uncharted-android/blob/android-ui-runtime-pending-xml/android/README.md)
+· [0.2.5 integration review](https://github.com/erickmendes22/uncharted-android/blob/android-ui-runtime-pending-xml/android/RELEASE_0.2.5_AUDIT.md)
+· [Original PC documentation](README.uncharted_pc.md)
