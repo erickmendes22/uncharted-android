@@ -77,7 +77,7 @@ void Set(Values& v, const std::string& key, const std::string& value) {
     } else if (key == "hud_position") {
         v.hud_position = std::clamp(i,0,3);
     } else if (key == "hud_scale") {
-        v.hud_scale = Clamp(f,0.7f,1.6f);
+        v.hud_scale = Clamp(f,0.7f,3.0f);
     } else if (key == "touch_pad") {
         v.touch_pad = value == "auto" ? 2 : std::clamp(i, 0, 2);
     } else if (key == "touch_pad_alpha") {
@@ -159,6 +159,11 @@ void Load() {
             Set(v, key, value);
         }
     }
+#ifdef __ANDROID__
+    // FSR frame interpolation is not functional in this Android port. Keep temporal
+    // upscaling separate; old configs/environment cannot silently re-enable interpolation.
+    if(v.frame_gen!=FrameGenOff && v.frame_gen!=FrameGenLsfg)v.frame_gen=FrameGenOff;
+#endif
     v.startup_preset = v.preset;
     v.startup_upscaler = v.upscaler;
     v.startup_object_motion = v.object_motion;

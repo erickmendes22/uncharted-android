@@ -231,7 +231,7 @@ void Menu() {
             int hud=s.hud_mode;if(ImGui::Combo("HUD style",&hud,hud_modes,3))Store(s.hud_mode,hud,true);
             static const char* corners[]={"Top left","Top right","Bottom left","Bottom right"};
             int corner=s.hud_position;if(ImGui::Combo("HUD position",&corner,corners,4))Store(s.hud_position,corner,true);
-            Slider("HUD size",s.hud_scale,.7f,1.6f);
+            Slider("HUD size",s.hud_scale,.7f,3.f);
             static const int rates[] = {-1, 0, 30, 60, 120};
             static const char* limits[] = {"Automatic", "Unlimited", "30 FPS", "60 FPS", "120 FPS"};
             int selected = 0;
@@ -366,15 +366,7 @@ void FpsCounter() {
     const auto* viewport=ImGui::GetMainViewport();
     const float pad=14.0f*base_scale;const int pos=settings.hud_position;
     const bool right=pos==1||pos==3,bottom=pos>=2;
-    // Leave a shoulder-button-wide gutter. A horizontal readout stays clear of R1/R2.
-#ifdef __ANDROID__
-    const float gutter=pad;
-    // Compact fits above the shoulder row; Full sits below it, away from PAD/menu.
-    const float top=TouchPadActive() && (settings.hud_mode>1 || (settings.hud_mode>0 && settings.upscaler!=BbSettings::UpscalerOff)) ? viewport->WorkSize.y*.21f : pad;
-#else
-    const float gutter=pad;
-    const float top=pad;
-#endif
+    const float gutter=pad,top=pad;
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x+(right?viewport->WorkSize.x-gutter:gutter),viewport->WorkPos.y+(bottom?viewport->WorkSize.y-pad:top)),ImGuiCond_Always,ImVec2(right?1.f:0.f,bottom?1.f:0.f));
     ImGui::SetNextWindowBgAlpha(.52f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(12*base_scale,7*base_scale));
@@ -382,8 +374,9 @@ void FpsCounter() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0);
     ImGui::Begin("##uncharted-hud",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoFocusOnAppearing);
     ImGui::PushFont(nullptr,21*base_scale*settings.hud_scale.load());
-    // Preserve the previous HUD's hierarchy and metric colors; only fix spacing/data.
+    // Corner-anchored HUD; controls reserve this rectangle instead of pushing the HUD down.
     ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"FPS %.0f",frame_ms_avg>0?1000.f/frame_ms_avg:0.f);
+    if(settings.hud_mode>1){ImGui::SameLine();ImGui::Text(" · %.1f ms",frame_ms_avg);}
     if(settings.hud_mode>0){
         if(sample.gpu>=0)ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU %d%%",sample.gpu);
         else ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU --");
@@ -400,12 +393,15 @@ void FpsCounter() {
             else ImGui::Text("TAA");
         }
         if(settings.hud_mode>1) {
-            ImGui::Text("RAM %.2f GB  ·  %.1f ms",sample.ram_mib/1024.f,frame_ms_avg);
-            if(settings.upscaler!=BbSettings::UpscalerOff)
-                ImGui::TextUnformatted(BbLocale::Text(settings.temporal_running?"running":"waiting"));
+            if(settings.upscaler!=BbSettings::UpscalerOff)ImGui::SameLine();
+            ImGui::Text(" · RAM %.2f GB",sample.ram_mib/1024.f);
         }
     }
 
+#ifdef __ANDROID__
+    const auto hud_pos=ImGui::GetWindowPos(),hud_size=ImGui::GetWindowSize();
+    TouchPadReserveHud(hud_pos.x,hud_pos.y,hud_pos.x+hud_size.x,hud_pos.y+hud_size.y);
+#endif
     ImGui::PopFont();
     ImGui::End();
     ImGui::PopStyleVar(3);
@@ -914,6 +910,9 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent,
         Menu();
 #endif
     }
+#ifdef __ANDROID__
+    TouchPadReserveHud(0,0,0,0);
+#endif
     if (BbSettings::Get().show_fps && !menu_open) {
         FpsCounter();
     }

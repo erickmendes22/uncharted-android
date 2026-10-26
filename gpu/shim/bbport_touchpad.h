@@ -8,6 +8,7 @@
 #pragma once
 
 #include <SDL3/SDL_events.h>
+#include "bbport_touch_layout.h"
 
 namespace BbOverlay {
 
@@ -22,5 +23,8 @@ bool TouchPadEvent(const SDL_Event& event);
 void TouchPadFrame(float width, float height);
 /// Releases every finger and sends a neutral state (the menu opened, the setting turned off).
 void TouchPadReset();
+/// Screen rectangle occupied by the corner FPS HUD (zero releases the reservation).
+void TouchPadReserveHud(float left,float top,float right,float bottom);
+BbTouchLayout::Rect TouchPadMenuRect(float width,float height);
 
 } // namespace BbOverlay

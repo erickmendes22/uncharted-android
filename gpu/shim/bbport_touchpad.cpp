@@ -18,6 +18,7 @@
 
 #include "bbport_settings.h"
 #include "bbport_touchpad.h"
+#include "bbport_touch_layout.h"
 
 extern "C" void runtime_touch_pad(uint32_t buttons, const int sticks[4], uint8_t l2, uint8_t r2);
 extern "C" int runtime_gamepad_connected(void);
@@ -34,45 +35,22 @@ enum : uint32_t {
     BtnTouchpad = 0x100000,
 };
 
-enum class Shape { Circle, Pill };
-/// What is drawn inside: a text label, or a PlayStation glyph made of lines (fonts lack them).
+/// PlayStation labels and button bits; all geometry lives in bbport_touch_layout.h.
 enum class Glyph { Text, Cross, Circle, Square, Triangle };
-
-/// A fixed control: its centre from an edge (ax 0 = the left edge, 1 = the right, 0.5 the
-/// middle; ay the same for the top and bottom), its size, all in units of the display height.
-struct Control {
-    const char* label;
-    uint32_t bit;
-    float ax, ox, ay, oy; // centre = (ax * W + ox * H, ay * H + oy * H)
-    float w, h;           // a pill's extent; a circle's diameter in w
-    Shape shape;
-    Glyph glyph;
+struct Control {const char* label;uint32_t bit;Glyph glyph;};
+constexpr Control Controls[]={
+    {"",BtnTriangle,Glyph::Triangle},{"",BtnCircle,Glyph::Circle},
+    {"",BtnCross,Glyph::Cross},{"",BtnSquare,Glyph::Square},
+    {"L2",BtnL2,Glyph::Text},{"L1",BtnL1,Glyph::Text},
+    {"R2",BtnR2,Glyph::Text},{"R1",BtnR1,Glyph::Text},
+    {"PAD",BtnTouchpad,Glyph::Text},{"II",BtnOptions,Glyph::Text},
+    {"L3",BtnL3,Glyph::Text},{"R3",BtnR3,Glyph::Text},
 };
-
-constexpr Control ClassicControls[] = {
-    {"", BtnTriangle,1,-.24f,0,.54f,.108f,.108f,Shape::Circle,Glyph::Triangle},
-    {"", BtnCircle,1,-.135f,0,.645f,.108f,.108f,Shape::Circle,Glyph::Circle},
-    {"", BtnCross,1,-.24f,0,.75f,.108f,.108f,Shape::Circle,Glyph::Cross},
-    {"", BtnSquare,1,-.345f,0,.645f,.108f,.108f,Shape::Circle,Glyph::Square},
-    {"L2",BtnL2,0,.19f,0,.14f,.15f,.066f,Shape::Pill,Glyph::Text},
-    {"L1",BtnL1,0,.37f,0,.14f,.15f,.066f,Shape::Pill,Glyph::Text},
-    {"R2",BtnR2,1,-.19f,0,.14f,.15f,.066f,Shape::Pill,Glyph::Text},
-    {"R1",BtnR1,1,-.37f,0,.14f,.15f,.066f,Shape::Pill,Glyph::Text},
-    {"PAD",BtnTouchpad,.5f,-.17f,0,.065f,.17f,.066f,Shape::Pill,Glyph::Text},
-    {"II",BtnOptions,.5f,0,0,.065f,.085f,.066f,Shape::Pill,Glyph::Text},
-    {"L3",BtnL3,0,.56f,0,.84f,.075f,.075f,Shape::Circle,Glyph::Text},
-    {"R3",BtnR3,1,-.68f,0,.84f,.075f,.075f,Shape::Circle,Glyph::Text},
-};
-constexpr int ControlCount = int(sizeof(ClassicControls) / sizeof(ClassicControls[0]));
-#define Controls ClassicControls
+constexpr int ControlCount=int(sizeof(Controls)/sizeof(Controls[0]));
 
 // The D-pad: a plus on the left, above the stick's usual place.
-constexpr float DpadX = 0.28f, DpadY = 0.60f; // centre, in H (x from the left edge)
-constexpr float DpadArm = 0.095f, DpadWidth = 0.104f;
-
-// The floating left stick and the camera drag.
-constexpr float StickRadius = 0.082f, KnobRadius = 0.041f; // in H
-constexpr float StickHintX = 0.40f, StickHintY = 0.82f;  // the idle hint, in H
+// The shared geometry solver expands spacing with button size and reserves the HUD.
+constexpr float StickRadius = 0.082f, KnobRadius = 0.041f;
 // The camera drag: full right stick deflection at this finger speed (display heights per second)
 // times the sensitivity setting; slower drags turn proportionally slower. Independent of the
 // frame rate (the deflection is the finger's speed over the time since the last frame).
@@ -106,31 +84,21 @@ double last_push = 0.0;
 
 float Width = 1920.0f, Height = 1080.0f;
 
+BbTouchLayout::Layout layout;
+BbTouchLayout::Rect hud_bounds;
 ImVec2 Centre(const Control& c) {
-    return ImVec2(c.ax * Width + c.ox * Height, c.ay * Height + c.oy * Height);
+    const auto& slot=layout.slots[&c-Controls];return {slot.x,slot.y};
 }
-
-bool Hits(const Control& c, float px, float py, float scale) {
-    const ImVec2 centre = Centre(c);
-    const float hw = c.w * Height * scale * 0.5f, hh = c.h * Height * scale * 0.5f;
-    if (c.shape == Shape::Circle) {
-        const float dx = px - centre.x, dy = py - centre.y;
-        return dx * dx + dy * dy <= hw * hw * 1.25f; // a little margin for fingers
-    }
-    return std::abs(px - centre.x) <= hw * 1.15f && std::abs(py - centre.y) <= hh * 1.3f;
+bool Hits(const Control& c,float px,float py,float) {
+    const auto& slot=layout.slots[&c-Controls];
+    const float dx=px-slot.x,dy=py-slot.y;
+    if(slot.circle)return dx*dx+dy*dy<=slot.w*slot.w*.25f;
+    return std::abs(dx)<=slot.w*.5f && std::abs(dy)<=slot.h*.5f;
 }
-
-/// D-pad bits for a point, 0 outside the plus.
-uint32_t DpadBits(float px, float py, float scale) {
-    const float cx = DpadX * Height, cy = DpadY * Height;
-    const float dx = (px - cx) / (Height * scale), dy = (py - cy) / (Height * scale);
-    // Hit the four separate circular buttons, matching the visible ISS-style D-pad.
-    const struct { float x,y; uint32_t bit; } keys[] = {
-        {0,-DpadArm,BtnUp},{0,DpadArm,BtnDown},{-DpadArm,0,BtnLeft},{DpadArm,0,BtnRight}};
-    for(const auto& key:keys) {
-        const float x=dx-key.x,y=dy-key.y,r=DpadWidth*.54f;
-        if(x*x+y*y<=r*r)return key.bit;
-    }
+uint32_t DpadBits(float px,float py,float) {
+    const uint32_t bits[]={BtnUp,BtnDown,BtnLeft,BtnRight};
+    for(int i=0;i<4;++i){const auto& slot=layout.slots[12+i];float dx=px-slot.x,dy=py-slot.y;
+        if(dx*dx+dy*dy<=slot.w*slot.w*.25f)return bits[i];}
     return 0;
 }
 
@@ -157,7 +125,7 @@ void Push(bool neutral) {
     const float dt = float(std::clamp(now - last_push, 0.004, 0.1));
     last_push = now;
     if (!neutral) {
-        const float scale = BbSettings::Get().touch_pad_scale.load();
+        const float scale = layout.scale;
         const float sensitivity = std::clamp(BbSettings::Get().touch_pad_look.load(), 0.25f, 4.0f);
         for (auto& f : fingers) {
             if (f.down && f.lifted && now - f.down_time >= MinHold) {
@@ -263,8 +231,8 @@ void Draw(float alpha, float scale) {
     for (const auto& c : Controls) {
         const ImVec2 centre = Centre(c);
         const bool on = held & c.bit;
-        if (c.shape == Shape::Circle) {
-            const float r = c.w * H * scale * 0.5f;
+        if (layout.slots[&c-Controls].circle) {
+            const float r = layout.slots[&c-Controls].w*.5f;
             const auto tint=[&](int a) {
                 const int opacity=int(a*(.45f+.55f*alpha));
                 switch(c.glyph){
@@ -280,27 +248,29 @@ void Draw(float alpha, float scale) {
             if(c.glyph!=Glyph::Text)DrawGlyph(dl,c.glyph,centre,r*.30f,tint(255),line);
 
         } else {
-            const ImVec2 a(centre.x - c.w * H * scale * 0.5f, centre.y - c.h * H * scale * 0.5f);
-            const ImVec2 b(centre.x + c.w * H * scale * 0.5f, centre.y + c.h * H * scale * 0.5f);
-            const float rounding = c.h * H * scale * 0.18f;
+            const auto box=layout.slots[&c-Controls].Bounds();
+            const ImVec2 a(box.left,box.top);
+            const ImVec2 b(box.right,box.bottom);
+            const float rounding = layout.slots[&c-Controls].h*.18f;
             dl->AddRectFilled(a,b,on?IM_COL32(151,117,58,int(170*alpha)):IM_COL32(11,17,16,int(200*alpha)),rounding);
             dl->AddRect(a,b,IM_COL32(199,174,121,int((on?250:185)*(.5f+.5f*alpha))),rounding,0,line);
             // Short brass rule echoes an expedition journal without obscuring the game.
             dl->AddLine(ImVec2(a.x+8*scale,b.y-5*scale),ImVec2(a.x+24*scale,b.y-5*scale),col(220),line);
         }
         if (c.glyph == Glyph::Text) {
-            label(c.label, centre, c.shape == Shape::Circle ? text_size*.72f : text_size * 0.8f);
+            label(c.label, centre, layout.slots[&c-Controls].circle ? text_size*.72f : text_size * 0.8f);
         }
     }
     // the D-pad
     {
-        const ImVec2 c(DpadX * H, DpadY * H);
-        const float arm=DpadArm*H*scale,r=DpadWidth*H*scale*.5f;
+        const float r=layout.slots[12].w*.5f;
         const struct { uint32_t bit;float x,y; } keys[] = {
             {BtnUp,0,-1},{BtnDown,0,1},{BtnLeft,-1,0},{BtnRight,1,0}};
+        int key_index=12;
         for(const auto& key:keys) {
             const bool on=held&key.bit;
-            const ImVec2 centre(c.x+key.x*arm,c.y+key.y*arm);
+            const auto& slot=layout.slots[key_index++];
+            const ImVec2 centre(slot.x,slot.y);
             dl->AddCircleFilled(centre,r,fill(on),48);
             dl->AddCircle(centre,r,col(on?255:210),48,line);
             const float size=r*.24f;
@@ -317,7 +287,7 @@ void Draw(float alpha, float scale) {
     // all three games and their menu prompts keep their real PlayStation mappings.
     for(int side=0;side<2;++side) {
         const float radius=StickRadius*H*scale, knob=KnobRadius*H*scale;
-        ImVec2 centre(side ? Width-.52f*H : StickHintX*H, StickHintY*H), point=centre;
+        ImVec2 centre(layout.slots[16+side].x,layout.slots[16+side].y), point=centre;
         bool down=false;
         {
             std::scoped_lock lock{fingers_mutex};
@@ -347,7 +317,7 @@ bool TouchPadActive() {
 
 bool TouchPadEvent(const SDL_Event& event) {
     std::scoped_lock lock{fingers_mutex};
-    const float scale = BbSettings::Get().touch_pad_scale.load();
+    const float scale = layout.scale;
     switch (event.type) {
     case SDL_EVENT_FINGER_DOWN: {
         const float px = event.tfinger.x * Width, py = event.tfinger.y * Height;
@@ -418,12 +388,21 @@ void TouchPadFrame(float width, float height) {
     was_active = true;
     const auto& s = BbSettings::Get();
     const float alpha = std::clamp(s.touch_pad_alpha.load(), 0.1f, 1.0f);
-    const float scale = std::clamp(s.touch_pad_scale.load(), 0.6f, 1.6f);
+    layout=BbTouchLayout::Build(width,height,s.touch_pad_scale.load(),hud_bounds);
+    const float scale=layout.scale;
     {
         std::scoped_lock lock{fingers_mutex};
         Push(false);
     }
     Draw(alpha, scale);
+}
+
+BbTouchLayout::Rect TouchPadMenuRect(float width,float height) {
+    return BbTouchLayout::Build(width,height,BbSettings::Get().touch_pad_scale.load(),hud_bounds).slots[18].Bounds();
+}
+
+void TouchPadReserveHud(float left,float top,float right,float bottom) {
+    hud_bounds={left,top,right,bottom};
 }
 
 void TouchPadReset() {

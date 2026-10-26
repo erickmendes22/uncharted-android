@@ -27,7 +27,7 @@ int main(){
     unsigned char* pixels;int w,h;io.Fonts->GetTexDataAsRGBA32(&pixels,&w,&h);
     auto& settings=BbSettings::Get();settings.touch_pad=0;frame();
     // The dedicated menu must remain usable when gamepad controls are hidden.
-    auto e=finger(SDL_EVENT_FINGER_DOWN,.5f+.16f*1080/1920,.055f);
+    auto e=finger(SDL_EVENT_FINGER_DOWN,(BbOverlay::TouchPadMenuRect(1920,1080).left+BbOverlay::TouchPadMenuRect(1920,1080).right)*.5f/1920,.055f);
     assert(BbOverlay::AndroidTouch(e,false)==BbOverlay::TouchAction::Open);
     settings.touch_pad=1;settings.touch_mobile=false;settings.touch_pad_look=1;frame();
     // Unlabelled right-side space is an analog: holding still must keep turning.
@@ -46,10 +46,11 @@ int main(){
     settings.touch_pad_scale=1;
     for(const auto size:{ImVec2(1920,1080),ImVec2(2400,1080),ImVec2(1920,1200)}) {
         frame(size.x,size.y);
-        e=finger(SDL_EVENT_FINGER_DOWN,(size.x-.37f*size.y)/size.x,.14f);
+        const auto layout=BbTouchLayout::Build(size.x,size.y,settings.touch_pad_scale.load());
+        e=finger(SDL_EVENT_FINGER_DOWN,layout.slots[7].x/size.x,layout.slots[7].y/size.y);
         BbOverlay::TouchPadEvent(e);frame(size.x,size.y);assert(last_buttons&0x800); // R1
         BbOverlay::TouchPadReset();
-        e=finger(SDL_EVENT_FINGER_DOWN,.28f*size.y/size.x,.505f);
+        e=finger(SDL_EVENT_FINGER_DOWN,layout.slots[12].x/size.x,layout.slots[12].y/size.y);
         BbOverlay::TouchPadEvent(e);frame(size.x,size.y);assert(last_buttons&0x10); // D-pad up
         BbOverlay::TouchPadReset();
         frame(size.x,size.y);

@@ -162,6 +162,9 @@ public class GameActivity extends SDLActivity {
                     else if (eq > 0) Os.setenv(line.substring(0, eq), line.substring(eq + 1), true);
                 }
             }
+            // The selected locale must reach Orbis, not just Android/ImGui. Set after
+            // old per-game environment files so their stale defaults cannot force English.
+            Os.setenv("BB_LANGUAGE",Integer.toString(GameLanguage.id(AppLanguage.code(),android.content.res.Resources.getSystem().getConfiguration().getLocales().get(0))),true);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

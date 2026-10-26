@@ -153,6 +153,7 @@ public class Launcher extends Activity {
             iniPut("hud_position","0");iniPut("hud_scale","1.0");
         }
         if(prefs.getInt("mobile_upscale",0)==5)prefs.edit().putInt("mobile_upscale",4).apply();
+        if("fsr3".equals(iniGet("frame_gen")) || "dlss".equals(iniGet("frame_gen")))iniPut("frame_gen","off");
         buildViews();
         handle(getIntent());
     }
@@ -406,7 +407,7 @@ public class Launcher extends Activity {
             startActivity(i);
         });
         pathEdit = new EditText(this);
-        pathEdit.setHint(AppLanguage.text("or type the path, e.g. /storage/XXXX-XXXX/PS4/CUSA02344"));
+        pathEdit.setHint(AppLanguage.text("Game folder path"));
         pathEdit.setSingleLine(true);
         pathEdit.setTextSize(14);
         pathEdit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -476,19 +477,14 @@ public class Launcher extends Activity {
         });
         button(driverRow, "Download...", v -> downloadDriver());
         button(driverRow, "Remove", v -> removeDriver());
-        text(root, "The bundled Turnip (tested, with the port's KGSL fixes) is the one to keep on Adreno. Driver "
-                 + "packages are the zips the Android emulators use (meta.json and the driver library): the Turnip "
-                 + "builds by K11MCH1, MrPurple, StevenMXZ (the Gen8 ones for Adreno 8xx: Snapdragon 8 Elite) and "
-                 + "others, or Qualcomm's own driver builds. They are untested with these games; if the bundled "
-                 + "driver gives a black screen, try one of them.", 14, false);
+        text(root, "Use bundled Turnip on Adreno. Custom driver ZIPs need compatibility testing.", 14, false);
         root = displayCard;
         ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
         ((ActivityManager) getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
         // An 8 GB device shows ~7.1-7.5 GiB to apps (the G2: 7.15), a 6 GB one ~5.5.
         if (memory.totalMem < (6656L << 20))
-            text(root, "This device has less than 8 GB of RAM: the games use about 6 GB (tested with 8 GB), "
-                     + "so the system may close them.", 14, false);
-        uncapped = check(root, "Show each frame at once (up to the display's refresh rate)", "uncapped", true);
+            text(root, "Less than 8 GB RAM detected. Android may close the game.", 14, false);
+        uncapped = check(root, "Present frames immediately", "uncapped", true);
         showFps = check(root, "Show the frame rate", "show_fps", true);
         text(root, "Frame rate limit:", 14, false);
         fpsLimit = new RadioGroup(this);
@@ -512,8 +508,7 @@ public class Launcher extends Activity {
             }
         });
         root.addView(fpsLimit);
-        text(root, "Off: no limit; above 120 FPS the game's movement timing breaks. The panel in the game "
-                 + "has the same setting.", 14, false);
+        text(root, "Unlimited may affect game speed above 120 FPS.", 14, false);
         root = card(config, "CONTROLS");
         text(root, "On-screen gamepad:", 14, false);
         touchPad = new RadioGroup(this);
@@ -536,20 +531,17 @@ public class Launcher extends Activity {
             }
         });
         root.addView(touchPad);
-        text(root, "Auto: shown while no gamepad is connected (phones). Left half of the screen: a stick under "
-                 + "the finger; right half: drag to look around; the buttons at the edges. The panel in the game "
-                 + "has the same setting with opacity and size.", 14, false);
-        note(root, "In the game, swipe in from the right edge of the screen (or press L3+R3) for the settings "
-                 + "panel: upscaling, sharpening, frame generation and more, applied at once.");
+        text(root, "Auto: show touch controls when no controller is connected.", 14, false);
+        note(root, "Open the menu with its button, a right-edge swipe or L3+R3.");
         root = card(home, "FRAME GENERATION");
-        text(root, "LSFG frame generation (your own Lossless.dll):", 14, false);
+        text(root, "LSFG requires your own Lossless.dll.", 14, false);
         button(root, "Import Lossless.dll", v -> {
             Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             pick.addCategory(Intent.CATEGORY_OPENABLE);
             pick.setType("*/*");
             startActivityForResult(pick, PICK_LOSSLESS);
         });
-        button(root, "Frame generation: Off / LSFG 2x / 3x / 4x", v -> {
+        button(root, "LSFG · Off / 2x / 3x / 4x", v -> {
             String[] modes = {"Off", "LSFG 2x", "LSFG 3x", "LSFG 4x"};
             int selected = 0;
             if ("lsfg".equals(iniGet("frame_gen"))) {
@@ -569,9 +561,9 @@ public class Launcher extends Activity {
                     dialog.dismiss();
                 }).setNegativeButton("Cancel", null).show();
         });
-        text(root, "No DLL or Lossless Scaling shaders are included. LSFG needs a compatible Vulkan driver and adds GPU and memory cost.", 14, false);
+        text(root, "Lossless.dll is not included. Frame generation increases GPU and memory usage.", 14, false);
         root = card(config, "ADVANCED");
-        text(root, "More environment for the port (KEY=VALUE per line, optional):", 14, false);
+        text(root, "Additional environment variables (optional):", 14, false);
         extraEnv = new EditText(this);
         extraEnv.setText(prefs.getString("extra_env", ""));
         extraEnv.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -582,8 +574,7 @@ public class Launcher extends Activity {
 
 
         LinearLayout savesCard = card(config, "SAVES");
-        note(savesCard, "The game's saves are in the app's own folder, which Android deletes together with the app. "
-                      + "Back them up to " + backups() + " before uninstalling.");
+        note(savesCard, "Back up saves before uninstalling the app.");
         LinearLayout saves = row(savesCard);
         button(saves, "Back up saves", v -> {
             String done = backupSaves();
@@ -591,8 +582,7 @@ public class Launcher extends Activity {
         });
         button(saves, "Restore saves", v -> restoreSaves());
         LinearLayout helpCard = card(config, "DIAGNOSTICS");
-        note(helpCard, "The game writes its log to the app's own folder, which other apps cannot read on recent "
-                     + "Android. Copy it to " + backups() + " to attach it to a report.");
+        note(helpCard, "Export the game log to a folder of your choice.");
         button(helpCard, "Export Uncharted log...", v -> LogExport.pick(this));
         text(about, "Uncharted — Daedalus Android", 22, true);
         note(about, "Android fork by erickmendes22 / Daedalus Emulator. Based on revvv991/uncharted-android and Supermedo/uncharted_pc, with selected integrations from RedVorteX-TV/Uncharted-arm.");

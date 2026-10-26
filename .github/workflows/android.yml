@@ -70,8 +70,13 @@ jobs:
         run: |
           python3 android/localization/generate.py
           git diff --exit-code -- gpu/shim/bbport_locale.h
-          javac -d "$RUNNER_TEMP/preset-test" android/scripts/g2/game_app/UpscalePreset.java tests/TestUpscalePreset.java
+          javac -d "$RUNNER_TEMP/preset-test" android/scripts/g2/game_app/UpscalePreset.java tests/TestUpscalePreset.java android/scripts/g2/game_app/GameLanguage.java tests/TestGameLanguage.java
           java -cp "$RUNNER_TEMP/preset-test" dev.unchartedg2.game.TestUpscalePreset
+          java -cp "$RUNNER_TEMP/preset-test" dev.unchartedg2.game.TestGameLanguage
+          g++ -std=c++20 -Igpu/shim tests/test_android_touch_layout.cpp -o "$RUNNER_TEMP/touch-layout-test"
+          "$RUNNER_TEMP/touch-layout-test"
+          g++ -std=c++20 -D__ANDROID__ -Igpu/shim -Igpu/shadps4 tests/test_android_ui_settings.cpp gpu/shim/bbport_settings.cpp -o "$RUNNER_TEMP/ui-settings-test"
+          BB_CONFIG="$RUNNER_TEMP/ui-settings.ini" "$RUNNER_TEMP/ui-settings-test"
       - name: Verify Android touch controls and menu
         shell: bash
         run: |
@@ -88,13 +93,13 @@ jobs:
           "$SDK/build-tools/35.0.1/aapt2" dump badging "$apk" > dist/package.txt
           grep -q "package: name='com.daedalus.uncharted'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.9.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.10.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.9
+          name: Uncharted-Daedalus-0.2.10
           path: dist/
           if-no-files-found: error
           retention-days: 30
