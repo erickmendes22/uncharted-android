@@ -1,0 +1,3802 @@
+{
+ "source": "Bachata S4+ 0.2.7",
+ "author": "Bachata S4, erickmendes22",
+ "patches": [
+  {
+   "name": "Resolution: 720p (performance)",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x008d0736",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x008d073d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x008d074b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x008d0752",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x008d077c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "a0000000"
+    },
+    {
+     "address": "0x008d0783",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "b4000000"
+    },
+    {
+     "address": "0x008d07a6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x008d07ad",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x009de4fe",
+     "length": 56,
+     "sha256": "e31d3ba929b788640b16ce6d2e5aa8ed990c1a9bef52ebf325903821bbb33d48",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e8ee0df9ff90909090"
+    },
+    {
+     "address": "0x009de53d",
+     "length": 83,
+     "sha256": "194eb234468bebec6877d0b22b32bb1dfb22c2bdcef8054219add222551ef8bd",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e8950df9ff9090909090"
+    },
+    {
+     "address": "0x009de597",
+     "length": 61,
+     "sha256": "5b2228d5db1ecec2b185bb6aef38a9f888789033f7ec1ff1bf6b790f89f76212",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e8550df9ff909090909090909090"
+    },
+    {
+     "address": "0x009de5db",
+     "length": 64,
+     "sha256": "3d3509ac8bfe8d659c18ae389b633d6a4dc47a4bbb145fac5c6430f2d1b0c2a0",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe80a0df9ff9090909090"
+    },
+    {
+     "address": "0x008fb7b1",
+     "length": 27,
+     "sha256": "55468b84d6dd64d7552067abfecfc0c98823f6e0799631637a3422dc3cf3f92f",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 540p (extreme performance)",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x008d0736",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x008d073d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x008d074b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x008d0752",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x008d077c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "78000000"
+    },
+    {
+     "address": "0x008d0783",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "87000000"
+    },
+    {
+     "address": "0x008d07a6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x008d07ad",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x009de4fe",
+     "length": 56,
+     "sha256": "e31d3ba929b788640b16ce6d2e5aa8ed990c1a9bef52ebf325903821bbb33d48",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e8ee0df9ff90909090"
+    },
+    {
+     "address": "0x009de53d",
+     "length": 83,
+     "sha256": "194eb234468bebec6877d0b22b32bb1dfb22c2bdcef8054219add222551ef8bd",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e8950df9ff9090909090"
+    },
+    {
+     "address": "0x009de597",
+     "length": 61,
+     "sha256": "5b2228d5db1ecec2b185bb6aef38a9f888789033f7ec1ff1bf6b790f89f76212",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e8550df9ff909090909090909090"
+    },
+    {
+     "address": "0x009de5db",
+     "length": 64,
+     "sha256": "3d3509ac8bfe8d659c18ae389b633d6a4dc47a4bbb145fac5c6430f2d1b0c2a0",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe80a0df9ff9090909090"
+    },
+    {
+     "address": "0x008fb7b1",
+     "length": 27,
+     "sha256": "55468b84d6dd64d7552067abfecfc0c98823f6e0799631637a3422dc3cf3f92f",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 468p (ultra performance)",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x008d0736",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x008d073d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x008d074b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x008d0752",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x008d077c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "68000000"
+    },
+    {
+     "address": "0x008d0783",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "75000000"
+    },
+    {
+     "address": "0x008d07a6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x008d07ad",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x009de4fe",
+     "length": 56,
+     "sha256": "e31d3ba929b788640b16ce6d2e5aa8ed990c1a9bef52ebf325903821bbb33d48",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e8ee0df9ff90909090"
+    },
+    {
+     "address": "0x009de53d",
+     "length": 83,
+     "sha256": "194eb234468bebec6877d0b22b32bb1dfb22c2bdcef8054219add222551ef8bd",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e8950df9ff9090909090"
+    },
+    {
+     "address": "0x009de597",
+     "length": 61,
+     "sha256": "5b2228d5db1ecec2b185bb6aef38a9f888789033f7ec1ff1bf6b790f89f76212",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e8550df9ff909090909090909090"
+    },
+    {
+     "address": "0x009de5db",
+     "length": 64,
+     "sha256": "3d3509ac8bfe8d659c18ae389b633d6a4dc47a4bbb145fac5c6430f2d1b0c2a0",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe80a0df9ff9090909090"
+    },
+    {
+     "address": "0x008fb7b1",
+     "length": 27,
+     "sha256": "55468b84d6dd64d7552067abfecfc0c98823f6e0799631637a3422dc3cf3f92f",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 360p (maximum performance)",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x008d0736",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x008d073d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x008d074b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x008d0752",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x008d077c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "50000000"
+    },
+    {
+     "address": "0x008d0783",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "5a000000"
+    },
+    {
+     "address": "0x008d07a6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x008d07ad",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x009de4fe",
+     "length": 56,
+     "sha256": "e31d3ba929b788640b16ce6d2e5aa8ed990c1a9bef52ebf325903821bbb33d48",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e8ee0df9ff90909090"
+    },
+    {
+     "address": "0x009de53d",
+     "length": 83,
+     "sha256": "194eb234468bebec6877d0b22b32bb1dfb22c2bdcef8054219add222551ef8bd",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e8950df9ff9090909090"
+    },
+    {
+     "address": "0x009de597",
+     "length": 61,
+     "sha256": "5b2228d5db1ecec2b185bb6aef38a9f888789033f7ec1ff1bf6b790f89f76212",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e8550df9ff909090909090909090"
+    },
+    {
+     "address": "0x009de5db",
+     "length": 64,
+     "sha256": "3d3509ac8bfe8d659c18ae389b633d6a4dc47a4bbb145fac5c6430f2d1b0c2a0",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe80a0df9ff9090909090"
+    },
+    {
+     "address": "0x008fb7b1",
+     "length": 27,
+     "sha256": "55468b84d6dd64d7552067abfecfc0c98823f6e0799631637a3422dc3cf3f92f",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Skip startup logos",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x00b4f261",
+     "length": 9,
+     "sha256": "a250698d0698fbc31e131d588a2b3711afddff750a0f66f6bda416a46ed0796f",
+     "bytes": "80b80f480000009090"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 2 cascades (performance)",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x009a6e07",
+     "length": 14,
+     "sha256": "e2854ea750ea5a0e3372539bdeafda4fd5bc0b379ad3b4944ad3c18b12b91270",
+     "bytes": "8b8ef4010000b80200000083f903"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 1 cascade (extreme performance)",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x009a6e07",
+     "length": 14,
+     "sha256": "e2854ea750ea5a0e3372539bdeafda4fd5bc0b379ad3b4944ad3c18b12b91270",
+     "bytes": "8b8ef4010000b80100000083f902"
+    }
+   ]
+  },
+  {
+   "name": "Disable water reflections",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x004f1843",
+     "length": 9,
+     "sha256": "8987f43cba7edd4e0f877261313abdbad2ada0d9a73caa55736e9fd1dcc0d8b4",
+     "bytes": "80b83808000000eb4d"
+    }
+   ]
+  },
+  {
+   "name": "Disable SSAO",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0099113d",
+     "length": 9,
+     "sha256": "f8c61ecb37e3a7350040b1be298233d5391d9015b458a8f758e5b8b358f95849",
+     "bytes": "80b84b01000000eb1c"
+    }
+   ]
+  },
+  {
+   "name": "Disable fog",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x009a144c",
+     "length": 17,
+     "sha256": "ba6895cbf9576cb379d4ab5987253be7af4c8feaf9aff4491b50394ce8e96ca8",
+     "bytes": "80b83508000000488b5d48e98600000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable volumetric lights",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x009e8eaf",
+     "length": 13,
+     "sha256": "13ce07e14f92c7f8e9db88f0b43de847ebc3f03b1b0550ca3665bb91286d8b6d",
+     "bytes": "80b86902000000e90a42000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable motion blur",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x00a0713c",
+     "length": 34,
+     "sha256": "22e188006b13b195b2a442895667549905f938972d38df7422367197dc0accd0",
+     "bytes": "80b8ba010000004c8bb568ffffff488b8560ffffff488b8d58ffffffe9c100000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable depth of field",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0096ca7b",
+     "length": 7,
+     "sha256": "9fdd6cd81cd3d26bfc09d23e3bd6d55fd245631906c063ef81b7ad003bdbfcf9",
+     "bytes": "4030ffeb099090"
+    }
+   ]
+  },
+  {
+   "name": "Disable bloom",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0096ca6c",
+     "length": 8,
+     "sha256": "dd211314fa64930612d47bba2ee2686ea83582fcefabbf2641306f612a2af6de",
+     "bytes": "410fb69002020000"
+    }
+   ]
+  },
+  {
+   "name": "Disable anti-aliasing",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x004f10f6",
+     "length": 10,
+     "sha256": "fb5ed89067effbf3f30b3052352f94171bc27c62ded38a300ea936590bd3f600",
+     "bytes": "4180bd0602000000eb0d"
+    }
+   ]
+  },
+  {
+   "name": "Disable anisotropic filtering",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x004f0e96",
+     "length": 7,
+     "sha256": "419188e19814b8e1fe477ce053564e04565c1cc48e25f5eb4e94b437082ca637",
+     "bytes": "31f60f1f440000"
+    }
+   ]
+  },
+  {
+   "name": "Disable dynamic lights",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x00898de7",
+     "length": 14,
+     "sha256": "3d38987d145839be98d7a12a9cc71532230a04a1d85eece0e44aef495a92784e",
+     "bytes": "8a80c201000084c0e90c03000090"
+    },
+    {
+     "address": "0x00899be0",
+     "length": 13,
+     "sha256": "e6fb74abd08ea3e5094713cc6769cef2ef6ac3658a380a3378a0f3fde49aac3e",
+     "bytes": "80b8c201000000e96806000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable sunlight ambient occlusion",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x009a619c",
+     "length": 9,
+     "sha256": "d1b557b944da487f254a27b93da8c351ea554f35556c3c201036ab5bf43a9f3e",
+     "bytes": "80b83908000000eb04"
+    }
+   ]
+  },
+  {
+   "name": "Draw distance: 40 m (extreme)",
+   "elf": "eboot.bin",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x00941f3c",
+     "length": 9,
+     "sha256": "73c423af2aa035bba00c14d5280ff16d047e17a2d9b6302e2943c70bd25e125a",
+     "bytes": "80b9dc030000009090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 720p (performance)",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x007c4d7f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x007c5326",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x007c4d86",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x007c532d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x007c4d94",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x007c533b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x007c4d9b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x007c5342",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x007c4dc5",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "a0000000"
+    },
+    {
+     "address": "0x007c536c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "a0000000"
+    },
+    {
+     "address": "0x007c4dcc",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "b4000000"
+    },
+    {
+     "address": "0x007c5373",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "b4000000"
+    },
+    {
+     "address": "0x007c4def",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x007c5396",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x007c4df6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x007c539d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x008b5f53",
+     "length": 60,
+     "sha256": "83e1bed6b2409018cfe219e9daf2f33c73c208eb5ec625089229eb4de6d061c8",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e8f3dcf9ff9090"
+    },
+    {
+     "address": "0x008b5f96",
+     "length": 80,
+     "sha256": "4fdd699cf4a694ffb701de93965033b17a7820b1992b9e8466216a76112d67a8",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e89fdcf9ff9090909090"
+    },
+    {
+     "address": "0x008b5fed",
+     "length": 68,
+     "sha256": "eb4f614a349c88c19f7ecdcbeab555bffa2dde517ba93762d4fed19ba7a0b4b0",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e855dcf9ff909090909090"
+    },
+    {
+     "address": "0x008b6038",
+     "length": 67,
+     "sha256": "1e99ef2a1a8815f4dfa799e70ab62cc437bd18359f55bc3073e34097b2f74324",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe80adcf9ff9090909090"
+    },
+    {
+     "address": "0x007ef6e4",
+     "length": 14,
+     "sha256": "9266c5f507bf7a33d888ebd1f417ef0471ef1853b76a8eafc139d9d7eeb9a785",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 540p (extreme performance)",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x007c4d7f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x007c5326",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x007c4d86",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x007c532d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x007c4d94",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x007c533b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x007c4d9b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x007c5342",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x007c4dc5",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "78000000"
+    },
+    {
+     "address": "0x007c536c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "78000000"
+    },
+    {
+     "address": "0x007c4dcc",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "87000000"
+    },
+    {
+     "address": "0x007c5373",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "87000000"
+    },
+    {
+     "address": "0x007c4def",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x007c5396",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x007c4df6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x007c539d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x008b5f53",
+     "length": 60,
+     "sha256": "83e1bed6b2409018cfe219e9daf2f33c73c208eb5ec625089229eb4de6d061c8",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e8f3dcf9ff9090"
+    },
+    {
+     "address": "0x008b5f96",
+     "length": 80,
+     "sha256": "4fdd699cf4a694ffb701de93965033b17a7820b1992b9e8466216a76112d67a8",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e89fdcf9ff9090909090"
+    },
+    {
+     "address": "0x008b5fed",
+     "length": 68,
+     "sha256": "eb4f614a349c88c19f7ecdcbeab555bffa2dde517ba93762d4fed19ba7a0b4b0",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e855dcf9ff909090909090"
+    },
+    {
+     "address": "0x008b6038",
+     "length": 67,
+     "sha256": "1e99ef2a1a8815f4dfa799e70ab62cc437bd18359f55bc3073e34097b2f74324",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe80adcf9ff9090909090"
+    },
+    {
+     "address": "0x007ef6e4",
+     "length": 14,
+     "sha256": "9266c5f507bf7a33d888ebd1f417ef0471ef1853b76a8eafc139d9d7eeb9a785",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 468p (ultra performance)",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x007c4d7f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x007c5326",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x007c4d86",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x007c532d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x007c4d94",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x007c533b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x007c4d9b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x007c5342",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x007c4dc5",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "68000000"
+    },
+    {
+     "address": "0x007c536c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "68000000"
+    },
+    {
+     "address": "0x007c4dcc",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "75000000"
+    },
+    {
+     "address": "0x007c5373",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "75000000"
+    },
+    {
+     "address": "0x007c4def",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x007c5396",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x007c4df6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x007c539d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x008b5f53",
+     "length": 60,
+     "sha256": "83e1bed6b2409018cfe219e9daf2f33c73c208eb5ec625089229eb4de6d061c8",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e8f3dcf9ff9090"
+    },
+    {
+     "address": "0x008b5f96",
+     "length": 80,
+     "sha256": "4fdd699cf4a694ffb701de93965033b17a7820b1992b9e8466216a76112d67a8",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e89fdcf9ff9090909090"
+    },
+    {
+     "address": "0x008b5fed",
+     "length": 68,
+     "sha256": "eb4f614a349c88c19f7ecdcbeab555bffa2dde517ba93762d4fed19ba7a0b4b0",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e855dcf9ff909090909090"
+    },
+    {
+     "address": "0x008b6038",
+     "length": 67,
+     "sha256": "1e99ef2a1a8815f4dfa799e70ab62cc437bd18359f55bc3073e34097b2f74324",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe80adcf9ff9090909090"
+    },
+    {
+     "address": "0x007ef6e4",
+     "length": 14,
+     "sha256": "9266c5f507bf7a33d888ebd1f417ef0471ef1853b76a8eafc139d9d7eeb9a785",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 360p (maximum performance)",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x007c4d7f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x007c5326",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x007c4d86",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x007c532d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x007c4d94",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x007c533b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x007c4d9b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x007c5342",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x007c4dc5",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "50000000"
+    },
+    {
+     "address": "0x007c536c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "50000000"
+    },
+    {
+     "address": "0x007c4dcc",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "5a000000"
+    },
+    {
+     "address": "0x007c5373",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "5a000000"
+    },
+    {
+     "address": "0x007c4def",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x007c5396",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x007c4df6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x007c539d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x008b5f53",
+     "length": 60,
+     "sha256": "83e1bed6b2409018cfe219e9daf2f33c73c208eb5ec625089229eb4de6d061c8",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e8f3dcf9ff9090"
+    },
+    {
+     "address": "0x008b5f96",
+     "length": 80,
+     "sha256": "4fdd699cf4a694ffb701de93965033b17a7820b1992b9e8466216a76112d67a8",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e89fdcf9ff9090909090"
+    },
+    {
+     "address": "0x008b5fed",
+     "length": 68,
+     "sha256": "eb4f614a349c88c19f7ecdcbeab555bffa2dde517ba93762d4fed19ba7a0b4b0",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e855dcf9ff909090909090"
+    },
+    {
+     "address": "0x008b6038",
+     "length": 67,
+     "sha256": "1e99ef2a1a8815f4dfa799e70ab62cc437bd18359f55bc3073e34097b2f74324",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe80adcf9ff9090909090"
+    },
+    {
+     "address": "0x007ef6e4",
+     "length": 14,
+     "sha256": "9266c5f507bf7a33d888ebd1f417ef0471ef1853b76a8eafc139d9d7eeb9a785",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Skip startup logos",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00b392f1",
+     "length": 9,
+     "sha256": "a250698d0698fbc31e131d588a2b3711afddff750a0f66f6bda416a46ed0796f",
+     "bytes": "80b80f480000009090"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 2 cascades (performance)",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x0087c70b",
+     "length": 17,
+     "sha256": "8fa98e4e55ae7c22f38c973e90da395d2a27e561b523a6571e20d386a47c49d2",
+     "bytes": "8b83f401000083f803b9020000000f4cc8"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 1 cascade (extreme performance)",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x0087c70b",
+     "length": 17,
+     "sha256": "8fa98e4e55ae7c22f38c973e90da395d2a27e561b523a6571e20d386a47c49d2",
+     "bytes": "8b83f401000083f802b9010000000f4cc8"
+    }
+   ]
+  },
+  {
+   "name": "Disable water reflections",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x004f1783",
+     "length": 9,
+     "sha256": "8987f43cba7edd4e0f877261313abdbad2ada0d9a73caa55736e9fd1dcc0d8b4",
+     "bytes": "80b83808000000eb4d"
+    }
+   ]
+  },
+  {
+   "name": "Disable SSAO",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x008615ad",
+     "length": 9,
+     "sha256": "f8c61ecb37e3a7350040b1be298233d5391d9015b458a8f758e5b8b358f95849",
+     "bytes": "80b84b01000000eb1c"
+    }
+   ]
+  },
+  {
+   "name": "Disable fog",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00b53fbe",
+     "length": 9,
+     "sha256": "be967d437622ca2ba8b166bf2f60eaa8293af20b00954d0802484ddbe75b5ae5",
+     "bytes": "80b83508000000eb54"
+    }
+   ]
+  },
+  {
+   "name": "Disable volumetric lights",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x008c1e72",
+     "length": 13,
+     "sha256": "dfc35d02c51ed9f07bf3f1f8fdbcd4abe5980a0b89cf24b37bb0f69c3e6ff7f0",
+     "bytes": "80b86902000000e99a38000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable motion blur",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x008db75f",
+     "length": 34,
+     "sha256": "780afce0965a5653992571f9949d9d836abc50dfca8ebd9db1496170b1d7ab03",
+     "bytes": "80b8ba010000004c8ba578ffffff488b8570ffffff488b8d68ffffffe9c400000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable depth of field",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00852040",
+     "length": 7,
+     "sha256": "9fdd6cd81cd3d26bfc09d23e3bd6d55fd245631906c063ef81b7ad003bdbfcf9",
+     "bytes": "4030ffeb099090"
+    }
+   ]
+  },
+  {
+   "name": "Disable bloom",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00852031",
+     "length": 8,
+     "sha256": "dd211314fa64930612d47bba2ee2686ea83582fcefabbf2641306f612a2af6de",
+     "bytes": "410fb69002020000"
+    }
+   ]
+  },
+  {
+   "name": "Disable anti-aliasing",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x004f0fd6",
+     "length": 10,
+     "sha256": "fb5ed89067effbf3f30b3052352f94171bc27c62ded38a300ea936590bd3f600",
+     "bytes": "4180bd0602000000eb0d"
+    }
+   ]
+  },
+  {
+   "name": "Disable anisotropic filtering",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x004f0d76",
+     "length": 7,
+     "sha256": "419188e19814b8e1fe477ce053564e04565c1cc48e25f5eb4e94b437082ca637",
+     "bytes": "31f60f1f440000"
+    }
+   ]
+  },
+  {
+   "name": "Disable dynamic lights",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x0079d817",
+     "length": 14,
+     "sha256": "2abe2a8053b92d1272e9a12f349693f58d3e2545ac3ab78dc43eb0b360d7a95a",
+     "bytes": "8a80c201000084c0e91c03000090"
+    },
+    {
+     "address": "0x0079f421",
+     "length": 13,
+     "sha256": "bbd211ac7cbd0c3845bc1858da334ef55650662147c7ecc86098bb0cc7470f09",
+     "bytes": "80b8c201000000e9ac05000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable sunlight ambient occlusion",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x0087b92c",
+     "length": 9,
+     "sha256": "d1b557b944da487f254a27b93da8c351ea554f35556c3c201036ab5bf43a9f3e",
+     "bytes": "80b83908000000eb04"
+    }
+   ]
+  },
+  {
+   "name": "Draw distance: 40 m (extreme)",
+   "elf": "eboot.bin",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x0082d2ff",
+     "length": 9,
+     "sha256": "73c423af2aa035bba00c14d5280ff16d047e17a2d9b6302e2943c70bd25e125a",
+     "bytes": "80b9dc030000009090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 720p (performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009525ef",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00952b96",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x009525f6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x00952b9d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x00952604",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00952bab",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x0095260b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x00952bb2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x00952635",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "a0000000"
+    },
+    {
+     "address": "0x00952bdc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "a0000000"
+    },
+    {
+     "address": "0x0095263c",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "b4000000"
+    },
+    {
+     "address": "0x00952be3",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "b4000000"
+    },
+    {
+     "address": "0x0095265f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00952c06",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00952666",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x00952c0d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x00a495d3",
+     "length": 60,
+     "sha256": "3888dca397caeeabce91425f0afe617843e7de71366953a8ad28b27d3f02ad3c",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e873fcf9ff9090"
+    },
+    {
+     "address": "0x00a49616",
+     "length": 80,
+     "sha256": "f5d732459aba9882fe99daf56b8816db6b808f406b097475c74456d96070ba1a",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e81ffcf9ff9090909090"
+    },
+    {
+     "address": "0x00a4966d",
+     "length": 68,
+     "sha256": "996481e8492dea9e5a9f8fbbe0299ddeb6d77ff4bf9eec3a9ba0dfaceca23887",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e8d5fbf9ff909090909090"
+    },
+    {
+     "address": "0x00a496b8",
+     "length": 67,
+     "sha256": "5045bfb7c87074356e8c87e0e9dd67d0435251c50976c842fab2d5b5d7d06aff",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe88afbf9ff9090909090"
+    },
+    {
+     "address": "0x00979b94",
+     "length": 14,
+     "sha256": "4fc917633fbfb5bd017559b3cf58769e740349f07e0bcc51885569b6ff3f4de3",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 540p (extreme performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009525ef",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00952b96",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x009525f6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x00952b9d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x00952604",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00952bab",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x0095260b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x00952bb2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x00952635",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "78000000"
+    },
+    {
+     "address": "0x00952bdc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "78000000"
+    },
+    {
+     "address": "0x0095263c",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "87000000"
+    },
+    {
+     "address": "0x00952be3",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "87000000"
+    },
+    {
+     "address": "0x0095265f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00952c06",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00952666",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x00952c0d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x00a495d3",
+     "length": 60,
+     "sha256": "3888dca397caeeabce91425f0afe617843e7de71366953a8ad28b27d3f02ad3c",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e873fcf9ff9090"
+    },
+    {
+     "address": "0x00a49616",
+     "length": 80,
+     "sha256": "f5d732459aba9882fe99daf56b8816db6b808f406b097475c74456d96070ba1a",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e81ffcf9ff9090909090"
+    },
+    {
+     "address": "0x00a4966d",
+     "length": 68,
+     "sha256": "996481e8492dea9e5a9f8fbbe0299ddeb6d77ff4bf9eec3a9ba0dfaceca23887",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e8d5fbf9ff909090909090"
+    },
+    {
+     "address": "0x00a496b8",
+     "length": 67,
+     "sha256": "5045bfb7c87074356e8c87e0e9dd67d0435251c50976c842fab2d5b5d7d06aff",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe88afbf9ff9090909090"
+    },
+    {
+     "address": "0x00979b94",
+     "length": 14,
+     "sha256": "4fc917633fbfb5bd017559b3cf58769e740349f07e0bcc51885569b6ff3f4de3",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 468p (ultra performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009525ef",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00952b96",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x009525f6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x00952b9d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x00952604",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00952bab",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x0095260b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x00952bb2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x00952635",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "68000000"
+    },
+    {
+     "address": "0x00952bdc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "68000000"
+    },
+    {
+     "address": "0x0095263c",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "75000000"
+    },
+    {
+     "address": "0x00952be3",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "75000000"
+    },
+    {
+     "address": "0x0095265f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00952c06",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00952666",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x00952c0d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x00a495d3",
+     "length": 60,
+     "sha256": "3888dca397caeeabce91425f0afe617843e7de71366953a8ad28b27d3f02ad3c",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e873fcf9ff9090"
+    },
+    {
+     "address": "0x00a49616",
+     "length": 80,
+     "sha256": "f5d732459aba9882fe99daf56b8816db6b808f406b097475c74456d96070ba1a",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e81ffcf9ff9090909090"
+    },
+    {
+     "address": "0x00a4966d",
+     "length": 68,
+     "sha256": "996481e8492dea9e5a9f8fbbe0299ddeb6d77ff4bf9eec3a9ba0dfaceca23887",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e8d5fbf9ff909090909090"
+    },
+    {
+     "address": "0x00a496b8",
+     "length": 67,
+     "sha256": "5045bfb7c87074356e8c87e0e9dd67d0435251c50976c842fab2d5b5d7d06aff",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe88afbf9ff9090909090"
+    },
+    {
+     "address": "0x00979b94",
+     "length": 14,
+     "sha256": "4fc917633fbfb5bd017559b3cf58769e740349f07e0bcc51885569b6ff3f4de3",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 360p (maximum performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009525ef",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00952b96",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x009525f6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x00952b9d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x00952604",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00952bab",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x0095260b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x00952bb2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x00952635",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "50000000"
+    },
+    {
+     "address": "0x00952bdc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "50000000"
+    },
+    {
+     "address": "0x0095263c",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "5a000000"
+    },
+    {
+     "address": "0x00952be3",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "5a000000"
+    },
+    {
+     "address": "0x0095265f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00952c06",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00952666",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x00952c0d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x00a495d3",
+     "length": 60,
+     "sha256": "3888dca397caeeabce91425f0afe617843e7de71366953a8ad28b27d3f02ad3c",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e873fcf9ff9090"
+    },
+    {
+     "address": "0x00a49616",
+     "length": 80,
+     "sha256": "f5d732459aba9882fe99daf56b8816db6b808f406b097475c74456d96070ba1a",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e81ffcf9ff9090909090"
+    },
+    {
+     "address": "0x00a4966d",
+     "length": 68,
+     "sha256": "996481e8492dea9e5a9f8fbbe0299ddeb6d77ff4bf9eec3a9ba0dfaceca23887",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e8d5fbf9ff909090909090"
+    },
+    {
+     "address": "0x00a496b8",
+     "length": 67,
+     "sha256": "5045bfb7c87074356e8c87e0e9dd67d0435251c50976c842fab2d5b5d7d06aff",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe88afbf9ff9090909090"
+    },
+    {
+     "address": "0x00979b94",
+     "length": 14,
+     "sha256": "4fc917633fbfb5bd017559b3cf58769e740349f07e0bcc51885569b6ff3f4de3",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Skip startup logos",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00e6cf15",
+     "length": 9,
+     "sha256": "5437122fe5164176a9ab6a1fa4770530538c175685f5463e5c5b27773fe93703",
+     "bytes": "80b854480000009090"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 2 cascades (performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00a12c4b",
+     "length": 17,
+     "sha256": "4c7fdc586e6aa7b967e6a0fc9378d4f9ab838a82bb19e91854c4c8b3dd1eb725",
+     "bytes": "8b831402000083f803b9020000000f4cc8"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 1 cascade (extreme performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00a12c4b",
+     "length": 17,
+     "sha256": "4c7fdc586e6aa7b967e6a0fc9378d4f9ab838a82bb19e91854c4c8b3dd1eb725",
+     "bytes": "8b831402000083f802b9010000000f4cc8"
+    }
+   ]
+  },
+  {
+   "name": "Disable water reflections",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x005d234e",
+     "length": 9,
+     "sha256": "207c5ff1b7cd4fe51f47a1b640bdaffbd65d7cb302af8113e8d12e3dcf907340",
+     "bytes": "80b83808000000eb65"
+    }
+   ]
+  },
+  {
+   "name": "Disable SSAO",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009f6cad",
+     "length": 9,
+     "sha256": "f8c61ecb37e3a7350040b1be298233d5391d9015b458a8f758e5b8b358f95849",
+     "bytes": "80b84b01000000eb1c"
+    }
+   ]
+  },
+  {
+   "name": "Disable fog",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00a032d2",
+     "length": 13,
+     "sha256": "ca48e24dd2fb0f7bb42f73be79139b58e2637f08a666233b56f47505b62662fc",
+     "bytes": "80b83508000000e98d00000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable volumetric lights",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00a559c2",
+     "length": 13,
+     "sha256": "2889982d258b772e35533304a3a1dd6d53dae2395bab842efdd84859a5ba690f",
+     "bytes": "80b86902000000e93d38000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable motion blur",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00a674af",
+     "length": 34,
+     "sha256": "780afce0965a5653992571f9949d9d836abc50dfca8ebd9db1496170b1d7ab03",
+     "bytes": "80b8ba010000004c8ba578ffffff488b8570ffffff488b8d68ffffffe9c400000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable depth of field",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009e7569",
+     "length": 4,
+     "sha256": "a26a2e68bec248b87e68fb294520a10d9031d78e7fd5d13d7fecbd2691e2291e",
+     "bytes": "30c0eb2e"
+    }
+   ]
+  },
+  {
+   "name": "Disable bloom",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009e755c",
+     "length": 8,
+     "sha256": "24bb51091ce315ae563fc94b0231f17119de38755fa6e17e1e9c9b003664524e",
+     "bytes": "410fb68002020000"
+    }
+   ]
+  },
+  {
+   "name": "Disable anti-aliasing",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x005d1bd6",
+     "length": 10,
+     "sha256": "6ef854f40c48a33bb40f68867b80fe90e06382cbe2ccd88c0807f34be23caa19",
+     "bytes": "4180bf0602000000eb0d"
+    }
+   ]
+  },
+  {
+   "name": "Disable anisotropic filtering",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x005d1914",
+     "length": 7,
+     "sha256": "c3f5e58a5fb12612183167e31460e14b5094198cf00bb89b2017c6294460996c",
+     "bytes": "31f60f1f440000"
+    }
+   ]
+  },
+  {
+   "name": "Disable dynamic lights",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00924d25",
+     "length": 14,
+     "sha256": "c401260624705813c23a74e5e463ecf6f5af0eedd9b0bac9f9aed742977e73eb",
+     "bytes": "8a80c201000084c0e9fe04000090"
+    },
+    {
+     "address": "0x00926ea1",
+     "length": 13,
+     "sha256": "dc6a9b383a6b34ebd9dac447b05eb8ed86d9d6e525af680febf9b05a152cb021",
+     "bytes": "80b8c201000000e9dc05000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable sunlight ambient occlusion",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00a11e2c",
+     "length": 9,
+     "sha256": "d1b557b944da487f254a27b93da8c351ea554f35556c3c201036ab5bf43a9f3e",
+     "bytes": "80b83908000000eb04"
+    }
+   ]
+  },
+  {
+   "name": "Draw distance: 40 m (extreme)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009b776f",
+     "length": 9,
+     "sha256": "73c423af2aa035bba00c14d5280ff16d047e17a2d9b6302e2943c70bd25e125a",
+     "bytes": "80b9dc030000009090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 720p (performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00902f7f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x009035b6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00902f86",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x009035bd",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x00902f94",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x009035cb",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00902f9b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x009035d2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x00902fc5",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "a0000000"
+    },
+    {
+     "address": "0x009035fc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "a0000000"
+    },
+    {
+     "address": "0x00902fcc",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "b4000000"
+    },
+    {
+     "address": "0x00903603",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "b4000000"
+    },
+    {
+     "address": "0x00902fef",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00903626",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00902ff6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x0090362d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x009ed333",
+     "length": 60,
+     "sha256": "b459fc3d4f6f6c465e1ed0436d76d83837173edc62d83b7b04ffd69d26c33fc5",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e863abf9ff9090"
+    },
+    {
+     "address": "0x009ed376",
+     "length": 80,
+     "sha256": "64fbfa531803bb14ffb453b89e040448cb3e7e259160f0ec8e1f4f33f5ae76e1",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e80fabf9ff9090909090"
+    },
+    {
+     "address": "0x009ed3cd",
+     "length": 68,
+     "sha256": "54ec39eb017e09df13b4137299275b4172cada183af56001d423a4d1b40823a8",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e8c5aaf9ff909090909090"
+    },
+    {
+     "address": "0x009ed418",
+     "length": 67,
+     "sha256": "ab74ba997b17c3112a96df95caf563a8610b72f9ec92fa584c1f868add4c5603",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe87aaaf9ff9090909090"
+    },
+    {
+     "address": "0x00925124",
+     "length": 14,
+     "sha256": "5acfdb8e4a583f953e9944c15f2efe2f377b3e0b41bab108f7c23c6b06db0c91",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 540p (extreme performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00902f7f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x009035b6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00902f86",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x009035bd",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x00902f94",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x009035cb",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00902f9b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x009035d2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x00902fc5",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "78000000"
+    },
+    {
+     "address": "0x009035fc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "78000000"
+    },
+    {
+     "address": "0x00902fcc",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "87000000"
+    },
+    {
+     "address": "0x00903603",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "87000000"
+    },
+    {
+     "address": "0x00902fef",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00903626",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00902ff6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x0090362d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x009ed333",
+     "length": 60,
+     "sha256": "b459fc3d4f6f6c465e1ed0436d76d83837173edc62d83b7b04ffd69d26c33fc5",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e863abf9ff9090"
+    },
+    {
+     "address": "0x009ed376",
+     "length": 80,
+     "sha256": "64fbfa531803bb14ffb453b89e040448cb3e7e259160f0ec8e1f4f33f5ae76e1",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e80fabf9ff9090909090"
+    },
+    {
+     "address": "0x009ed3cd",
+     "length": 68,
+     "sha256": "54ec39eb017e09df13b4137299275b4172cada183af56001d423a4d1b40823a8",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e8c5aaf9ff909090909090"
+    },
+    {
+     "address": "0x009ed418",
+     "length": 67,
+     "sha256": "ab74ba997b17c3112a96df95caf563a8610b72f9ec92fa584c1f868add4c5603",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe87aaaf9ff9090909090"
+    },
+    {
+     "address": "0x00925124",
+     "length": 14,
+     "sha256": "5acfdb8e4a583f953e9944c15f2efe2f377b3e0b41bab108f7c23c6b06db0c91",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 468p (ultra performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00902f7f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x009035b6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00902f86",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x009035bd",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x00902f94",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x009035cb",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00902f9b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x009035d2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x00902fc5",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "68000000"
+    },
+    {
+     "address": "0x009035fc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "68000000"
+    },
+    {
+     "address": "0x00902fcc",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "75000000"
+    },
+    {
+     "address": "0x00903603",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "75000000"
+    },
+    {
+     "address": "0x00902fef",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00903626",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00902ff6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x0090362d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x009ed333",
+     "length": 60,
+     "sha256": "b459fc3d4f6f6c465e1ed0436d76d83837173edc62d83b7b04ffd69d26c33fc5",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e863abf9ff9090"
+    },
+    {
+     "address": "0x009ed376",
+     "length": 80,
+     "sha256": "64fbfa531803bb14ffb453b89e040448cb3e7e259160f0ec8e1f4f33f5ae76e1",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e80fabf9ff9090909090"
+    },
+    {
+     "address": "0x009ed3cd",
+     "length": 68,
+     "sha256": "54ec39eb017e09df13b4137299275b4172cada183af56001d423a4d1b40823a8",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e8c5aaf9ff909090909090"
+    },
+    {
+     "address": "0x009ed418",
+     "length": 67,
+     "sha256": "ab74ba997b17c3112a96df95caf563a8610b72f9ec92fa584c1f868add4c5603",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe87aaaf9ff9090909090"
+    },
+    {
+     "address": "0x00925124",
+     "length": 14,
+     "sha256": "5acfdb8e4a583f953e9944c15f2efe2f377b3e0b41bab108f7c23c6b06db0c91",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 360p (maximum performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00902f7f",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x009035b6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00902f86",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x009035bd",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x00902f94",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x009035cb",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00902f9b",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x009035d2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x00902fc5",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "50000000"
+    },
+    {
+     "address": "0x009035fc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "50000000"
+    },
+    {
+     "address": "0x00902fcc",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "5a000000"
+    },
+    {
+     "address": "0x00903603",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "5a000000"
+    },
+    {
+     "address": "0x00902fef",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00903626",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00902ff6",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x0090362d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x009ed333",
+     "length": 60,
+     "sha256": "b459fc3d4f6f6c465e1ed0436d76d83837173edc62d83b7b04ffd69d26c33fc5",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d41594c89f6b9800700004c89c341b838040000e863abf9ff9090"
+    },
+    {
+     "address": "0x009ed376",
+     "length": 80,
+     "sha256": "64fbfa531803bb14ffb453b89e040448cb3e7e259160f0ec8e1f4f33f5ae76e1",
+     "bytes": "6a118f8510ffffff49d1ef4c89bdd0fcffff48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a3141594c89f6b9c003000041b81c020000e80fabf9ff9090909090"
+    },
+    {
+     "address": "0x009ed3cd",
+     "length": 68,
+     "sha256": "54ec39eb017e09df13b4137299275b4172cada183af56001d423a4d1b40823a8",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d41594c89f6b9800700004c8b8510fdffff41b838040000e8c5aaf9ff909090909090"
+    },
+    {
+     "address": "0x009ed418",
+     "length": 67,
+     "sha256": "ab74ba997b17c3112a96df95caf563a8610b72f9ec92fa584c1f868add4c5603",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a3141594c89f6b9c003000041b81c020000488b9df0fcffffe87aaaf9ff9090909090"
+    },
+    {
+     "address": "0x00925124",
+     "length": 14,
+     "sha256": "5acfdb8e4a583f953e9944c15f2efe2f377b3e0b41bab108f7c23c6b06db0c91",
+     "bytes": "41bd80070000b838040000909090"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 2 cascades (performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009b280b",
+     "length": 17,
+     "sha256": "11fa91264c9ce63b304b30dc004430f926ea1fbe365bffc0697f51795bba0707",
+     "bytes": "8b838c01000083f803b9020000000f4cc8"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 1 cascade (extreme performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009b280b",
+     "length": 17,
+     "sha256": "11fa91264c9ce63b304b30dc004430f926ea1fbe365bffc0697f51795bba0707",
+     "bytes": "8b838c01000083f802b9010000000f4cc8"
+    }
+   ]
+  },
+  {
+   "name": "Disable water reflections",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x007b2665",
+     "length": 9,
+     "sha256": "9e75421e9c7ee2ed59e09a5bb75eb67d2fbda685ac8ef63e8226c0508c11e954",
+     "bytes": "80b83808000000eb74"
+    }
+   ]
+  },
+  {
+   "name": "Disable SSAO",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00995acd",
+     "length": 9,
+     "sha256": "f8c61ecb37e3a7350040b1be298233d5391d9015b458a8f758e5b8b358f95849",
+     "bytes": "80b84b01000000eb1c"
+    }
+   ]
+  },
+  {
+   "name": "Disable fog",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009a1e89",
+     "length": 13,
+     "sha256": "ca48e24dd2fb0f7bb42f73be79139b58e2637f08a666233b56f47505b62662fc",
+     "bytes": "80b83508000000e98d00000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable volumetric lights",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009ff0c2",
+     "length": 13,
+     "sha256": "624e810739ee1456d9ab658ec74d4866a15081e22d9a9216c09309d9c24259fe",
+     "bytes": "80b86902000000e94d39000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable motion blur",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00a14b4f",
+     "length": 34,
+     "sha256": "780afce0965a5653992571f9949d9d836abc50dfca8ebd9db1496170b1d7ab03",
+     "bytes": "80b8ba010000004c8ba578ffffff488b8570ffffff488b8d68ffffffe9c400000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable depth of field",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00985a3c",
+     "length": 4,
+     "sha256": "a26a2e68bec248b87e68fb294520a10d9031d78e7fd5d13d7fecbd2691e2291e",
+     "bytes": "30c0eb2e"
+    }
+   ]
+  },
+  {
+   "name": "Disable bloom",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x00985a2f",
+     "length": 8,
+     "sha256": "24bb51091ce315ae563fc94b0231f17119de38755fa6e17e1e9c9b003664524e",
+     "bytes": "410fb68002020000"
+    }
+   ]
+  },
+  {
+   "name": "Disable anti-aliasing",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x007b1ea4",
+     "length": 10,
+     "sha256": "6ef854f40c48a33bb40f68867b80fe90e06382cbe2ccd88c0807f34be23caa19",
+     "bytes": "4180bf0602000000eb0d"
+    }
+   ]
+  },
+  {
+   "name": "Disable anisotropic filtering",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x007b1b7f",
+     "length": 7,
+     "sha256": "c3f5e58a5fb12612183167e31460e14b5094198cf00bb89b2017c6294460996c",
+     "bytes": "31f60f1f440000"
+    }
+   ]
+  },
+  {
+   "name": "Disable dynamic lights",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x008d5855",
+     "length": 14,
+     "sha256": "fd909224cb8637ed32a71737f2c4952133191df68fd7901b2418816c4b3b36d1",
+     "bytes": "8a80c201000084c0e97e04000090"
+    },
+    {
+     "address": "0x008d79d7",
+     "length": 13,
+     "sha256": "5b33362ca817992a156c3343e5a7539626731043fc2833d42e22205b8fb6f001",
+     "bytes": "80b8c201000000e97c05000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable sunlight ambient occlusion",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x009b1a1c",
+     "length": 9,
+     "sha256": "d1b557b944da487f254a27b93da8c351ea554f35556c3c201036ab5bf43a9f3e",
+     "bytes": "80b83908000000eb04"
+    }
+   ]
+  },
+  {
+   "name": "Draw distance: 40 m (extreme)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.00",
+   "writes": [
+    {
+     "address": "0x0095fa4f",
+     "length": 9,
+     "sha256": "73c423af2aa035bba00c14d5280ff16d047e17a2d9b6302e2943c70bd25e125a",
+     "bytes": "80b9dc030000009090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 720p (performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x00fd2326",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00fd232d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x00fd233b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00fd2342",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x00fd236c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "a0000000"
+    },
+    {
+     "address": "0x00fd2373",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "b4000000"
+    },
+    {
+     "address": "0x00fd2396",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x00fd239d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x010f191e",
+     "length": 56,
+     "sha256": "557c90643d6a47a4643218faae5c29948107056b4af9500905fb407f25e45710",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e89eedf8ff90909090"
+    },
+    {
+     "address": "0x010f195d",
+     "length": 83,
+     "sha256": "0cacc24cfc05f6e35aba7f231ccd8cb7355231d9a3c2f9bf2934824a256048b8",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e845edf8ff9090909090"
+    },
+    {
+     "address": "0x010f19b7",
+     "length": 61,
+     "sha256": "594beaad838b8a43cd85c8711fe4e8c148d4816c45637652de98ff480914295f",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e805edf8ff909090909090909090"
+    },
+    {
+     "address": "0x010f19fb",
+     "length": 64,
+     "sha256": "b3c7cd88ee2e7dfdc47baadc1485f14d94fedcdc972ae9ddc1954ff3906fec1a",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe8baecf8ff9090909090"
+    },
+    {
+     "address": "0x00ffb131",
+     "length": 27,
+     "sha256": "5dbf1f56f65b2168e9dcbc695b815452f9c80a2aabb43a6b7a7644170aa1e2b1",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 540p (extreme performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x00fd2326",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00fd232d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x00fd233b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00fd2342",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x00fd236c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "78000000"
+    },
+    {
+     "address": "0x00fd2373",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "87000000"
+    },
+    {
+     "address": "0x00fd2396",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x00fd239d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x010f191e",
+     "length": 56,
+     "sha256": "557c90643d6a47a4643218faae5c29948107056b4af9500905fb407f25e45710",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e89eedf8ff90909090"
+    },
+    {
+     "address": "0x010f195d",
+     "length": 83,
+     "sha256": "0cacc24cfc05f6e35aba7f231ccd8cb7355231d9a3c2f9bf2934824a256048b8",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e845edf8ff9090909090"
+    },
+    {
+     "address": "0x010f19b7",
+     "length": 61,
+     "sha256": "594beaad838b8a43cd85c8711fe4e8c148d4816c45637652de98ff480914295f",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e805edf8ff909090909090909090"
+    },
+    {
+     "address": "0x010f19fb",
+     "length": 64,
+     "sha256": "b3c7cd88ee2e7dfdc47baadc1485f14d94fedcdc972ae9ddc1954ff3906fec1a",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe8baecf8ff9090909090"
+    },
+    {
+     "address": "0x00ffb131",
+     "length": 27,
+     "sha256": "5dbf1f56f65b2168e9dcbc695b815452f9c80a2aabb43a6b7a7644170aa1e2b1",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 468p (ultra performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x00fd2326",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00fd232d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x00fd233b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00fd2342",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x00fd236c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "68000000"
+    },
+    {
+     "address": "0x00fd2373",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "75000000"
+    },
+    {
+     "address": "0x00fd2396",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x00fd239d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x010f191e",
+     "length": 56,
+     "sha256": "557c90643d6a47a4643218faae5c29948107056b4af9500905fb407f25e45710",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e89eedf8ff90909090"
+    },
+    {
+     "address": "0x010f195d",
+     "length": 83,
+     "sha256": "0cacc24cfc05f6e35aba7f231ccd8cb7355231d9a3c2f9bf2934824a256048b8",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e845edf8ff9090909090"
+    },
+    {
+     "address": "0x010f19b7",
+     "length": 61,
+     "sha256": "594beaad838b8a43cd85c8711fe4e8c148d4816c45637652de98ff480914295f",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e805edf8ff909090909090909090"
+    },
+    {
+     "address": "0x010f19fb",
+     "length": 64,
+     "sha256": "b3c7cd88ee2e7dfdc47baadc1485f14d94fedcdc972ae9ddc1954ff3906fec1a",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe8baecf8ff9090909090"
+    },
+    {
+     "address": "0x00ffb131",
+     "length": 27,
+     "sha256": "5dbf1f56f65b2168e9dcbc695b815452f9c80a2aabb43a6b7a7644170aa1e2b1",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 360p (maximum performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x00fd2326",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00fd232d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x00fd233b",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00fd2342",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x00fd236c",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "50000000"
+    },
+    {
+     "address": "0x00fd2373",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "5a000000"
+    },
+    {
+     "address": "0x00fd2396",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x00fd239d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x010f191e",
+     "length": 56,
+     "sha256": "557c90643d6a47a4643218faae5c29948107056b4af9500905fb407f25e45710",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e89eedf8ff90909090"
+    },
+    {
+     "address": "0x010f195d",
+     "length": 83,
+     "sha256": "0cacc24cfc05f6e35aba7f231ccd8cb7355231d9a3c2f9bf2934824a256048b8",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e845edf8ff9090909090"
+    },
+    {
+     "address": "0x010f19b7",
+     "length": 61,
+     "sha256": "594beaad838b8a43cd85c8711fe4e8c148d4816c45637652de98ff480914295f",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e805edf8ff909090909090909090"
+    },
+    {
+     "address": "0x010f19fb",
+     "length": 64,
+     "sha256": "b3c7cd88ee2e7dfdc47baadc1485f14d94fedcdc972ae9ddc1954ff3906fec1a",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe8baecf8ff9090909090"
+    },
+    {
+     "address": "0x00ffb131",
+     "length": 27,
+     "sha256": "5dbf1f56f65b2168e9dcbc695b815452f9c80a2aabb43a6b7a7644170aa1e2b1",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Skip startup logos",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x00e551c1",
+     "length": 9,
+     "sha256": "5437122fe5164176a9ab6a1fa4770530538c175685f5463e5c5b27773fe93703",
+     "bytes": "80b854480000009090"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 2 cascades (performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x010b93cd",
+     "length": 17,
+     "sha256": "2c584efea91ccbbec8396ce24fd222e2df21fc25fffa1562737e33a4b9f5eb9d",
+     "bytes": "8b8b14020000b80200000083f9030f4cc1"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 1 cascade (extreme performance)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x010b93cd",
+     "length": 17,
+     "sha256": "2c584efea91ccbbec8396ce24fd222e2df21fc25fffa1562737e33a4b9f5eb9d",
+     "bytes": "8b8b14020000b80100000083f9020f4cc1"
+    }
+   ]
+  },
+  {
+   "name": "Disable water reflections",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x008b9738",
+     "length": 9,
+     "sha256": "3a7bccdabf128f5a130f893ebf01d89ee8e2c8c4f74c80d9ae51493eadb8689c",
+     "bytes": "80b83808000000eb59"
+    }
+   ]
+  },
+  {
+   "name": "Disable SSAO",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x010a3b4d",
+     "length": 9,
+     "sha256": "f8c61ecb37e3a7350040b1be298233d5391d9015b458a8f758e5b8b358f95849",
+     "bytes": "80b84b01000000eb1c"
+    }
+   ]
+  },
+  {
+   "name": "Disable fog",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x01098f4d",
+     "length": 14,
+     "sha256": "b0d4971053259b8e5bbbd6af61b5c60ae17a12e4fff8f6b89fb99a0de6af6755",
+     "bytes": "4180bd3508000000e99b00000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable volumetric lights",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x010fcb5f",
+     "length": 13,
+     "sha256": "ae7297f9eb78bfee30616f31ec6638a6ceeab3d6e288ebca287a72a4e4352121",
+     "bytes": "80b86902000000e96244000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable motion blur",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x01111dcc",
+     "length": 34,
+     "sha256": "09b5348e00506b383b3b6d7fb8817ac4d507125661b63c84bf5ebfbefe72c5bb",
+     "bytes": "80b8ba010000004c8bb568ffffff488b8560ffffff488b8d58ffffffe9cb00000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable depth of field",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0107dd95",
+     "length": 4,
+     "sha256": "c6fa0803e9486d84aa531ce91546f1c2c034bd928f925fa27e685b2ff33ac8f6",
+     "bytes": "30d2eb35"
+    }
+   ]
+  },
+  {
+   "name": "Disable bloom",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0107dd88",
+     "length": 8,
+     "sha256": "dd211314fa64930612d47bba2ee2686ea83582fcefabbf2641306f612a2af6de",
+     "bytes": "410fb69002020000"
+    }
+   ]
+  },
+  {
+   "name": "Disable anti-aliasing",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x008bad51",
+     "length": 10,
+     "sha256": "453031aaf3e23a8c32e52e764aea7facb71574c1083e87bb2e973d47605c270a",
+     "bytes": "80bc240602000000eb0d"
+    }
+   ]
+  },
+  {
+   "name": "Disable anisotropic filtering",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x008ba97d",
+     "length": 8,
+     "sha256": "4441a7d2de4472d637479aab971c1480611919ff2ff43267e973aca32db8ffd8",
+     "bytes": "31f6660f1f440000"
+    }
+   ]
+  },
+  {
+   "name": "Disable dynamic lights",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x00f7b9b5",
+     "length": 14,
+     "sha256": "cb4ed572f902f60449f5cfa6f52877b8ff249b3238eb9d6a6173941b5d3dbc2a",
+     "bytes": "8a80c201000084c0e95e05000090"
+    },
+    {
+     "address": "0x00f7cd50",
+     "length": 13,
+     "sha256": "ac3caffb8c808ce104e7b768c840afd65de1a89b5965e3e0a0b2cc61b7116041",
+     "bytes": "80b8c201000000e97206000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable sunlight ambient occlusion",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x010b875c",
+     "length": 9,
+     "sha256": "d1b557b944da487f254a27b93da8c351ea554f35556c3c201036ab5bf43a9f3e",
+     "bytes": "80b83908000000eb04"
+    }
+   ]
+  },
+  {
+   "name": "Draw distance: 40 m (extreme)",
+   "elf": "big2-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x01041f4c",
+     "length": 9,
+     "sha256": "73c423af2aa035bba00c14d5280ff16d047e17a2d9b6302e2943c70bd25e125a",
+     "bytes": "80b9dc030000009090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 720p (performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x012396b6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x012396bd",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x012396cb",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x012396d2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x012396fc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "a0000000"
+    },
+    {
+     "address": "0x01239703",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "b4000000"
+    },
+    {
+     "address": "0x01239726",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "00050000"
+    },
+    {
+     "address": "0x0123972d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d0020000"
+    },
+    {
+     "address": "0x0134af5e",
+     "length": 56,
+     "sha256": "ce67d203d2fe210a0bf09e982feaebfa5f114b1af064892e9f2da9ec0a679690",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e85eb0f8ff90909090"
+    },
+    {
+     "address": "0x0134af9d",
+     "length": 83,
+     "sha256": "2631a71b00e823a38f3c1b3f74087355d7b27a3d40b5d218a64949161f5aa6e9",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e805b0f8ff9090909090"
+    },
+    {
+     "address": "0x0134aff7",
+     "length": 61,
+     "sha256": "4c551b48da0b97b503b2c43d399c0c7503c4b360c8312e18542e375ed9891d64",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e8c5aff8ff909090909090909090"
+    },
+    {
+     "address": "0x0134b03b",
+     "length": 64,
+     "sha256": "a447cb4af9f3b602fe57d163b98ffaa21beb5a98a7e455cea72fd7b578708167",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe87aaff8ff9090909090"
+    },
+    {
+     "address": "0x0125d641",
+     "length": 27,
+     "sha256": "e281120fa6493a59e2f835bd51f9dc7e7285b887cec40ed7c15052cffa3090bc",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 540p (extreme performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x012396b6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x012396bd",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x012396cb",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x012396d2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x012396fc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "78000000"
+    },
+    {
+     "address": "0x01239703",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "87000000"
+    },
+    {
+     "address": "0x01239726",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "c0030000"
+    },
+    {
+     "address": "0x0123972d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "1c020000"
+    },
+    {
+     "address": "0x0134af5e",
+     "length": 56,
+     "sha256": "ce67d203d2fe210a0bf09e982feaebfa5f114b1af064892e9f2da9ec0a679690",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e85eb0f8ff90909090"
+    },
+    {
+     "address": "0x0134af9d",
+     "length": 83,
+     "sha256": "2631a71b00e823a38f3c1b3f74087355d7b27a3d40b5d218a64949161f5aa6e9",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e805b0f8ff9090909090"
+    },
+    {
+     "address": "0x0134aff7",
+     "length": 61,
+     "sha256": "4c551b48da0b97b503b2c43d399c0c7503c4b360c8312e18542e375ed9891d64",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e8c5aff8ff909090909090909090"
+    },
+    {
+     "address": "0x0134b03b",
+     "length": 64,
+     "sha256": "a447cb4af9f3b602fe57d163b98ffaa21beb5a98a7e455cea72fd7b578708167",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe87aaff8ff9090909090"
+    },
+    {
+     "address": "0x0125d641",
+     "length": 27,
+     "sha256": "e281120fa6493a59e2f835bd51f9dc7e7285b887cec40ed7c15052cffa3090bc",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 468p (ultra performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x012396b6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x012396bd",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x012396cb",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x012396d2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x012396fc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "68000000"
+    },
+    {
+     "address": "0x01239703",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "75000000"
+    },
+    {
+     "address": "0x01239726",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "40030000"
+    },
+    {
+     "address": "0x0123972d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "d4010000"
+    },
+    {
+     "address": "0x0134af5e",
+     "length": 56,
+     "sha256": "ce67d203d2fe210a0bf09e982feaebfa5f114b1af064892e9f2da9ec0a679690",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e85eb0f8ff90909090"
+    },
+    {
+     "address": "0x0134af9d",
+     "length": 83,
+     "sha256": "2631a71b00e823a38f3c1b3f74087355d7b27a3d40b5d218a64949161f5aa6e9",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e805b0f8ff9090909090"
+    },
+    {
+     "address": "0x0134aff7",
+     "length": 61,
+     "sha256": "4c551b48da0b97b503b2c43d399c0c7503c4b360c8312e18542e375ed9891d64",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e8c5aff8ff909090909090909090"
+    },
+    {
+     "address": "0x0134b03b",
+     "length": 64,
+     "sha256": "a447cb4af9f3b602fe57d163b98ffaa21beb5a98a7e455cea72fd7b578708167",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe87aaff8ff9090909090"
+    },
+    {
+     "address": "0x0125d641",
+     "length": 27,
+     "sha256": "e281120fa6493a59e2f835bd51f9dc7e7285b887cec40ed7c15052cffa3090bc",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Resolution: 360p (maximum performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x012396b6",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x012396bd",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x012396cb",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x012396d2",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x012396fc",
+     "length": 4,
+     "sha256": "e6bfd42cb3ef4c11ccd2eb76227f9fa93916250b47c03f644c3171b9be8d9c02",
+     "bytes": "50000000"
+    },
+    {
+     "address": "0x01239703",
+     "length": 4,
+     "sha256": "a68cf346a1167f10f7a8240b20e63d68459207f456d2d4f9e650147b60538655",
+     "bytes": "5a000000"
+    },
+    {
+     "address": "0x01239726",
+     "length": 4,
+     "sha256": "67f14df289a306019bac4efec91b2ebe04696a523bc18d3e835bafcc2f69a249",
+     "bytes": "80020000"
+    },
+    {
+     "address": "0x0123972d",
+     "length": 4,
+     "sha256": "421e8bb0dfb8cf71d7f62018fb21a7e1808a11320eeff7752897f2ec84139e29",
+     "bytes": "68010000"
+    },
+    {
+     "address": "0x0134af5e",
+     "length": 56,
+     "sha256": "ce67d203d2fe210a0bf09e982feaebfa5f114b1af064892e9f2da9ec0a679690",
+     "bytes": "6a118f8518ffffff6a018f4424106a008f4424086a078f0424488d9518ffffff6a3d4159b98007000041b838040000e85eb0f8ff90909090"
+    },
+    {
+     "address": "0x0134af9d",
+     "length": 83,
+     "sha256": "2631a71b00e823a38f3c1b3f74087355d7b27a3d40b5d218a64949161f5aa6e9",
+     "bytes": "6a118f8510ffffff4989de49d1ee4c89b5d0fcffff4c89eb48d1eb48899dc8fcffff6a018f4424106a008f4424086a078f0424488d9510ffffff6a314159b9c003000041b81c020000e805b0f8ff9090909090"
+    },
+    {
+     "address": "0x0134aff7",
+     "length": 61,
+     "sha256": "4c551b48da0b97b503b2c43d399c0c7503c4b360c8312e18542e375ed9891d64",
+     "bytes": "6a118f8508ffffff6a018f4424106a008f4424086a078f0424488d9508ffffff6a3d4159b98007000041b838040000e8c5aff8ff909090909090909090"
+    },
+    {
+     "address": "0x0134b03b",
+     "length": 64,
+     "sha256": "a447cb4af9f3b602fe57d163b98ffaa21beb5a98a7e455cea72fd7b578708167",
+     "bytes": "6a118f8500ffffff6a018f4424106a008f4424086a078f0424488d9500ffffff6a314159b9c003000041b81c020000488b9d00fdffffe87aaff8ff9090909090"
+    },
+    {
+     "address": "0x0125d641",
+     "length": 27,
+     "sha256": "e281120fa6493a59e2f835bd51f9dc7e7285b887cec40ed7c15052cffa3090bc",
+     "bytes": "b98007000048898d00ffffffb838040000488985f8feffff909090"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 2 cascades (performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0130cf47",
+     "length": 19,
+     "sha256": "8fa95987438bdc568399ef788c3441f14a034613da32d1e259170c4d17c41f6a",
+     "bytes": "418bb4248c010000b80200000083fe030f4cc6"
+    }
+   ]
+  },
+  {
+   "name": "Shadows: 1 cascade (extreme performance)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0130cf47",
+     "length": 19,
+     "sha256": "8fa95987438bdc568399ef788c3441f14a034613da32d1e259170c4d17c41f6a",
+     "bytes": "418bb4248c010000b80100000083fe020f4cc6"
+    }
+   ]
+  },
+  {
+   "name": "Disable water reflections",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x010197ba",
+     "length": 9,
+     "sha256": "1b02ca297dd734c849d362650c731de7f19fe70b596e5a557e7d13f37cd693dc",
+     "bytes": "80b83808000000eb70"
+    }
+   ]
+  },
+  {
+   "name": "Disable SSAO",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x012f9ced",
+     "length": 9,
+     "sha256": "f8c61ecb37e3a7350040b1be298233d5391d9015b458a8f758e5b8b358f95849",
+     "bytes": "80b84b01000000eb1c"
+    }
+   ]
+  },
+  {
+   "name": "Disable fog",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x012eeaa5",
+     "length": 20,
+     "sha256": "5d61b77bae511fee4b74e2b908611ae193bf9f731f345137677b73a25ec74a27",
+     "bytes": "80b835080000004c8bbb80000000e99b00000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable volumetric lights",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0135b98f",
+     "length": 13,
+     "sha256": "fc2fc009163bcf89df6e6a1814e15a46389490cbdb921c0c8753a29cab55120b",
+     "bytes": "80b86902000000e94042000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable motion blur",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0137456c",
+     "length": 34,
+     "sha256": "22e188006b13b195b2a442895667549905f938972d38df7422367197dc0accd0",
+     "bytes": "80b8ba010000004c8bb568ffffff488b8560ffffff488b8d58ffffffe9c100000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable depth of field",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x012d2b0b",
+     "length": 4,
+     "sha256": "a0e5db1259fde65c8f74c5758296611c4af340c03c32254e81992ff00387f1fc",
+     "bytes": "30d2eb38"
+    }
+   ]
+  },
+  {
+   "name": "Disable bloom",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x012d2afe",
+     "length": 8,
+     "sha256": "dd211314fa64930612d47bba2ee2686ea83582fcefabbf2641306f612a2af6de",
+     "bytes": "410fb69002020000"
+    }
+   ]
+  },
+  {
+   "name": "Disable anti-aliasing",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0101b037",
+     "length": 10,
+     "sha256": "453031aaf3e23a8c32e52e764aea7facb71574c1083e87bb2e973d47605c270a",
+     "bytes": "80bc240602000000eb0d"
+    }
+   ]
+  },
+  {
+   "name": "Disable anisotropic filtering",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0101abed",
+     "length": 8,
+     "sha256": "4441a7d2de4472d637479aab971c1480611919ff2ff43267e973aca32db8ffd8",
+     "bytes": "31f6660f1f440000"
+    }
+   ]
+  },
+  {
+   "name": "Disable dynamic lights",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x011e5db5",
+     "length": 14,
+     "sha256": "cb4ed572f902f60449f5cfa6f52877b8ff249b3238eb9d6a6173941b5d3dbc2a",
+     "bytes": "8a80c201000084c0e95e05000090"
+    },
+    {
+     "address": "0x011e72f8",
+     "length": 13,
+     "sha256": "aa9894b917b1d57ee0eb21caa5758ce0fb17f0746c98d5b0f2b8b2d7d0933f2f",
+     "bytes": "80b8c201000000e91806000090"
+    }
+   ]
+  },
+  {
+   "name": "Disable sunlight ambient occlusion",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x0130c26c",
+     "length": 9,
+     "sha256": "d1b557b944da487f254a27b93da8c351ea554f35556c3c201036ab5bf43a9f3e",
+     "bytes": "80b83908000000eb04"
+    }
+   ]
+  },
+  {
+   "name": "Draw distance: 40 m (extreme)",
+   "elf": "big3-ps4_Shipping.elf",
+   "version": "01.02",
+   "writes": [
+    {
+     "address": "0x012a0d7c",
+     "length": 9,
+     "sha256": "73c423af2aa035bba00c14d5280ff16d047e17a2d9b6302e2943c70bd25e125a",
+     "bytes": "80b9dc030000009090"
+    }
+   ]
+  }
+ ]
+}

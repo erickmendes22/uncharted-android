@@ -81,6 +81,7 @@ public class Launcher extends Activity {
      *  recipes' byte patches (the display configuration's size pairs and the light tile grid). */
     private static final String[][] RESOLUTIONS = {
         {"640x360", "640x360 (fastest, a soft picture)"},
+        {"832x468", "832x468 (Bachata patch)"},
         {"960x540", "960x540"},
         {"1280x720", "1280x720 (recommended)"},
         {"1920x1080", "1920x1080, the game's own (much slower)"},
@@ -397,6 +398,7 @@ public class Launcher extends Activity {
                  + "executables (the app ships recipes, no code of the game) and the movies play through the "
                  + "port's decoder. FSR 3.1 and TAA (the panel in the game) are anti-aliasing at that size; the port "
                  + "scales the picture to the screen.", 14, false);
+        buildPatchOptions(patches);
         LinearLayout displayCard = card(home, "DISPLAY & PERFORMANCE");
         root = card(config, "GPU DRIVER");
         text(root, "Vulkan driver:", 14, false);
@@ -807,7 +809,7 @@ public class Launcher extends Activity {
      *  it: a write is the executable's own bytes with the recipe's edits and its resolution fields
      *  (W, H, W/8, H/4) put in; writes marked below_1080p are left out at 1920x1080. Null when a
      *  write's original bytes do not hash as the recipe says. */
-    private byte[] makePreset(String recipe, File boot, int width, int height) {
+    private byte[] makeBasePreset(String recipe, File boot, int width, int height) {
         String text = readAsset(recipe);
         if (text == null) return null;
         try (RandomAccessFile f = new RandomAccessFile(boot, "r")) {
@@ -859,6 +861,120 @@ public class Launcher extends Activity {
             return out.array();
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    private void buildPatchOptions(LinearLayout parent) {
+        LinearLayout card = card(parent, "BACHATA PERFORMANCE PATCHES");
+        note(card, "Optional patches from Bachata S4+ 0.2.7. The original bytes are verified for each executable; incompatible patches are skipped. Changes apply on the next game start.");
+        try {
+            JSONArray options = new JSONObject(readAsset("recipes/bachata.json")).getJSONArray("patches");
+            java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+            for (int i = 0; i < options.length(); i++) {
+                String name = options.getJSONObject(i).getString("name");
+                if (name.startsWith("Resolution:") || name.startsWith("Shadows:") || !seen.add(name)) continue;
+                check(card, name, "patch_" + name, false);
+            }
+            text(card, "Shadow cascades", 14, true);
+            RadioGroup shadows = new RadioGroup(this);
+            String[] modes = {"Original", "2 cascades", "1 cascade"};
+            for (int i = 0; i < 3; i++) {
+                RadioButton b = new RadioButton(this); b.setId(View.generateViewId()); b.setTag(i); b.setText(modes[i]);
+                shadows.addView(b);
+                if (i == prefs.getInt("shadow_cascades", 0)) shadows.check(b.getId());
+            }
+            shadows.setOnCheckedChangeListener((group, id) -> {
+                RadioButton b = group.findViewById(id);
+                if (b != null) prefs.edit().putInt("shadow_cascades", (Integer)b.getTag()).apply();
+            });
+            card.addView(shadows);
+        } catch (Exception ex) { note(card, "Patch catalog unavailable: " + ex.getMessage()); }
+    }
+
+    /** Merge existing recipes with independently validated Bachata batches. No game bytes are changed on disk. */
+    private byte[] makePreset(String recipe, File boot, int width, int height) {
+        byte[] nativePreset = makeBasePreset(recipe, boot, width, height);
+        try (RandomAccessFile file = new RandomAccessFile(boot, "r")) {
+            byte[] head = new byte[16]; file.readFully(head);
+            long imageSize = ByteBuffer.wrap(head, 8, 8).order(ByteOrder.LITTLE_ENDIAN).getLong();
+            long imageAt = file.length() - imageSize;
+            if (imageSize < 0 || imageAt < 16) return nativePreset;
+            final long base = 0x400000L;
+            List<long[]> places = new ArrayList<>();
+            List<byte[]> data = new ArrayList<>();
+            if (nativePreset != null) {
+                ByteBuffer b = ByteBuffer.wrap(nativePreset).order(ByteOrder.LITTLE_ENDIAN);
+                b.position(16); long count = b.getLong();
+                for (long i = 0; i < count; i++) {
+                    long address = b.getLong(); int size = Math.toIntExact(b.getLong());
+                    byte[] bytes = new byte[size]; b.get(bytes);
+                    places.add(new long[] {address, size}); data.add(bytes);
+                }
+            }
+            String elf = new JSONObject(readAsset(recipe)).getString("executable");
+            JSONArray catalog = new JSONObject(readAsset("recipes/bachata.json")).getJSONArray("patches");
+            java.util.Map<String, List<JSONObject>> groups = new java.util.LinkedHashMap<>();
+            for (int i = 0; i < catalog.length(); i++) {
+                JSONObject patch = catalog.getJSONObject(i);
+                if (!elf.equals(patch.getString("elf"))) continue;
+                String name = patch.getString("name");
+                boolean resolution = name.startsWith("Resolution:");
+                boolean wanted = resolution ? nativePreset == null && height < 1080 && name.startsWith("Resolution: " + height + "p ")
+                    : name.startsWith("Shadows: 2") ? prefs.getInt("shadow_cascades", 0) == 1
+                    : name.startsWith("Shadows: 1") ? prefs.getInt("shadow_cascades", 0) == 2
+                    : prefs.getBoolean("patch_" + name, false);
+                if (wanted) groups.computeIfAbsent(name, key -> new ArrayList<>()).add(patch);
+            }
+            boolean resolutionReady = nativePreset != null || height == 1080;
+            MessageDigest sha = MessageDigest.getInstance("SHA-256");
+            for (java.util.Map.Entry<String, List<JSONObject>> group : groups.entrySet()) {
+                JSONObject match = null; int matches = 0;
+                for (JSONObject patch : group.getValue()) {
+                    boolean fits = true; JSONArray writes = patch.getJSONArray("writes");
+                    for (int j = 0; j < writes.length(); j++) {
+                        JSONObject write = writes.getJSONObject(j);
+                        long offset = Long.decode(write.getString("address")) - base;
+                        int length = write.getInt("length");
+                        if (offset < 0 || length <= 0 || offset > imageSize - length) { fits = false; break; }
+                        byte[] original = new byte[length]; file.seek(imageAt + offset); file.readFully(original);
+                        if (!hex(sha.digest(original)).equals(write.getString("sha256"))) { fits = false; break; }
+                    }
+                    if (fits) { match = patch; matches++; }
+                }
+                if (matches != 1) {
+                    android.util.Log.w("Patches", elf + ": " + group.getKey() + " skipped (" + matches + " matching versions)");
+                    continue;
+                }
+                JSONArray writes = match.getJSONArray("writes");
+                List<long[]> batchPlaces = new ArrayList<>(); List<byte[]> batchData = new ArrayList<>();
+                boolean conflict = false;
+                for (int j = 0; j < writes.length(); j++) {
+                    JSONObject write = writes.getJSONObject(j);
+                    long offset = Long.decode(write.getString("address")) - base;
+                    byte[] bytes = unhex(write.getString("bytes"));
+                    if (bytes.length != write.getInt("length")) { conflict = true; break; }
+                    for (long[] range : places)
+                        if (offset < range[0] + range[1] && range[0] < offset + bytes.length) conflict = true;
+                    for (long[] range : batchPlaces)
+                        if (offset < range[0] + range[1] && range[0] < offset + bytes.length) conflict = true;
+                    batchPlaces.add(new long[] {offset, bytes.length}); batchData.add(bytes);
+                }
+                if (!conflict) {
+                    places.addAll(batchPlaces); data.addAll(batchData);
+                    if (group.getKey().startsWith("Resolution:")) resolutionReady = true;
+                    android.util.Log.i("Patches", elf + ": " + group.getKey() + " verified and enabled");
+                }
+            }
+            if (!resolutionReady) return null; // never label an unpatched native render as low resolution
+            int total = 24;
+            for (byte[] bytes : data) total = Math.addExact(total, 16 + bytes.length);
+            ByteBuffer out = ByteBuffer.allocate(total).order(ByteOrder.LITTLE_ENDIAN);
+            out.put("BBPATCH2".getBytes("US-ASCII")).putLong(base).putLong(places.size());
+            for (int i = 0; i < places.size(); i++) out.putLong(places.get(i)[0]).putLong(data.get(i).length).put(data.get(i));
+            return out.array();
+        } catch (Exception ex) {
+            android.util.Log.w("Patches", "Catalog: " + ex.getMessage());
+            return nativePreset;
         }
     }
 

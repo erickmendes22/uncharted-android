@@ -74,3 +74,20 @@ Cloth barriers and Windows memory policies were not enabled.
 
 Physical-device boot, LSFG image quality, pacing and driver stability remain
 unverified. No DLL or game data is supplied.
+
+## UI and existing Bachata catalog
+
+The launcher now uses a consistent Uncharted expedition palette, Home/Patches/
+Settings/About navigation, direct trilogy selection, and responsive action rows.
+The in-game panel uses the same palette, viewport-bounded sizing and touch-sized
+Graphics/Frame generation/Controls tabs. Original PC-only and Bloodborne labels
+are no longer displayed in that panel.
+
+The Bachata S4+ 0.2.7 release APK supplies the Uncharted catalog. Imported data
+contains expected-byte hashes and patch values for 112 batches, excluding macOS
+memory and low-frame-rate assertion bypasses already treated by this runtime.
+The runtime verifies an entire batch against the user's boot image, rejects
+ambiguous version matches and overlapping writes, and keeps imported effects
+optional/off. Existing resolution recipes take precedence; catalog resolution
+variants provide a byte-checked fallback (including build 1.00 and 832x468).
+No claim of new physical-device validation is made.
