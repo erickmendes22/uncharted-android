@@ -19,3 +19,12 @@ Performance varies by device and game; new performance changes await device comp
 [Android base](https://github.com/revvv991/uncharted-android) ·
 [PC base](https://github.com/Supermedo/uncharted_pc) ·
 [Bloodborne Android](https://github.com/ducvd89/Bloodborne-Android)
+
+### Startup and display fixes
+- Automatic game-file preparation when playing; removed the manual Prepare card.
+- Requests storage access on first opening, with manual retry if declined.
+- Frame-generation HUD reports measured original and output FPS with the selected multiplier.
+- Rebuilds launcher layout after rotation while preserving its active page and background tasks.
+- Refreshes the swapchain when display rotation changes from an identity transform.
+
+These fixes retain version 0.2.5. Device rotation and gameplay need confirmation on hardware.

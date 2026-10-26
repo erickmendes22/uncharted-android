@@ -782,7 +782,7 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
     if (shown && !behind()) {
         wait_until(start + step * shown);
     }
-    if (!PresentImage(frame, frame->image, true)) {
+    if (!PresentImage(frame, frame->image, true, !is_reusing_frame && is_game_frame)) {
         free_frame();
         return;
     }
@@ -793,7 +793,7 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
     }
 }
 
-bool Presenter::PresentImage(Frame* frame, vk::Image image, bool last) {
+bool Presenter::PresentImage(Frame* frame, vk::Image image, bool last, bool original) {
     if (!swapchain.AcquireNextImage()) {
         if (swapchain.AcquireTimedOut() || !swapchain.SurfaceReady()) {
             return false; // g2-arm64: no buffer or no surface now: skip this frame
@@ -1045,7 +1045,9 @@ bool Presenter::PresentImage(Frame* frame, vk::Image image, bool last) {
     // Present to swapchain.
     {
         std::scoped_lock submit_lock{Scheduler::submit_mutex};
-        if (!swapchain.Present() && window.GetWidth() != 0 && window.GetHeight() != 0) {
+        if (swapchain.Present()) {
+            BbOverlay::NotePresentedFrame(original);
+        } else if (window.GetWidth() != 0 && window.GetHeight() != 0) {
             swapchain.Recreate(window.GetWidth(), window.GetHeight());
         }
     }

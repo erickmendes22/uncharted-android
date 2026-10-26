@@ -82,6 +82,8 @@ jobs:
         run: |
           g++ -std=c++20 -Igpu/shim tests/test_android_mobile_policy.cpp -o "$RUNNER_TEMP/mobile-policy-test"
           "$RUNNER_TEMP/mobile-policy-test"
+          g++ -std=c++20 -Igpu/shim tests/test_android_fps_meter.cpp -o "$RUNNER_TEMP/fps-meter-test"
+          "$RUNNER_TEMP/fps-meter-test"
       - name: Verify Android touch controls and menu
         shell: bash
         run: |

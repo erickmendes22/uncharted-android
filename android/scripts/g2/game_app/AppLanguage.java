@@ -47,11 +47,11 @@ final class AppLanguage {
         int n=java.util.Arrays.asList(CODES).indexOf(choice);
         return text("Language")+" · "+(n<=0?text("Automatic"):LABELS[n]);
     }
-    static void show(Activity a) {
+    static android.app.AlertDialog show(Activity a) {
         String choice=a.getSharedPreferences("launcher",0).getString("app_language","auto");
         int current=Math.max(0,java.util.Arrays.asList(CODES).indexOf(choice));
         String[] names=LABELS.clone();names[0]=text("Automatic");
-        new android.app.AlertDialog.Builder(a).setTitle(text("Language"))
+        return new android.app.AlertDialog.Builder(a).setTitle(text("Language"))
             .setSingleChoiceItems(names,current,(dialog,n)->{
                 if(n!=current && a.getSharedPreferences("launcher",0).edit().putString("app_language",CODES[n]).commit()) {
                     dialog.dismiss();a.getWindow().getDecorView().post(()->{if(!a.isFinishing()&&!a.isDestroyed())a.recreate();});

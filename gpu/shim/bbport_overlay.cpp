@@ -1,3 +1,4 @@
+#include "bbport_fps_meter.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "bbport_overlay.h"
 
@@ -80,6 +81,7 @@ float base_scale = 1.0f;
 // Present rate for the FPS counter.
 std::chrono::steady_clock::time_point last_present{};
 float frame_ms_avg = 0.0f, last_present_ms = 0.0f;
+FpsMeter presented_fps;
 
 void SetOpen(bool value) {
     if (menu_open.exchange(value) == value) {
@@ -375,7 +377,12 @@ void FpsCounter() {
     ImGui::Begin("##uncharted-hud",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoFocusOnAppearing);
     ImGui::PushFont(nullptr,21*base_scale*settings.hud_scale.load());
     // Corner-anchored HUD; controls reserve this rectangle instead of pushing the HUD down.
-    ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"FPS %.0f",frame_ms_avg>0?1000.f/frame_ms_avg:0.f);
+    if(settings.frame_gen==BbSettings::FrameGenLsfg) {
+        ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"FPS %.0f | %dx %.0f",presented_fps.real_fps,
+            settings.frame_gen_multiplier.load(),presented_fps.output_fps);
+    } else {
+        ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"FPS %.0f",presented_fps.real_fps);
+    }
     if(settings.hud_mode>1){ImGui::SameLine();ImGui::Text(" · %.1f ms",frame_ms_avg);}
     if(settings.hud_mode>0){
         if(sample.gpu>=0)ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU %d%%",sample.gpu);
@@ -813,6 +820,11 @@ static void StartMemoryLog() {
                         (unsigned long long)BbStats::arena_allocations.load(), protects_per_s);
         }
     }).detach();
+}
+
+void NotePresentedFrame(bool original) {
+    const double now=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    presented_fps.Presented(now,original);
 }
 
 void NotePresent() {

@@ -146,6 +146,7 @@ private:
     vk::PresentModeKHR present_mode;
     vk::Extent2D extent;
     vk::SurfaceTransformFlagBitsKHR transform;
+    vk::SurfaceTransformFlagBitsKHR surface_transform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
     u32 quarter_turns = 0; ///< g2-arm64: pre-rotation applied by the presenter
     vk::CompositeAlphaFlagBitsKHR composite_alpha;
     std::vector<vk::Image> images;

@@ -185,7 +185,7 @@ bool Swapchain::Present() {
         // A reverse-landscape turn can keep exactly the same pixel dimensions.
         // Only discard Suboptimal if the display transform actually stayed the same.
         const auto [status,caps]=instance.GetPhysicalDevice().getSurfaceCapabilitiesKHR(surface);
-        if(status==vk::Result::eSuccess && quarter_turns && caps.currentTransform!=transform)
+        if(status==vk::Result::eSuccess && caps.currentTransform!=surface_transform)
             result=vk::Result::eErrorOutOfDateKHR;
         else if(status==vk::Result::eErrorSurfaceLostKHR) result=status;
         else result=vk::Result::eSuccess;
@@ -319,6 +319,7 @@ bool Swapchain::SetSurfaceProperties() {
     ASSERT_MSG(capabilities_result == vk::Result::eSuccess,
                "Failed to query surface capabilities: {}", vk::to_string(capabilities_result));
 
+    surface_transform = capabilities.currentTransform;
     extent = capabilities.currentExtent;
     if (capabilities.currentExtent.width == std::numeric_limits<u32>::max()) {
         extent.width = std::max(capabilities.minImageExtent.width,

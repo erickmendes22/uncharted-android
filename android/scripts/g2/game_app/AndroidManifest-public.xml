@@ -17,7 +17,7 @@
              a new one, and that brings a running game back to the front (Launcher.resumeGame). -->
         <activity android:name="dev.unchartedg2.game.Launcher" android:exported="true"
             android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation">
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

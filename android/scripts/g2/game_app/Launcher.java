@@ -96,9 +96,9 @@ public class Launcher extends Activity {
 
     private SharedPreferences prefs;
     private File files;
-    private TextView folderText, folderInfo, prepareInfo, statusText;
+    private TextView folderText, folderInfo, statusText;
     private EditText pathEdit, extraEnv;
-    private Button accessButton, prepareButton, playButton;
+    private Button accessButton, playButton;
     private RadioGroup resolution;
     private RadioGroup fpsLimit;
     private RadioGroup touchPad;
@@ -109,6 +109,9 @@ public class Launcher extends Activity {
     private long gpuChip;
     private PkgInstaller pkgInstaller;
     private int pendingPkg=-1;
+    private int selectedPage;
+    private ScrollView pageScroll;
+    private android.app.AlertDialog activeDialog;
 
     @Override protected void attachBaseContext(android.content.Context base) {super.attachBaseContext(AppLanguage.attach(base));}
 
@@ -154,15 +157,52 @@ public class Launcher extends Activity {
         }
         if(prefs.getInt("mobile_upscale",0)==5)prefs.edit().putInt("mobile_upscale",4).apply();
         if("fsr3".equals(iniGet("frame_gen")) || "dlss".equals(iniGet("frame_gen")))iniPut("frame_gen","off");
+        if(savedInstanceState!=null)selectedPage=savedInstanceState.getInt("selected_page",0);
+        // Request before any game/storage action, once. A refusal keeps a manual retry button.
+        if(!Environment.isExternalStorageManager() && !prefs.getBoolean("storage_requested",false)) {
+            requestStorageAccess();
+        }
         buildViews();
-        handle(getIntent());
+        if(Environment.isExternalStorageManager())handle(getIntent());else refresh();
+        if(savedInstanceState!=null){final int y=savedInstanceState.getInt("page_scroll",0);pageScroll.post(()->pageScroll.scrollTo(0,y));}
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handle(intent);
+        if(Environment.isExternalStorageManager())handle(intent);
+    }
+
+    private void requestStorageAccess() {
+        try {
+            startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:"+getPackageName())));
+            prefs.edit().putBoolean("storage_requested",true).apply();
+        } catch(android.content.ActivityNotFoundException noAppPage) {
+            try {startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+                prefs.edit().putBoolean("storage_requested",true).apply();
+            }catch(android.content.ActivityNotFoundException unavailable){android.util.Log.w("Launcher","Storage permission settings unavailable");}
+        }
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        state.putInt("selected_page",selectedPage);
+        if(pageScroll!=null)state.putInt("page_scroll",pageScroll.getScrollY());
+        if(extraEnv!=null)prefs.edit().putString("extra_env",extraEnv.getText().toString()).apply();
+        super.onSaveInstanceState(state);
+    }
+
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        // Rebuild responsive rows from current bounds, keeping the same activity and its
+        // installer/preparation workers alive. Old dialogs retain the previous orientation.
+        if(activeDialog!=null){activeDialog.dismiss();activeDialog=null;}
+        final int y=pageScroll!=null?pageScroll.getScrollY():0;
+        final String path=pathEdit!=null?pathEdit.getText().toString():"";
+        if(extraEnv!=null)prefs.edit().putString("extra_env",extraEnv.getText().toString()).apply();
+        buildViews();refresh();pathEdit.setText(path);
+        pageScroll.post(()->{pageScroll.scrollTo(0,y);pageScroll.requestApplyInsets();});
     }
 
     /** Brings the running game's task to the front; false when no game runs. */
@@ -195,7 +235,7 @@ public class Launcher extends Activity {
             status(done != null ? "Saves copied to " + done : "Backing up failed.");
         }
         if (intent.getBooleanExtra("prepare", false)) prepare(intent.getBooleanExtra("play", false));
-        else if (intent.getBooleanExtra("play", false) && prepared()) play();
+        else if (intent.getBooleanExtra("play", false)) play();
     }
 
     @Override
@@ -345,6 +385,7 @@ public class Launcher extends Activity {
         subtitle.setTextSize(11);
         subtitle.setPadding(dp(22), 0, dp(16), dp(8));
         ScrollView scroll = new ScrollView(this);
+        pageScroll=scroll;
         scroll.setFillViewport(true);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -356,7 +397,7 @@ public class Launcher extends Activity {
             pages[n] = new LinearLayout(this);
             pages[n].setOrientation(LinearLayout.VERTICAL);
             root.addView(pages[n]);
-            pages[n].setVisibility(n == 0 ? View.VISIBLE : View.GONE);
+            pages[n].setVisibility(n == selectedPage ? View.VISIBLE : View.GONE);
         }
         LinearLayout home = pages[0], patches = pages[1], config = pages[2], about = pages[3];
         android.widget.FrameLayout hero = new android.widget.FrameLayout(this);
@@ -403,11 +444,7 @@ public class Launcher extends Activity {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             startActivityForResult(i, PICK_FOLDER);
         });
-        accessButton = button(row, "Allow access to all files", v -> {
-            Intent i = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                                  Uri.parse("package:" + getPackageName()));
-            startActivity(i);
-        });
+        accessButton = button(row, "Allow access to all files", v -> requestStorageAccess());
         pathEdit = new EditText(this);
         pathEdit.setHint(AppLanguage.text("Game folder path"));
         pathEdit.setSingleLine(true);
@@ -420,9 +457,6 @@ public class Launcher extends Activity {
             refresh();
         });
 
-        LinearLayout prepareCard = card(config, "PREPARE GAME FILES");
-        prepareInfo = note(prepareCard, "");
-        prepareButton = button(prepareCard, "Prepare", v -> prepare(false));
 
         LinearLayout page = root;
         root = card(patches, "RESOLUTION PATCHES"); // the settings widgets below go into the card
@@ -461,7 +495,7 @@ public class Launcher extends Activity {
             new ExpeditionDialog(this).setTitle(AppLanguage.text("HUD style")).setSingleChoiceItems(labels,selected,(dialog,which)->{iniPut("hud_mode",Integer.toString(which));dialog.dismiss();}).setNegativeButton("Cancel",null).show();
         });
         LinearLayout languageCard=card(config,"LANGUAGE");
-        button(languageCard,AppLanguage.summary(this),v->AppLanguage.show(this));
+        button(languageCard,AppLanguage.summary(this),v->activeDialog=AppLanguage.show(this));
         note(languageCard,"Language changes apply on next game start.");
         root = card(config, "GPU DRIVER");
         text(root, "Vulkan driver:", 14, false);
@@ -559,7 +593,7 @@ public class Launcher extends Activity {
                     }
                     iniPut("frame_gen", which == 0 ? "off" : "lsfg");
                     if (which > 0) iniPut("frame_gen_multiplier", Integer.toString(which + 1));
-                    status("Frame generation: " + modes[which]);
+                    status(AppLanguage.text("Frame generation")+" · "+AppLanguage.text(modes[which]));
                     dialog.dismiss();
                 }).setNegativeButton("Cancel", null).show();
         });
@@ -616,11 +650,12 @@ public class Launcher extends Activity {
             final int index = n;
             Button item = new Button(this, null, android.R.attr.borderlessButtonStyle);
             item.setText(AppLanguage.text(tabs[n])); item.setAllCaps(false); item.setTextSize(11);
-            ExpeditionIcon navIcon=new ExpeditionIcon(n,n==0?accent:muted);navIcon.setBounds(0,0,dp(22),dp(22));
+            ExpeditionIcon navIcon=new ExpeditionIcon(n,n==selectedPage?accent:muted);navIcon.setBounds(0,0,dp(22),dp(22));
             item.setCompoundDrawables(null,navIcon,null,null);item.setCompoundDrawablePadding(dp(3));
             item.setMinWidth(0); item.setMinimumWidth(0); item.setPadding(0, dp(12), 0, dp(12));
-            item.setTextColor(n == 0 ? accent : muted);
+            item.setTextColor(n == selectedPage ? accent : muted);
             item.setOnClickListener(v -> {
+                selectedPage=index;
                 prefs.edit().putString("extra_env", extraEnv.getText().toString()).apply();
                 for (int j = 0; j < pages.length; j++) {
                     pages[j].setVisibility(j == index ? View.VISIBLE : View.GONE);
@@ -652,6 +687,7 @@ public class Launcher extends Activity {
         @Override public android.app.AlertDialog.Builder setPositiveButton(CharSequence label,android.content.DialogInterface.OnClickListener listener) {return super.setPositiveButton(AppLanguage.text(label),listener);}
         @Override public android.app.AlertDialog show() {
             android.app.AlertDialog dialog = super.show();
+            activeDialog=dialog;
             if (dialog.getWindow() != null) {
                 GradientDrawable background = new GradientDrawable();
                 background.setColor(0xFF191F19); background.setCornerRadius(dp(22));
@@ -825,22 +861,6 @@ public class Launcher extends Activity {
         } else {
             folderInfo.setText(AppLanguage.text(problem));
         }
-        boolean ready = problem == null && prepared();
-        String presets = "";
-        if (ready) {
-            List<String> fit = new ArrayList<>(), not = new ArrayList<>();
-            for (String[] g : GAMES) {
-                File out = g[2].isEmpty() ? files : new File(files, g[2]);
-                (recipeFits(g[3], new File(out, "boot-linked.bin")) ? fit : not).add(g[0].toUpperCase(Locale.ROOT));
-            }
-            presets = not.isEmpty() ? " The resolution recipes fit all three games."
-                    : " The resolution recipes fit " + (fit.isEmpty() ? "none of the games" : String.join(", ", fit))
-                      + " (another version of the executables): " + String.join(", ", not)
-                      + " run at 1920x1080 without patches.";
-        }
-        prepareInfo.setText(AppLanguage.text(problem != null ? "-" : ready ? "Prepared for this folder." + presets
-                                                     : "Not prepared yet: the app makes the loader's files from the game (a few seconds)."));
-        prepareButton.setEnabled(problem == null && !busy);
         playButton.setEnabled(problem == null && !busy);
     }
 
@@ -1187,6 +1207,7 @@ public class Launcher extends Activity {
     }
 
     private void play() {
+        if(!Environment.isExternalStorageManager()){requestStorageAccess();return;}
         if (!prepared()) {
             prepare(true);
             return;
