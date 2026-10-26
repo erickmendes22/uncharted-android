@@ -607,8 +607,8 @@ public class Launcher extends Activity {
                 for (int j = 0; j < pages.length; j++) {
                     pages[j].setVisibility(j == index ? View.VISIBLE : View.GONE);
                     navButtons[j].setTextColor(j == index ? accent : muted);
-                    android.graphics.drawable.Drawable navIcon=navButtons[j].getCompoundDrawables()[1];
-                    if(navIcon!=null)navIcon.setColorFilter(j==index?accent:muted,android.graphics.PorterDuff.Mode.SRC_IN);
+                    android.graphics.drawable.Drawable activeIcon=navButtons[j].getCompoundDrawables()[1];
+                    if(activeIcon!=null)activeIcon.setColorFilter(j==index?accent:muted,android.graphics.PorterDuff.Mode.SRC_IN);
                 }
                 scroll.scrollTo(0, 0);
             });
