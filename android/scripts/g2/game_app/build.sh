@@ -36,7 +36,7 @@ cp -r "$HERE/../recipes" "$W/assets/"
 mkdir -p "$W/res/drawable"
 if [ -n "$ASSETS_DIR" ]; then cp -r "$ASSETS_DIR"/. "$W/assets/"; fi
 if [ ! -f "$W/assets/art/collection.png" ]; then bash "$HERE/../../fetch_art.sh" "$W/assets"; fi
-cp "$W/assets/art/collection.png" "$W/res/drawable/collection.png"
+cp "$W/assets/art/collection.png" "$W/res/drawable/collection.jpg"
 "$BT/aapt2" compile --dir "$W/res" -o "$W/resources.zip"
 LINK_EXTRA+=(-A "$W/assets")
 cd "$W"
