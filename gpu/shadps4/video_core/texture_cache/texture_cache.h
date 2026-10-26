@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include "bbport_toggles.h"
@@ -383,6 +384,7 @@ private:
     void UntrackImageTail(ImageId image_id);
 
     void MarkAsMaybeDirty(ImageId image_id, Image& image);
+    static u64 MaybeDirtyHash(const Image& image);
 
     /// Removes the image and any views/surface metas that reference it.
     void DeleteImage(ImageId image_id);
@@ -416,6 +418,8 @@ private:
     std::unordered_set<ImageId> download_images;
     u64 total_used_memory = 0;
     u64 registered_image_bytes = 0; ///< bbport: guest bytes of registered images (diagnostics)
+    std::array<u64,64> gc_tick_at_second{};
+    u64 gc_second=0;
     u64 gc_evictions = 0, gc_downloads = 0; ///< bbport: pressure report
     std::chrono::steady_clock::time_point gc_report_time{};
     u64 trigger_gc_memory = 0;

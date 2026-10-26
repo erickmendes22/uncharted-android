@@ -26,7 +26,11 @@ MANIFEST=$HERE/AndroidManifest.xml
 VERSION=$(tr -d '[:space:]' < "$HERE/../../../VERSION")
 V1=${VERSION%%.*} V3=${VERSION##*.} V2=${VERSION#*.}
 V2=${V2%.*}
-LINK_EXTRA=(--version-name "$VERSION" --version-code $((V1 * 10000 + V2 * 100 + V3)) --replace-version)
+# Public release numbering stays newer than development 0.2.10 (code 210), even
+# though its public version is intentionally reset to 0.2.5.
+VERSION_CODE=$((V1 * 10000 + V2 * 100 + V3))
+[ "$PUBLIC" = 1 ] && VERSION_CODE=$((100000 + VERSION_CODE))
+LINK_EXTRA=(--version-name "$VERSION" --version-code "$VERSION_CODE" --replace-version)
 if [ "$PUBLIC" = 1 ]; then
     MANIFEST=$HERE/AndroidManifest-public.xml
     LINK_EXTRA+=(--rename-manifest-package "$APP_ID")
@@ -35,6 +39,7 @@ rm -rf "$W"; mkdir -p "$W/classes" "$W/lib/arm64-v8a" "$W/assets"
 cp -r "$HERE/../recipes" "$W/assets/"
 cp "$HERE/../../../localization/strings.json" "$W/assets/translations.json"
 mkdir -p "$W/res/drawable"
+cp -r "$HERE/res/". "$W/res/"
 if [ -n "$ASSETS_DIR" ]; then cp -r "$ASSETS_DIR"/. "$W/assets/"; fi
 if [ ! -f "$W/assets/art/collection.png" ]; then bash "$HERE/../../fetch_art.sh" "$W/assets"; fi
 cp "$W/assets/art/collection.png" "$W/res/drawable/collection.jpg"

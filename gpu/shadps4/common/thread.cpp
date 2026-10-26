@@ -1,3 +1,6 @@
+#ifdef __ANDROID__
+extern "C" void bbgpu_adpf_thread_named(const char* name);
+#endif
 // SPDX-FileCopyrightText: 2013 Dolphin Emulator Project
 // SPDX-FileCopyrightText: 2014 Citra Emulator Project
 // SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
@@ -293,6 +296,9 @@ void SetCurrentThreadName(const char* name) {
         errno = e;
         LOG_ERROR(Common, "Failed to set thread name to '{}': {}", truncated, GetLastErrorMsg());
     }
+#ifdef __ANDROID__
+    bbgpu_adpf_thread_named(truncated.c_str());
+#endif
     ApplyRenderAffinity(truncated);
     ApplyHostNice(name);
 #else

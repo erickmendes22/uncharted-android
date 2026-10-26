@@ -25,6 +25,15 @@ import org.libsdl.app.SDLActivity;
  *  for the game started (KEY=VALUE per line; -KEY removes KEY). */
 public class GameActivity extends SDLActivity {
     @Override protected void attachBaseContext(android.content.Context base) {super.attachBaseContext(AppLanguage.attach(base));}
+    private boolean gameReady;
+    private void gameState(boolean loading,int mode) {
+        if(android.os.Build.VERSION.SDK_INT>=33)try{
+            android.app.GameManager manager=getSystemService(android.app.GameManager.class);
+            if(manager!=null)manager.setGameState(new android.app.GameState(loading,mode));
+        }catch(RuntimeException ignored){}
+    }
+    public void gameStarted(){runOnUiThread(()->{gameReady=true;gameState(false,android.app.GameState.MODE_GAMEPLAY_INTERRUPTIBLE);});}
+    @Override protected void onPause(){gameState(false,android.app.GameState.MODE_NONE);super.onPause();}
     private final List<String> bootArgs = new ArrayList<>();
 
     public void exportLogToFolder() { runOnUiThread(()->LogExport.pick(this)); }
@@ -35,6 +44,7 @@ public class GameActivity extends SDLActivity {
 
     @Override protected void onResume() {
         super.onResume();
+        gameState(!gameReady,android.app.GameState.MODE_GAMEPLAY_INTERRUPTIBLE);
         setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         getWindow().getDecorView().setSystemUiVisibility(
             android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |

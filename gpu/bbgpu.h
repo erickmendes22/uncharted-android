@@ -42,6 +42,10 @@ int bbgpu_camera_yaw(float *yaw_degrees, double *age_seconds);
 int bbgpu_mouse_sample(float *dx, float *dy, uint32_t *buttons, int *wheel);
 /* Number of symbols registered by the vendored libraries (diagnostics). */
 unsigned bbgpu_symbol_count(void);
+#ifdef __ANDROID__
+void bbgpu_adpf_register_main(void);
+void bbgpu_adpf_thread_named(const char* name);
+#endif
 #ifdef __cplusplus
 }
 #endif

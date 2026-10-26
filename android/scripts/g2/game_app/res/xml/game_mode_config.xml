@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android Game Mode (12+): the game offers the Performance and Battery modes of the OS's game dashboard and
+     game boosters. Downscaling and FPS overrides by the OS stay off: the game picks its own output size and frame
+     limit, and a scaled window would break the surface fitted to the aspect ratio. -->
+<game-mode-config xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsPerformanceGameMode="true"
+    android:supportsBatteryGameMode="true"
+    android:allowGameDownscaling="false"
+    android:allowGameFpsOverride="false" />

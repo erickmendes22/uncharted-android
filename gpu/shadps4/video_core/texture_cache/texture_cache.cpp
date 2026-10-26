@@ -5,6 +5,9 @@
 #include <xxhash.h>
 
 #include "bbport_toggles.h"
+#ifdef __ANDROID__
+#include "bbport_gc_budget.h"
+#endif
 #include "common/assert.h"
 #include "common/debug.h"
 #include "common/div_ceil.h"
@@ -157,11 +160,18 @@ void TextureCache::DownloadImageMemory(ImageId image_id, bool sync) {
     }
 }
 
+/// g2-arm64 (from uncharted_Linux 4f5a95a): the guest memory a MaybeCpuDirty check compares, the
+/// same at marking and at refresh (they hashed different ranges, the whole image and its first
+/// 8x8 pixels, so the first check never matched). Such an image lies within the faulting page: cheap to hash
+/// whole, and a CPU write past its first pixels still counts.
+u64 TextureCache::MaybeDirtyHash(const Image& image) {
+    return XXH3_64bits(std::bit_cast<const u8*>(image.info.guest_address), image.info.guest_size);
+}
+
 void TextureCache::MarkAsMaybeDirty(ImageId image_id, Image& image) {
     if (image.hash == 0) {
         // Initialize hash
-        const u8* addr = std::bit_cast<u8*>(image.info.guest_address);
-        image.hash = XXH3_64bits(addr, image.info.guest_size);
+        image.hash = MaybeDirtyHash(image);
     }
     image.flags |= ImageFlagBits::MaybeCpuDirty;
     UntrackImage(image_id);
@@ -275,13 +285,17 @@ ImageId TextureCache::ResolveDepthOverlap(const ImageInfo& requested_info, Bindi
         const auto new_image_id = slot_images.insert(instance, runtime, slot_image_views, new_info);
         RegisterImage(new_image_id);
 
+        // g2-arm64 (from uncharted_Linux fddcf62): insert() may have grown slot_images and moved
+        // every image, leaving `cache_image` in freed storage: look it up again.
+        auto& old_image = slot_images[cache_image_id];
+
         // Inherit image usage
         auto& new_image = slot_images[new_image_id];
-        new_image.usage = cache_image.usage;
+        new_image.usage = old_image.usage;
         new_image.flags &= ~ImageFlagBits::Dirty;
         // When creating a depth buffer through overlap resolution don't clear it on first use.
         new_image.info.meta_info.htile_clear_mask = 0;
-        runtime.CopyColorAndDepth(&cache_image, &new_image);
+        runtime.CopyColorAndDepth(&old_image, &new_image);
 
         // Free the cache image.
         FreeImage(cache_image_id);
@@ -845,10 +859,12 @@ ImageView& TextureCache::FindDepthTarget(ImageId image_id, const ImageDesc& desc
         }
         Image& stencil_image = slot_images[stencil_id];
         TouchImage(stencil_image);
-        stencil_image.AssociateDepth(image_id, image.image_uid);
+        // g2-arm64 (from uncharted_Linux fddcf62): insert() above may have grown slot_images and
+        // moved every image, leaving `image` in freed storage: look the depth image up again.
+        stencil_image.AssociateDepth(image_id, slot_images[image_id].image_uid);
     }
 
-    return image.FindView(desc.view_info, false);
+    return slot_images[image_id].FindView(desc.view_info, false);
 }
 
 namespace {
@@ -933,17 +949,7 @@ void TextureCache::RefreshImage(Image& image) {
 
     if (True(image.flags & ImageFlagBits::MaybeCpuDirty) &&
         False(image.flags & ImageFlagBits::CpuDirty)) {
-        // The image size should be less than page size to be considered MaybeCpuDirty
-        // So this calculation should be very uncommon and reasonably fast
-        // For now we'll just check up to 64 first pixels
-        const auto addr = std::bit_cast<u8*>(image.info.guest_address);
-        const u32 w = std::min(image.info.size.width, u32(8));
-        const u32 h = std::min(image.info.size.height, u32(8));
-
-        const u32 s_w = image.info.props.is_block ? Common::DivCeil(w, 4u) : w;
-        const u32 s_h = image.info.props.is_block ? Common::DivCeil(h, 4u) : h;
-        const u32 size = s_w * s_h * (image.info.num_bits / 8);
-        const u64 hash = XXH3_64bits(addr, size);
+        const u64 hash = MaybeDirtyHash(image);
         if (image.hash == hash) {
             image.flags &= ~ImageFlagBits::MaybeCpuDirty;
             return;
@@ -966,13 +972,24 @@ void TextureCache::RefreshImage(Image& image) {
         const auto [mip_size, mip_pitch, mip_height, mip_offset] = image.info.mips_layout[m];
 
         // Protect GPU modified resources from accidental CPU reuploads.
-        if (is_gpu_modified && !is_gpu_dirty) {
-            const u8* addr = std::bit_cast<u8*>(image.info.guest_address);
-            const u64 hash = XXH3_64bits(addr + mip_offset, mip_size);
-            if (image.mip_hashes[m] == hash) {
+        // g2-arm64 (from uncharted_Linux 4f5a95a, e0baa3b): every upload records the guest
+        // memory it saw, not only uploads of images the GPU had already written. An image the
+        // GPU writes after an upload from the buffer cache (GpuDirty: a storage image's first
+        // binding) or from a plain texture otherwise had no reference, and the first CPU write
+        // anywhere in its page replaced the GPU's contents with stale guest memory (Bloodborne:
+        // a 1x1 exposure texture computed once, its character creation preview black).
+        // Only for images the GPU writes or may write (small ones, targets, storage images): a
+        // streamed texture hashed here cost the GPU thread its whole size again on every upload.
+        const bool track = (is_gpu_modified && !is_gpu_dirty) || mip_size <= 64_KB ||
+                           image.usage.storage || image.usage.render_target ||
+                           image.usage.depth_target;
+        if (track) {
+            const u8* mip_addr = std::bit_cast<u8*>(image.info.guest_address) + mip_offset;
+            const u64 mip_hash = XXH3_64bits(mip_addr, mip_size);
+            if (is_gpu_modified && !is_gpu_dirty && image.mip_hashes[m] == mip_hash) {
                 continue;
             }
-            image.mip_hashes[m] = hash;
+            image.mip_hashes[m] = mip_hash;
         }
 
         const u32 extent_width = mip_pitch ? std::min(mip_pitch, width) : width;
@@ -1194,10 +1211,12 @@ void TextureCache::GarbageCollectImages() {
         // collector evicted images used two or three frames ago on every submission and wrote
         // GPU-written ones back. Compare with the driver's current budget instead.
         // BB_GC_BUDGET_MB=N: this rule with a fixed budget on any GPU (tests on a desktop).
-        static const u64 forced_budget = [] {
-            const char* env = std::getenv("BB_GC_BUDGET_MB");
-            return env ? std::strtoull(env, nullptr, 10) << 20 : 0;
-        }();
+#ifdef __ANDROID__
+        const u64 forced_budget=BbGcBudget::Bytes();
+        BbGcBudget::ReportUsage(total_used_memory);
+#else
+        static const u64 forced_budget=[] {const char* env=std::getenv("BB_GC_BUDGET_MB");return env?std::strtoull(env,nullptr,10)<<20:0;}();
+#endif
         if (instance.IsIntegrated() || forced_budget) {
             const u64 budget = forced_budget ? forced_budget : instance.GetDeviceMemoryBudgetNow();
             if (budget != 0) {
@@ -1207,6 +1226,17 @@ void TextureCache::GarbageCollectImages() {
             }
         }
     }
+    // From uncharted-android 0.2.5: use seconds below pressure, not a handful of
+    // GPU submissions. Briefly off-screen textures remain warm instead of re-uploading.
+    const u64 second=u64(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+    if(second!=gc_second){gc_second=second;gc_tick_at_second[second%gc_tick_at_second.size()]=gc_tick;}
+    static const u64 base_idle=[]{const char* v=std::getenv("BB_GC_IDLE_SECONDS");return std::clamp<u64>(v?std::strtoull(v,nullptr,10):20,1,63);}();
+#ifdef __ANDROID__
+    const u64 idle_seconds=BbGcBudget::Short()?std::min<u64>(base_idle,5):base_idle;
+#else
+    const u64 idle_seconds=base_idle;
+#endif
+    const u64 idle_tick=gc_tick_at_second[(second-idle_seconds)%gc_tick_at_second.size()];
     if (total_used_memory < trigger_gc_memory) {
         return;
     }
@@ -1215,6 +1245,8 @@ void TextureCache::GarbageCollectImages() {
     bool aggresive = false;
     u64 ticks_to_destroy = 0;
     size_t num_deletions = 0;
+    u32 visited=0;
+    u64 below_tick=0;
 
     const auto configure = [&](bool allow_aggressive) {
         pressured = total_used_memory >= pressure_gc_memory;
@@ -1224,22 +1256,22 @@ void TextureCache::GarbageCollectImages() {
         ticks_to_destroy = aggresive ? 40 : pressured ? 80 : 16;
         ticks_to_destroy = std::min(ticks_to_destroy, gc_tick);
         num_deletions = aggresive ? 40 : pressured ? 20 : 10;
+        below_tick=gc_tick-ticks_to_destroy;
+        if(!pressured && !aggresive)below_tick=std::min(below_tick,idle_tick);
+        visited=0;
     };
     const auto clean_up = [&](ImageId image_id) {
-        if (num_deletions == 0) {
+        if (num_deletions == 0 || ++visited>256) {
             return true;
         }
-        --num_deletions;
         auto& image = slot_images[image_id];
         const bool download = image.SafeToDownload();
         const bool tiled = image.info.IsTiled();
-        if (tiled && download) {
-            // This is a workaround for now. We can't handle non-linear image downloads.
-            return false;
+        // An ineligible old image must not consume a deletion slot or starve the LRU.
+        if((tiled && download) || (download && !pressured)){
+            lru_cache.Touch(image.lru_id,gc_tick);return false;
         }
-        if (download && !pressured) {
-            return false;
-        }
+        --num_deletions;
         if (download) {
             // bbport: synchronously, while the image still protects its pages. A deferred
             // write-back landed after FreeImage had unprotected them, over whatever the game
@@ -1265,12 +1297,12 @@ void TextureCache::GarbageCollectImages() {
 
     // Try to remove anything old enough and not high priority.
     configure(false);
-    lru_cache.ForEachItemBelow(gc_tick - ticks_to_destroy, clean_up);
+    lru_cache.ForEachItemBelow(below_tick, clean_up);
 
     if (total_used_memory >= critical_gc_memory) {
         // If we are still over the critical limit, run an aggressive GC
         configure(true);
-        lru_cache.ForEachItemBelow(gc_tick - ticks_to_destroy, clean_up);
+        lru_cache.ForEachItemBelow(below_tick, clean_up);
     }
     // bbport: evictions under memory pressure, at most every 5 s (BB_FRAME_STATS or not).
     if (pressured || gc_downloads != 0) {

@@ -3,15 +3,16 @@
      loader's files on the device, settings), then GameActivity. The package name is set at
      build time (APP_ID); the class names stay dev.unchartedg2.game.*. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="dev.unchartedg2.game" android:versionCode="1" android:versionName="0.1">
+    package="dev.unchartedg2.game" android:versionCode="100205" android:versionName="0.2.5">
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" /> <!-- driver packages from GitHub (the launcher) -->
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
-    <application android:label="Uncharted — Daedalus" android:icon="@drawable/collection" android:hasCode="true" android:extractNativeLibs="true"
+    <application android:label="Uncharted Daedalus" android:icon="@drawable/collection" android:hasCode="true" android:extractNativeLibs="true" android:isGame="true" android:appCategory="game"
         android:hardwareAccelerated="true" android:requestLegacyExternalStorage="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+        <meta-data android:name="android.game_mode_config" android:resource="@xml/game_mode_config" />
         <!-- singleTask: one launcher, which finishes when it starts the game; the icon then makes
              a new one, and that brings a running game back to the front (Launcher.resumeGame). -->
         <activity android:name="dev.unchartedg2.game.Launcher" android:exported="true"
@@ -26,7 +27,7 @@
              launcher's (the package name) Android hid the game's task from Recents and from
              getAppTasks as soon as a new launcher task appeared. -->
         <activity android:name="dev.unchartedg2.game.GameActivity" android:exported="true"
-            android:taskAffinity="dev.unchartedandroid.game"
+            android:taskAffinity="com.daedalus.uncharted.game"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
             android:screenOrientation="sensorLandscape" android:launchMode="singleInstance"
             android:configChanges="layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation" />

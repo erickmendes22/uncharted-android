@@ -8,6 +8,9 @@
  * the same 9-byte instruction with another displacement. */
 #define _GNU_SOURCE
 #include "runtime.h"
+#ifdef __ANDROID__
+#include "gpu/bbgpu.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -273,6 +276,9 @@ static void set_host_name(const char *name) {
     char host[16]={0};
     memcpy(host,name,strnlen(name,sizeof(host)-1));
     pthread_setname_np(pthread_self(),host);
+#ifdef __ANDROID__
+    bbgpu_adpf_thread_named(host);
+#endif
 }
 #ifdef _WIN32
 #define exit_setjmp(t) bb_setjmp((t)->exit_jump)

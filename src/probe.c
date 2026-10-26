@@ -1251,12 +1251,12 @@ void runtime_mobile_action(int action) {
     jobject activity=(jobject)SDL_GetAndroidActivity();
     if (env && activity) {
         jclass cls=(*env)->GetObjectClass(env,activity);
-        jmethodID method=cls ? (*env)->GetMethodID(env,cls,action ? "quitGame" : "exportLogToFolder","()V") : NULL;
+        jmethodID method=cls ? (*env)->GetMethodID(env,cls,action==2 ? "gameStarted" : action==1 ? "quitGame" : "exportLogToFolder","()V") : NULL;
         if (method) (*env)->CallVoidMethod(env,activity,method);
         if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     }
 #else
-    if (action) { fflush(NULL); _exit(0); }
+    if (action==1) { fflush(NULL); _exit(0); }
 #endif
 }
 void runtime_restart(void) {
@@ -1320,7 +1320,7 @@ int main(int argc, char **argv) {
 #endif
     setvbuf(stdout, NULL, _IONBF, 0);
 #ifdef BB_SDL_MAIN
-    printf("UNCHARTED — Daedalus Android | diagnostics\n");
+    printf("Uncharted Daedalus | diagnostics\n");
 #endif
 #ifndef _WIN32
     /* Keep host heap objects handed to the guest (thread handles, TLS) in the
@@ -1334,6 +1334,9 @@ int main(int argc, char **argv) {
 #endif
     if (argc == 2 && !strcmp(argv[1], "--vulkan-only")) return vulkan_smoke();
     check_cpu();
+#ifdef __ANDROID__
+    bbgpu_adpf_register_main();
+#endif
 #ifdef _WIN32
     /* The PS4 user range must stay free of host allocations (GPU driver, heaps), and the guest
      * TCB needs one of the 64 TEB TLS slots before DLLs (Vulkan drivers) take them. */

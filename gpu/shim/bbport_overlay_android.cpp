@@ -174,14 +174,14 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
     ImGui::GetIO().MouseDrawCursor=false;
     if(ImGui::Begin("##android_menu",nullptr,flags)) {
         const float resume_width=std::max(ImGui::CalcTextSize(BbLocale::Text("Resume")).x+24*scale,ImGui::GetContentRegionAvail().x*.34f);
-        ImGui::TextColored(ImVec4(.85f,.73f,.48f,1),"UNCHARTED");
+        ImGui::TextColored(ImVec4(.85f,.73f,.48f,1),"UNCHARTED DAEDALUS");
         ImGui::SameLine(ImGui::GetWindowWidth()-ImGui::GetStyle().WindowPadding.x-resume_width);
         if(ImGui::Button(BbLocale::Text("Resume"),{resume_width,0}))keep_open=false;
-        ImGui::TextDisabled("DAEDALUS");
+
         ImGui::Separator();
         static int tab=0;
-        const char* tabs[]={"Video","HUD","Controls","More"};
-        const bool switched=Segmented("tabs",tab,tabs,4);
+        const char* tabs[]={"Video","HUD","Controls"};
+        const bool switched=Segmented("tabs",tab,tabs,3);
         const float footer=ImGui::GetFrameHeightWithSpacing()+12*scale;
         ImGui::BeginChild("settings-scroll",{0,-footer},false);
         if(switched)ImGui::SetScrollY(0);
@@ -227,14 +227,6 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
             Slider("Camera drag sensitivity",s.touch_pad_look,.25f,4.f);
             Note("Left: movement. Right: camera.");
             ImGui::EndDisabled();
-        } else {
-            Section("Language");Note("The selected app language is also sent to the game on startup.");
-            Note("Change language in the launcher, then restart the game.");
-            Section("Advanced");
-            Toggle("Sub-pixel jitter",s.jitter);Toggle("Character motion vectors",s.object_motion);Toggle("Reactive mask",s.reactive);
-            if(s.reactive){Slider("Scale",s.reactive_scale,0.f,4.f);Slider("Threshold",s.reactive_threshold,0.f,1.f);Slider("Maximum",s.reactive_max,0.f,1.f);}
-            const bool restart=s.object_motion!=s.startup_object_motion || BbSettings::ResolutionNeedsRestart();
-            if(restart){Note("Changes apply on the next game start.");if(ImGui::Button(BbLocale::Text("Apply and restart the game"),{-FLT_MIN,0})){BbSettings::Save();runtime_restart();}}
         }
         ImGui::EndChild();ImGui::Separator();
         const float half=(ImGui::GetContentRegionAvail().x-ImGui::GetStyle().ItemSpacing.x)*.5f;

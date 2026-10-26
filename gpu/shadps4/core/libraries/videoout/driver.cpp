@@ -14,6 +14,11 @@
 #include <sys/resource.h>
 #endif
 #include "common/assert.h"
+#include "bbport_frame_pacing.h"
+#ifdef __ANDROID__
+#include "bbport_adpf.h"
+extern "C" void runtime_mobile_action(int);
+#endif
 #include "bbport_toggles.h"
 #include "video_core/renderer_vulkan/vk_frame_capture.h"
 #include "common/debug.h"
@@ -627,6 +632,11 @@ void WaitEopFlipsReached(u64 count, u32 timeout_ms) {
 }
 
 void VideoOutDriver::SubmitFlipInternal(VideoOutPort* port, s32 index, s64 flip_arg, bool is_eop) {
+#ifdef __ANDROID__
+    BbAdpf::FrameSubmitted();
+    static std::once_flag first_game_frame;
+    std::call_once(first_game_frame,[]{runtime_mobile_action(2);});
+#endif
     Vulkan::Frame* frame;
     if (index == -1) {
         frame = presenter->PrepareBlankFrame(false);
@@ -678,7 +688,7 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
     Common::AccurateTimer timer{vblank_period};
 
     // bbport: frame limit (see EmulatorSettings::GetFrameLimit). A request waits in the queue
-    // until its slot; slots advance by one period (no drift) but never lag behind by more.
+    // until its slot; slots advance by one period (no drift).
     // g2-arm64: the limit is a live setting (the in-game panel), read on every tick below.
     auto next_flip = std::chrono::steady_clock::now();
     std::printf("VideoOut: vblank %u Hz, frame limit %u FPS\n",
@@ -708,6 +718,20 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
         const u32 frame_limit = EmulatorSettings.GetFrameLimit();
         const auto frame_period = frame_limit ? std::chrono::nanoseconds(1000000000 / frame_limit)
                                               : std::chrono::nanoseconds(0);
+        // g2-arm64 (from uncharted_Linux d976ca3): the next slot is a period after this one, but
+        // no sooner than a period minus 1/16 after the flip made. Slots that only "never lag
+        // behind by more than a period" flipped the frame after a late one early (at 30 FPS a
+        // 45 ms frame could be followed by a 22 ms one); counting from the flip alone would add
+        // the wake-up delay to every frame.
+        // g2-arm64: and no later than a period after the flip made. Movies flip at 60 Hz past a
+        // lower limit (movie mode above), and each of their flips moved the slot a period on: at
+        // 30 FPS a second per second of movie, so after a movie the game could not flip for as
+        // long as the movie had played (U1's black screens after its cutscenes, U3 stuck at the
+        // end of the 150 s cutscene after its prologue).
+        const auto next_slot = [&](std::chrono::steady_clock::time_point slot) {
+            const auto now = std::chrono::steady_clock::now();
+            return BbFramePacing::Next(slot,now,frame_period);
+        };
         // bbport: with a frame limit (uncapped presets) a queued flip is presented as soon as it
         // arrives and its slot allows, between vblanks, instead of on the next vblank tick.
         const bool immediate_flips = frame_limit != 0;
@@ -733,7 +757,7 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
         if (flip_slot && vblank_status.count % (main_port.flip_rate + 1) == 0) {
             const auto request = receive_request();
             if (request && frame_limit) {
-                next_flip = std::max(next_flip + frame_period, now - frame_period);
+                next_flip = next_slot(next_flip);
             }
             if (!request) {
                 if (timer.GetTotalWait().count() < 0) { // Dont draw too fast
@@ -791,10 +815,9 @@ void VideoOutDriver::PresentThread(std::stop_token token) {
                 }
                 std::this_thread::sleep_until(next_flip);
             }
-            const auto now = std::chrono::steady_clock::now();
             const auto request = receive_request();
             if (request) {
-                next_flip = std::max(next_flip + frame_period, now - frame_period);
+                next_flip = next_slot(next_flip);
                 Flip(request);
                 FRAME_END;
             }

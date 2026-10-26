@@ -325,6 +325,8 @@ public class Launcher extends Activity {
         return c;
     }
 
+    private void openLink(String url) {startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}
+
     private int dp(int v) {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
@@ -335,11 +337,11 @@ public class Launcher extends Activity {
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
             new int[] {0xFF26342A, 0xFF111713, 0xFF1D1913}));
-        TextView brand = text(shell, "UNCHARTED", 29, true);
+        TextView brand = text(shell, "Uncharted Daedalus", 26, true);
         brand.setTypeface(Typeface.create("serif", Typeface.BOLD));
-        brand.setLetterSpacing(0.08f);
+        brand.setLetterSpacing(0.025f);
         brand.setPadding(dp(22), dp(14), dp(16), 0);
-        TextView subtitle = note(shell, "THE NATHAN DRAKE COLLECTION  ·  DAEDALUS");
+        TextView subtitle = note(shell, "THE NATHAN DRAKE COLLECTION");
         subtitle.setTextSize(11);
         subtitle.setPadding(dp(22), 0, dp(16), dp(8));
         ScrollView scroll = new ScrollView(this);
@@ -365,7 +367,7 @@ public class Launcher extends Activity {
             artwork.setImageBitmap(android.graphics.BitmapFactory.decodeStream(in,null,options));
         } catch(Exception ignored) {}
         hero.addView(artwork,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        TextView heroCaption=new TextView(this);heroCaption.setText(AppLanguage.text("THE NATHAN DRAKE COLLECTION\nDAEDALUS ANDROID"));
+        TextView heroCaption=new TextView(this);heroCaption.setText(AppLanguage.text("THE NATHAN DRAKE COLLECTION\nUNCHARTED DAEDALUS"));
         heroCaption.setTextColor(0xFFF3DCA6);heroCaption.setTextSize(15);heroCaption.setTypeface(Typeface.DEFAULT_BOLD);
         heroCaption.setGravity(android.view.Gravity.BOTTOM);heroCaption.setPadding(dp(18),dp(16),dp(18),dp(16));
         heroCaption.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0x0015110C,0xE615110C}));
@@ -584,10 +586,26 @@ public class Launcher extends Activity {
         LinearLayout helpCard = card(config, "DIAGNOSTICS");
         note(helpCard, "Export the game log to a folder of your choice.");
         button(helpCard, "Export Uncharted log...", v -> LogExport.pick(this));
-        text(about, "Uncharted — Daedalus Android", 22, true);
-        note(about, "Android fork by erickmendes22 / Daedalus Emulator. Based on revvv991/uncharted-android and Supermedo/uncharted_pc, with selected integrations from RedVorteX-TV/Uncharted-arm.");
-        note(about, "Use your own decrypted Nathan Drake Collection files. No game files or Lossless.dll are included.");
-        button(about, "Licenses and upstream credits", v -> showLicenses());
+        LinearLayout aboutCard=card(about,"Uncharted Daedalus");
+        String version="0.2.5";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
+        text(aboutCard,AppLanguage.text("Version")+" "+version,20,true);
+        note(aboutCard,"Android port with a Bionic runtime.");
+        text(aboutCard,"Fork and modifications:",15,true);
+        note(aboutCard,"erickmendes22 · Daedalus Emulator");
+        text(aboutCard,"Base project:",15,true);
+        note(aboutCard,"revvv991/uncharted-android · Supermedo/uncharted_pc");
+        note(aboutCard,"No game files or Lossless.dll are included.");
+        button(aboutCard,"YouTube · @daedalusemulator",v->openLink("https://www.youtube.com/@daedalusemulator"));
+        button(aboutCard,"GitHub · Uncharted Daedalus",v->openLink("https://github.com/erickmendes22/uncharted-android"));
+        LinearLayout credits=card(about,"Project credits");
+        button(credits,"revvv991 · Uncharted Android",v->openLink("https://github.com/revvv991/uncharted-android"));
+        button(credits,"Supermedo · uncharted_pc",v->openLink("https://github.com/Supermedo/uncharted_pc"));
+        button(credits,"ducvd89 · Bloodborne Android",v->openLink("https://github.com/ducvd89/Bloodborne-Android"));
+        button(credits,"RedVorteX-TV · Uncharted-arm",v->openLink("https://github.com/RedVorteX-TV/Uncharted-arm"));
+        button(credits,"Licenses and upstream credits",v->showLicenses());
+        LinearLayout help=card(about,"CONTROLS");
+        note(help,"Left: movement. Right: camera.");
+        note(help,"Open the menu with its button, a right-edge swipe or L3+R3.");
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout nav = new LinearLayout(this);
         nav.setPadding(dp(8), dp(6), dp(8), dp(6));
@@ -1205,7 +1223,7 @@ public class Launcher extends Activity {
             StringBuilder args = new StringBuilder();
             args.append(out).append("/boot-linked.bin\n--content-profile\n").append(out).append("/content.bin\n")
                 .append("--app0\n").append(dir).append("\n--user\n").append(d).append("/user\n")
-                .append("--timeout\n0\n--log\n").append(d).append("/uncharted.log\n");
+                .append("--timeout\n0\n--log\n").append(d).append("/uncharted-daedalus.log\n");
             if (preset != null) args.append("--patches\n").append(preset).append('\n');
             writeText(new File(files, "args-" + g[0] + ".txt"), args.toString());
             if (g[0].equals(prefs.getString("selected_game", "u1"))) writeText(new File(files, "args.txt"), args.toString());
@@ -1224,7 +1242,7 @@ public class Launcher extends Activity {
         if(upscale>0){iniPut("output_res","1280x720");iniPut("upscaler","fsr3");iniPut("preset",Integer.toString(upscale-1));}
         else {iniPut("preset","0");iniPut("upscaler","off");}
         e.append("# Written by the launcher on every start; edit the settings there.\n");
-        e.append("BB_FULLSCREEN=1\nBB_FPS_LOG=1\nBB_MIDFRAME_FLUSH=10\nBB_DEFERRED_SUBMIT=1\nBB_SKIN_BATCH=1\n");
+        e.append("BB_FULLSCREEN=1\nBB_FPS_LOG=0\nBB_THERMAL_LOG=0\nBB_MIDFRAME_FLUSH=10\nBB_DEFERRED_SUBMIT=1\nBB_SKIN_BATCH=1\n");
         e.append("BB_CS_SPLIT=256:8f067540\nBB_OBJECT_MOTION=0\nBB_THREAD_NICE=0\n");
         // The game waits when it is two frames ahead of the GPU side (gnmdriver.cpp): a GPU that
         // falls behind (shaders compiling, a slow device) made it trip its own command buffer
@@ -1318,10 +1336,9 @@ public class Launcher extends Activity {
         drivers = new RadioGroup(this);
         boolean kgsl = new File("/dev/kgsl-3d0").exists();
         List<String[]> options = new ArrayList<>();
-        options.add(new String[] {"auto", "Automatic: " + ((gpuChip >>> 24) == 0x44 ? "Turnip Gen8 V37 (Adreno 8xx)" : kgsl ? "bundled Turnip (Adreno)" : "system Vulkan driver")});
-        options.add(new String[] {"turnip", "Bundled Turnip (Mesa 26.2.5 with the port's fixes; Adreno)"
-                                            + (kgsl ? "" : " - no Adreno GPU (KGSL) found here")});
-        options.add(new String[] {"system", "The system's Vulkan driver" + (kgsl ? " (untested with these games)" : "")});
+        options.add(new String[] {"auto", AppLanguage.text("Automatic")+": "+((gpuChip>>>24)==0x44?"Turnip Gen8 V37 (Adreno 8xx)":kgsl?AppLanguage.text("Bundled Turnip")+" (Adreno)":AppLanguage.text("System Vulkan driver"))});
+        options.add(new String[] {"turnip", AppLanguage.text("Bundled Turnip")+" · Mesa 26.2.5 · Adreno"+(kgsl?"":" · "+AppLanguage.text("Adreno GPU not detected"))});
+        options.add(new String[] {"system", AppLanguage.text("System Vulkan driver")+(kgsl?" · "+AppLanguage.text("Untested with these games"):"")});
         File[] installed = driversDir().listFiles(File::isDirectory);
         if (installed != null) {
             java.util.Arrays.sort(installed);
@@ -1332,7 +1349,7 @@ public class Launcher extends Activity {
                 String author = meta != null ? meta.optString("author", "") : "";
                 String detail = version.isEmpty() ? author : author.isEmpty() ? version : version + ", " + author;
                 if (!detail.isEmpty()) label += " (" + detail + ")";
-                if (packageLibrary(d) == null) label += " - broken: no library";
+                if (packageLibrary(d) == null) label += " · "+AppLanguage.text("Driver library is missing");
                 options.add(new String[] {"pkg:" + d.getName(), label});
             }
         }

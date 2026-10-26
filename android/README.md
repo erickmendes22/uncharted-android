@@ -1,6 +1,6 @@
-# android/
+# Uncharted Daedalus — Android build
 
-The Android part of uncharted-android. The port's code is at the repository root (`gpu/`, `src/`,
+The Android part of Uncharted Daedalus 0.2.5. The port's code is at the repository root (`gpu/`, `src/`,
 the port's `scripts/`).
 
 | Path | What |
@@ -16,3 +16,5 @@ the port's `scripts/`).
 
 Paths in the scripts of this folder (`scripts/...`) are relative to `android/`. Some comments refer
 to `docs/` and `notes/`: the development notes, which are not published.
+
+Release integration and validation: [RELEASE_0.2.5_AUDIT.md](RELEASE_0.2.5_AUDIT.md).
