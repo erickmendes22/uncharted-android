@@ -107,6 +107,8 @@ public class Launcher extends Activity {
     private RadioGroup drivers;
     private volatile boolean busy;
     private long gpuChip;
+    private PkgInstaller pkgInstaller;
+    private int pendingPkg=-1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -139,6 +141,7 @@ public class Launcher extends Activity {
         }
         File d = getExternalFilesDir(null);
         files = d != null ? d : getFilesDir();
+        pkgInstaller = new PkgInstaller(this,(active,message)->{busy=active;status(message);refresh();});
         buildViews();
         handle(getIntent());
     }
@@ -186,7 +189,8 @@ public class Launcher extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        refresh(); // back from the system's "all files access" screen
+        refresh(); // back from permissions
+        if(pendingPkg>=0 && Environment.isExternalStorageManager()){boolean update=pendingPkg==1;pendingPkg=-1;pkgInstaller.pick(update);}
     }
 
     // ---- views ----
@@ -330,7 +334,21 @@ public class Launcher extends Activity {
             pages[n].setVisibility(n == 0 ? View.VISIBLE : View.GONE);
         }
         LinearLayout home = pages[0], patches = pages[1], config = pages[2], about = pages[3];
-        LinearLayout games = card(home, "YOUR COLLECTION");
+        android.widget.FrameLayout hero = new android.widget.FrameLayout(this);
+        android.widget.ImageView artwork = new android.widget.ImageView(this);
+        artwork.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        try(java.io.InputStream in=getAssets().open("art/hero.png")) {
+            android.graphics.BitmapFactory.Options options=new android.graphics.BitmapFactory.Options();options.inSampleSize=2;
+            artwork.setImageBitmap(android.graphics.BitmapFactory.decodeStream(in,null,options));
+        } catch(Exception ignored) {}
+        hero.addView(artwork,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        TextView heroCaption=new TextView(this);heroCaption.setText("THE NATHAN DRAKE COLLECTION\nDAEDALUS ANDROID");
+        heroCaption.setTextColor(0xFFF3DCA6);heroCaption.setTextSize(15);heroCaption.setTypeface(Typeface.DEFAULT_BOLD);
+        heroCaption.setGravity(android.view.Gravity.BOTTOM);heroCaption.setPadding(dp(18),dp(16),dp(18),dp(16));
+        heroCaption.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0x0015110C,0xE615110C}));
+        hero.addView(heroCaption,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        home.addView(hero,new LinearLayout.LayoutParams(-1,dp(210)));
+        LinearLayout games = card(home, "CHOOSE YOUR ADVENTURE");
         RadioGroup gameSelect = new RadioGroup(this);
         String[] names = {"UNCHARTED  ·  Drake's Fortune", "UNCHARTED 2  ·  Among Thieves", "UNCHARTED 3  ·  Drake's Deception"};
         for (int n = 0; n < GAMES.length; n++) {
@@ -345,11 +363,12 @@ public class Launcher extends Activity {
             if (game != null) prefs.edit().putString("selected_game", (String)game.getTag()).apply();
         });
         games.addView(gameSelect);
-        playButton = primaryButton(games, "PLAY", v -> play());
+        playButton = primaryButton(games, "CONTINUE ADVENTURE", v -> play());
+        button(games,"Choose game folder",v->{startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),PICK_FOLDER);});
         statusText = note(shell, "");
         statusText.setPadding(dp(22), 0, dp(22), dp(4));
         root = home;
-        LinearLayout folder = card(root, "Game folder");
+        LinearLayout folder = card(config, "GAME INSTALLATION");
         folderText = text(folder, "", 15, false);
         folderInfo = note(folder, "");
         LinearLayout row = row(folder);
@@ -374,7 +393,9 @@ public class Launcher extends Activity {
             refresh();
         });
 
-        LinearLayout prepareCard = card(root, "Game files");
+        button(folder,"Install game PKG",v->installPkg(false));
+        button(folder,"Install update PKG",v->installPkg(true));
+        LinearLayout prepareCard = card(config, "PREPARE GAME FILES");
         prepareInfo = note(prepareCard, "");
         prepareButton = button(prepareCard, "Prepare", v -> prepare(false));
 
@@ -396,12 +417,17 @@ public class Launcher extends Activity {
             if (b != null) prefs.edit().putString("resolution", (String) b.getTag()).apply();
         });
         root.addView(resolution);
-        text(root, "Below 1920x1080 the game's size is set by a few byte patches made here from your own "
-                 + "executables (the app ships recipes, no code of the game) and the movies play through the "
-                 + "port's decoder. FSR 3.1 and TAA (the panel in the game) are anti-aliasing at that size; the port "
-                 + "scales the picture to the screen.", 14, false);
+        note(root,"Manual resolution patches apply when temporal upscale is Off. For FSR Quality/Performance, choose a preset on Home; display and UI stay at 1080p.");
         buildPatchOptions(patches);
         LinearLayout displayCard = card(home, "DISPLAY & PERFORMANCE");
+        button(displayCard,"Upscale: Native / Quality / Performance / Ultra Performance",v->{
+            String[] labels={"Off (resolution patches)","FSR 3.1 — Native AA","FSR 3.1 — Quality (720p → 1080p)","FSR 3.1 — Balanced","FSR 3.1 — Performance (540p → 1080p)","FSR 3.1 — Ultra Performance (360p → 1080p)"};
+            new ExpeditionDialog(this).setTitle("Temporal upscale").setSingleChoiceItems(labels,prefs.getInt("mobile_upscale",0),(dialog,which)->{
+                prefs.edit().putInt("mobile_upscale",which).apply();
+                iniPut("upscaler",which==0?"off":"fsr3");iniPut("preset",Integer.toString(Math.max(0,which-1)));
+                status(labels[which]+" — applies on next start");dialog.dismiss();
+            }).setNegativeButton("Cancel",null).show();
+        });
         root = card(config, "GPU DRIVER");
         text(root, "Vulkan driver:", 14, false);
         driverList = new LinearLayout(this);
@@ -431,7 +457,7 @@ public class Launcher extends Activity {
             text(root, "This device has less than 8 GB of RAM: the games use about 6 GB (tested with 8 GB), "
                      + "so the system may close them.", 14, false);
         uncapped = check(root, "Show each frame at once (up to the display's refresh rate)", "uncapped", true);
-        showFps = check(root, "Show the frame rate", "show_fps", false);
+        showFps = check(root, "Show the frame rate", "show_fps", true);
         text(root, "Frame rate limit:", 14, false);
         fpsLimit = new RadioGroup(this);
         fpsLimit.setOrientation(RadioGroup.HORIZONTAL);
@@ -535,10 +561,7 @@ public class Launcher extends Activity {
         LinearLayout helpCard = card(config, "DIAGNOSTICS");
         note(helpCard, "The game writes its log to the app's own folder, which other apps cannot read on recent "
                      + "Android. Copy it to " + backups() + " to attach it to a report.");
-        button(helpCard, "Copy the log", v -> {
-            String done = exportLog();
-            status(done != null ? "Log copied to " + done : "No log yet (the game has not run), or no access.");
-        });
+        button(helpCard, "Export Uncharted log...", v -> LogExport.pick(this));
         text(about, "Uncharted — Daedalus Android", 22, true);
         note(about, "Android fork by erickmendes22 / Daedalus Emulator. Based on revvv991/uncharted-android and Supermedo/uncharted_pc, with selected integrations from RedVorteX-TV/Uncharted-arm.");
         note(about, "Use your own decrypted Nathan Drake Collection files. No game files or Lossless.dll are included.");
@@ -609,6 +632,16 @@ public class Launcher extends Activity {
         }
     }
 
+    private void installPkg(boolean update) {
+        if(busy||pkgInstaller.busy())return;
+        if(!Environment.isExternalStorageManager()){
+            pendingPkg=update?1:0;
+            startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,Uri.parse("package:"+getPackageName())));
+            return;
+        }
+        pkgInstaller.pick(update);
+    }
+
     // ---- the game folder ----
 
     private String folder() {
@@ -623,6 +656,8 @@ public class Launcher extends Activity {
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if(LogExport.result(this,request,result,data))return;
+        if(pkgInstaller!=null&&pkgInstaller.result(request,result,data))return;
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         if (request == PICK_LOSSLESS) {
             status("Importing Lossless.dll ...");
@@ -752,7 +787,7 @@ public class Launcher extends Activity {
         prepareInfo.setText(problem != null ? "-" : ready ? "Prepared for this folder." + presets
                                                      : "Not prepared yet: the app makes the loader's files from the game (a few seconds).");
         prepareButton.setEnabled(problem == null && !busy);
-        playButton.setEnabled(ready && !busy);
+        playButton.setEnabled(problem == null && !busy);
     }
 
     private void status(String s) {
@@ -1066,12 +1101,13 @@ public class Launcher extends Activity {
 
     private void play() {
         if (!prepared()) {
-            status("Prepare the game's files first.");
+            prepare(true);
             return;
         }
         prefs.edit().putString("extra_env", extraEnv.getText().toString()).apply();
         String dir = folder(), d = files.getAbsolutePath();
-        String[] size = chosenResolution().split("x");
+        int upscale=prefs.getInt("mobile_upscale",0);
+        String[] size = (upscale>0 ? "1920x1080" : chosenResolution()).split("x");
         int width = Integer.parseInt(size[0]), height = Integer.parseInt(size[1]);
         boolean below1080 = height < 1080;
         new File(files, "patches").mkdirs();
@@ -1100,7 +1136,7 @@ public class Launcher extends Activity {
             StringBuilder args = new StringBuilder();
             args.append(out).append("/boot-linked.bin\n--content-profile\n").append(out).append("/content.bin\n")
                 .append("--app0\n").append(dir).append("\n--user\n").append(d).append("/user\n")
-                .append("--timeout\n0\n--log\n").append(d).append("/bb-probe.log\n");
+                .append("--timeout\n0\n--log\n").append(d).append("/uncharted.log\n");
             if (preset != null) args.append("--patches\n").append(preset).append('\n');
             writeText(new File(files, "args-" + g[0] + ".txt"), args.toString());
             if (g[0].equals(prefs.getString("selected_game", "u1"))) writeText(new File(files, "args.txt"), args.toString());
@@ -1112,6 +1148,9 @@ public class Launcher extends Activity {
                 env[i] += "BB_TINY_READBACK=1\n";
         }
         StringBuilder e = new StringBuilder();
+        e.append("BB_MOBILE_UPSCALE=").append(upscale>0?1:0).append('\n');
+        if(upscale>0){iniPut("upscaler","fsr3");iniPut("preset",Integer.toString(upscale-1));}
+        else {iniPut("preset","0");iniPut("upscaler","off");}
         e.append("# Written by the launcher on every start; edit the settings there.\n");
         e.append("BB_FULLSCREEN=1\nBB_FPS_LOG=1\nBB_MIDFRAME_FLUSH=10\nBB_DEFERRED_SUBMIT=1\nBB_SKIN_BATCH=1\n");
         e.append("BB_CS_SPLIT=256:8f067540\nBB_OBJECT_MOTION=0\nBB_THREAD_NICE=0\n");
@@ -1134,7 +1173,7 @@ public class Launcher extends Activity {
             else report.append("The chosen driver package is missing or broken: the system driver is used. ");
         }
         if (uncapped.isChecked()) e.append("BB_VBLANK_HZ=0\n");
-        if (showFps.isChecked()) e.append("BB_SHOW_FPS=1\n");
+        e.append("BB_SHOW_FPS=").append(showFps.isChecked()?1:0).append('\n');
         e.append(extraEnv.getText().toString().trim()).append('\n');
         writeText(new File(files, "env.txt"), e.toString());
         for (int i = 0; i < GAMES.length; i++) writeText(new File(files, "env-" + GAMES[i][0] + ".txt"), env[i]);
@@ -1395,10 +1434,10 @@ public class Launcher extends Activity {
     /** files/bb-probe.log copied to backups() (other apps cannot read the app's folder on recent
      *  Android); the copy's path, or null. */
     private String exportLog() {
-        File log = new File(files, "bb-probe.log");
+        File log = new File(files, "uncharted.log");
         if (!log.isFile()) return null;
         String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new java.util.Date());
-        File to = new File(backups(), "bb-probe-" + stamp + ".log");
+        File to = new File(backups(), "Uncharted-" + stamp + ".log");
         try {
             backups().mkdirs();
             copyTree(log, to);

@@ -1,3 +1,4 @@
+#include "bbport_settings.h"
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -116,9 +117,13 @@ bool EnvContentSize(s32& width, s32& height) {
         }
         return std::pair<s32, s32>{w & ~1, h & ~1};
     }();
-    width = size.first;
-    height = size.second;
-    return width > 0;
+    const auto& settings = BbSettings::Get();
+    width = settings.game_display_width.load();
+    height = settings.game_display_height.load();
+    // A 720p render patch can deliberately keep a 1080p display/UI. Never shrink its movies into a corner.
+    if (width >= 1920 && height >= 1080) { width=0; height=0; return false; }
+    if (!size.first) { width=0; height=0; return false; }
+    return width > 0 && height > 0;
 }
 
 #if defined(__aarch64__)

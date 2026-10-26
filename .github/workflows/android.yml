@@ -55,7 +55,7 @@ jobs:
       - name: Prepare development signing key
         shell: bash
         run: base64 --decode .github/android/development-key.base64 > "$KEYSTORE"
-      - name: Build Android LSFG integration
+      - name: Build Uncharted Android
         shell: bash
         run: |
           mkdir -p "$WORK"
@@ -70,13 +70,13 @@ jobs:
           "$SDK/build-tools/35.0.1/aapt2" dump badging "$apk" > dist/package.txt
           grep -q "package: name='com.daedalus.uncharted'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.5-LSFG.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.6.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.5-LSFG
+          name: Uncharted-Daedalus-0.2.6
           path: dist/
           if-no-files-found: error
           retention-days: 30

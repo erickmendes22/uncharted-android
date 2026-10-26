@@ -26,6 +26,12 @@ import org.libsdl.app.SDLActivity;
 public class GameActivity extends SDLActivity {
     private final List<String> bootArgs = new ArrayList<>();
 
+    public void exportLogToFolder() { runOnUiThread(()->LogExport.pick(this)); }
+    public void quitGame() { runOnUiThread(()->{ finishAndRemoveTask(); new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->android.os.Process.killProcess(android.os.Process.myPid()),200); }); }
+    @Override protected void onActivityResult(int request,int result,Intent data) {
+        if (!LogExport.result(this,request,result,data)) super.onActivityResult(request,result,data);
+    }
+
     private File dir() {
         File d = getExternalFilesDir(null);
         return d != null ? d : getFilesDir();

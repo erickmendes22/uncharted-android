@@ -33,14 +33,18 @@ if [ "$PUBLIC" = 1 ]; then
 fi
 rm -rf "$W"; mkdir -p "$W/classes" "$W/lib/arm64-v8a" "$W/assets"
 cp -r "$HERE/../recipes" "$W/assets/"
+mkdir -p "$W/res/drawable"
 if [ -n "$ASSETS_DIR" ]; then cp -r "$ASSETS_DIR"/. "$W/assets/"; fi
+if [ ! -f "$W/assets/art/collection.png" ]; then bash "$HERE/../../fetch_art.sh" "$W/assets"; fi
+cp "$W/assets/art/collection.png" "$W/res/drawable/collection.png"
+"$BT/aapt2" compile --dir "$W/res" -o "$W/resources.zip"
 LINK_EXTRA+=(-A "$W/assets")
 cd "$W"
 javac -nowarn -source 11 -target 11 -classpath "$JAR" -d classes \
-    $(find "$SDLJAVA" -name '*.java') "$HERE/GameActivity.java" "$HERE/Launcher.java"
+    $(find "$SDLJAVA" -name '*.java') "$HERE"/*.java
 "$BT/d8" --release --min-api 33 --lib "$JAR" --output . $(find classes -name '*.class')
 "$BT/aapt2" link -o base.apk -I "$JAR" --manifest "$MANIFEST" \
-    --min-sdk-version 33 --target-sdk-version 35 "${LINK_EXTRA[@]}"
+    --min-sdk-version 33 --target-sdk-version 35 "${LINK_EXTRA[@]}" "$W/resources.zip"
 STRIP=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip
 for lib in "$BUILD/libmain.so" "$BUILD/libbbgpu.so" "$BUILD/libbbprepare.so" "$DEPS"/lib/{libSDL3,libavutil,libswresample,libswscale,libavcodec,libavformat}.so \
            "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"; do

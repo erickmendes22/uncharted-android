@@ -15,6 +15,7 @@ typedef bb_jmp_buf sigjmp_buf;
 extern __thread sigjmp_buf *runtime_fault_recover;
 /* Restarts the game (in-game settings menu, render resolution change). */
 void runtime_restart(void);
+void runtime_mobile_action(int action);
 /* Guest-facing host functions: System V on x86-64 hosts (called by native guest code). ARM64:
  * plain AAPCS64 functions, reached through the FEX veneers (guest_cpu_fex.cpp bridge). */
 #if defined(__x86_64__)

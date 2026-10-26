@@ -11,6 +11,10 @@
 #include <mutex>
 #include <cstring>
 #include <thread>
+#include <ctime>
+#if defined(__linux__)
+#include <unistd.h>
+#endif
 #include <vector>
 #if defined(__linux__)
 #include <pthread.h>
@@ -54,6 +58,7 @@ asm(".section .rodata\n"
 extern "C" const unsigned char bb_font_ttf[];
 extern "C" const unsigned char bb_font_ttf_end[];
 
+extern "C" void runtime_mobile_action(int action);
 extern "C" void runtime_restart(void); // bb-probe (probe.c)
 extern "C" size_t runtime_memory_protect_count(void); // g2-arm64: runtime_memory.c
 
@@ -205,6 +210,15 @@ void Menu() {
                 }
                 ImGui::EndCombo();
             }
+            const bool mobile_mode=std::getenv("BB_MOBILE_UPSCALE") && std::getenv("BB_MOBILE_UPSCALE")[0]=='1';
+            if(mobile_mode) {
+                int preset = s.preset;
+                if (ImGui::BeginCombo("Preset", BbSettings::PresetName(preset))) {
+                    for (int i = 0; i < BbSettings::PresetCount; ++i)
+                        if (ImGui::Selectable(BbSettings::PresetName(i), i == preset)) Store(s.preset, i, true);
+                    ImGui::EndCombo();
+                }
+            } else ImGui::TextWrapped("Enable temporal upscale in the launcher for Quality / Performance presets (next game start).");
             if (const char* error = s.upscaler_problem.load()) ImGui::TextWrapped("%s", error);
             if (const char* error = s.fsr4_problem.load()) ImGui::TextWrapped("%s", error);
             if (const char* error = s.dlss_problem.load(); error && s.upscaler == BbSettings::UpscalerDlss)
@@ -212,6 +226,11 @@ void Menu() {
             Checkbox("Sharpen", s.sharpen);
             Slider("Sharpness", s.sharpness, 0, 2);
             Checkbox("Show FPS", s.show_fps);
+            static const char* hud_modes[]={"FPS only","Compact","Detailed"};
+            int hud=s.hud_mode;if(ImGui::Combo("HUD style",&hud,hud_modes,3))Store(s.hud_mode,hud,true);
+            static const char* corners[]={"Top left","Top right","Bottom left","Bottom right"};
+            int corner=s.hud_position;if(ImGui::Combo("HUD position",&corner,corners,4))Store(s.hud_position,corner,true);
+            Slider("HUD size",s.hud_scale,.7f,1.6f);
             static const int rates[] = {-1, 0, 30, 60, 120};
             static const char* limits[] = {"Automatic", "Unlimited", "30 FPS", "60 FPS", "120 FPS"};
             int selected = 0;
@@ -223,12 +242,6 @@ void Menu() {
             }
             ImGui::TextWrapped("Internal resolution patches are in the launcher. FSR and TAA operate on the scene size provided by the game.");
             if (ImGui::CollapsingHeader("Advanced graphics")) {
-                int preset = s.preset;
-                if (ImGui::BeginCombo("Preset", BbSettings::PresetName(preset))) {
-                    for (int i = 0; i < BbSettings::PresetCount; ++i)
-                        if (ImGui::Selectable(BbSettings::PresetName(i), i == preset)) Store(s.preset, i, true);
-                    ImGui::EndCombo();
-                }
                 Checkbox("Subpixel jitter", s.jitter);
                 Checkbox("Object motion vectors", s.object_motion);
                 Checkbox("Reactive mask", s.reactive);
@@ -240,9 +253,7 @@ void Menu() {
                 static const char* debug[] = {"Off", "Reactive mask", "Motion vectors"};
                 int debug_view = s.debug_view;
                 if (ImGui::Combo("Debug view", &debug_view, debug, 3)) Store(s.debug_view, debug_view, true);
-                static const char* outputs[] = {"1280 x 720", "1920 x 1080", "2560 x 1440", "3840 x 2160"};
-                int output = s.output_res;
-                if (ImGui::Combo("Output resolution", &output, outputs, 4)) Store(s.output_res, output, true);
+                if(mobile_mode) ImGui::TextUnformatted("Temporal output: 1920 x 1080 (native UI)");
                 static const char* modes[] = {"Automatic", "Off", "On"};
                 int live = s.live_resolution + 1;
                 if (ImGui::Combo("Live resolution changes", &live, modes, 3)) Store(s.live_resolution, live - 1, true);
@@ -278,6 +289,7 @@ void Menu() {
         }
         if (ImGui::BeginTabItem("Controls")) {
             ImGui::Spacing();
+            Checkbox("Mobile action layout",s.touch_mobile);
             static const char* modes[] = {"Off", "On", "Automatic (no controller)"};
             int mode = s.touch_pad;
             if (ImGui::Combo("Touch controls", &mode, modes, 3)) Store(s.touch_pad, mode, true);
@@ -296,6 +308,8 @@ void Menu() {
         if (ImGui::Button("Save and restart game")) { BbSettings::Save(); runtime_restart(); }
     }
     ImGui::Spacing();
+    if (ImGui::Button("Export Uncharted log...",ImVec2(-1,38.0f*base_scale))) runtime_mobile_action(0);
+    if (ImGui::Button("Exit game",ImVec2(-1,38.0f*base_scale))) { BbSettings::Save(); runtime_mobile_action(1); }
     if (ImGui::Button("Save and return to game", ImVec2(-1, 42.0f * base_scale))) keep_open = false;
     ImGui::End();
     if (!keep_open) SetOpen(false);
@@ -326,27 +340,45 @@ void TextEntryBox() {
 }
 
 void FpsCounter() {
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const float pad = 12.0f * base_scale;
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - pad,
-                                   viewport->WorkPos.y + pad),
-                            ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-    ImGui::SetNextWindowBgAlpha(0.5f);
-    ImGui::Begin("##fps", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-                     ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav |
-                     ImGuiWindowFlags_NoFocusOnAppearing);
-    const auto& s = BbSettings::Get();
-    // g2-arm64: "ms", not upstream's Russian abbreviation (every user sees the counter).
-    ImGui::Text("%.0f FPS  %.1f ms  %s", frame_ms_avg > 0.0f ? 1000.0f / frame_ms_avg : 0.0f,
-                frame_ms_avg,
-                s.upscaler == BbSettings::UpscalerFsr3
-                    ? (s.upscaler_problem.load() ? "FSR 3.1 failed" : "FSR 3.1")
-                : s.upscaler == BbSettings::UpscalerFsr4 ? "FSR 4"
-                : s.upscaler == BbSettings::UpscalerFsr411 ? "FSR 4.1.1"
-                : s.upscaler == BbSettings::UpscalerTaa ? "TAA"
-                : s.upscaler == BbSettings::UpscalerDlss ? "DLSS"
-                                                         : "");
+    const auto& settings=BbSettings::Get();
+    struct Sample { double at=0,cpu=0;float cpu_percent=0,ram_mib=0;long long gpu_busy=0,gpu_total=0;int gpu=-1; };
+    static Sample sample;
+    const double now=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if(now-sample.at>=1.0) {
+#if defined(__linux__)
+        struct timespec cpu_time{};clock_gettime(CLOCK_PROCESS_CPUTIME_ID,&cpu_time);
+        double cpu=cpu_time.tv_sec+cpu_time.tv_nsec*1e-9;
+        if(sample.at>0)sample.cpu_percent=std::clamp(float(100*(cpu-sample.cpu)/(now-sample.at)/std::max(1u,std::thread::hardware_concurrency())),0.f,100.f);
+        sample.cpu=cpu;
+        long pages=0,resident=0; if(FILE* f=std::fopen("/proc/self/statm","r")){if(std::fscanf(f,"%ld %ld",&pages,&resident)==2)sample.ram_mib=resident*double(sysconf(_SC_PAGESIZE))/(1024*1024);std::fclose(f);}
+        if(FILE* f=std::fopen("/sys/class/kgsl/kgsl-3d0/gpubusy","r")){
+            long long busy=0,total=0;
+            if(std::fscanf(f,"%lld %lld",&busy,&total)==2 && total>0){
+                sample.gpu=std::clamp(int(100.0*double(busy)/total),0,100);
+                sample.gpu_busy=busy;sample.gpu_total=total;
+            }
+            std::fclose(f);
+        }
+#endif
+        sample.at=now;
+    }
+    const auto* viewport=ImGui::GetMainViewport();
+    const float pad=12.0f*base_scale;const int pos=settings.hud_position;
+    const bool right=pos==1||pos==3,bottom=pos>=2;
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x+(right?viewport->WorkSize.x-pad:pad),viewport->WorkPos.y+(bottom?viewport->WorkSize.y-pad:pad)),ImGuiCond_Always,ImVec2(right?1.f:0.f,bottom?1.f:0.f));
+    ImGui::SetNextWindowBgAlpha(.80f);
+    ImGui::Begin("##uncharted-hud",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoFocusOnAppearing);
+    ImGui::SetWindowFontScale(settings.hud_scale.load());
+    ImGui::TextColored(ImVec4(.93f,.80f,.50f,1),"FPS %.0f",frame_ms_avg>0?1000.f/frame_ms_avg:0.f);
+    if(settings.hud_mode>0){
+        if(sample.gpu>=0)ImGui::Text("GPU %d%%  |  CPU %.0f%%",sample.gpu,sample.cpu_percent);
+        else ImGui::Text("GPU --  |  CPU %.0f%%",sample.cpu_percent);
+        ImGui::Text("RAM %.2f GB  |  %.1f ms",sample.ram_mib/1024.f,frame_ms_avg);
+    }
+    if(settings.hud_mode>1) {
+        ImGui::Text("Scene %d x %d",settings.active_render_width.load(),settings.active_render_height.load());
+        ImGui::Text("%s / %s",BbSettings::UpscalerName(settings.upscaler),BbSettings::PresetName(settings.preset));
+    }
     ImGui::End();
 }
 

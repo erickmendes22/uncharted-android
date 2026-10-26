@@ -23,3 +23,5 @@ int32_t* runtime_errno() { std::abort(); }
 int runtime_memory_write_backing(uintptr_t, const void*, uint64_t) { std::abort(); }
 }
 
+
+extern "C" void runtime_mobile_action(int) {}

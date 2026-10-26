@@ -49,7 +49,7 @@ struct Control {
     Glyph glyph;
 };
 
-constexpr Control Controls[] = {
+constexpr Control ClassicControls[] = {
     // the face buttons: a diamond at the bottom right
     {"", BtnTriangle, 1.0f, -0.24f, 1.0f, -0.405f, 0.11f, 0.11f, Shape::Circle, Glyph::Triangle},
     {"", BtnCircle, 1.0f, -0.135f, 1.0f, -0.30f, 0.11f, 0.11f, Shape::Circle, Glyph::Circle},
@@ -67,7 +67,24 @@ constexpr Control Controls[] = {
     {"L3", BtnL3, 0.5f, -0.14f, 1.0f, -0.075f, 0.09f, 0.09f, Shape::Circle, Glyph::Text},
     {"R3", BtnR3, 0.5f, 0.14f, 1.0f, -0.075f, 0.09f, 0.09f, Shape::Circle, Glyph::Text},
 };
-constexpr int ControlCount = int(sizeof(Controls) / sizeof(Controls[0]));
+constexpr Control MobileControls[] = {
+    {"Reload", BtnTriangle, 1,-0.43f,1,-0.36f,0.09f,0.09f,Shape::Circle,Glyph::Triangle},
+    {"Cover", BtnCircle, 1,-0.32f,1,-0.16f,0.105f,0.105f,Shape::Circle,Glyph::Circle},
+    {"Jump", BtnCross, 1,-0.15f,1,-0.12f,0.12f,0.12f,Shape::Circle,Glyph::Cross},
+    {"Melee", BtnSquare, 1,-0.14f,1,-0.32f,0.10f,0.10f,Shape::Circle,Glyph::Square},
+    {"AIM", BtnL2, 0,0.22f,0,0.18f,0.12f,0.12f,Shape::Circle,Glyph::Text},
+    {"L1", BtnL1, 0,0.40f,0,0.24f,0.09f,0.09f,Shape::Circle,Glyph::Text},
+    {"FIRE", BtnR2, 1,-0.23f,0,0.43f,0.15f,0.15f,Shape::Circle,Glyph::Text},
+    {"R1", BtnR1, 1,-0.44f,0,0.23f,0.09f,0.09f,Shape::Circle,Glyph::Text},
+    {"PAD", BtnTouchpad, .5f,0,0,.065f,.16f,.065f,Shape::Pill,Glyph::Text},
+    {"II", BtnOptions, 0,.09f,0,.075f,.085f,.065f,Shape::Pill,Glyph::Text},
+    {"L3", BtnL3, 0,.55f,1,-.10f,.075f,.075f,Shape::Circle,Glyph::Text},
+    {"R3", BtnR3, 1,-.55f,1,-.10f,.075f,.075f,Shape::Circle,Glyph::Text},
+};
+constexpr int ControlCount = int(sizeof(ClassicControls) / sizeof(ClassicControls[0]));
+const Control (&Layout())[ControlCount] { return BbSettings::Get().touch_mobile ? MobileControls : ClassicControls; }
+#define Controls Layout()
+
 
 // The D-pad: a plus on the left, above the stick's usual place.
 constexpr float DpadX = 0.22f, DpadY = 0.47f; // centre, in H (x from the left edge)
@@ -238,7 +255,7 @@ void Draw(float alpha, float scale) {
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     ImFont* font = ImGui::GetFont();
     const float H = Height;
-    const auto col = [alpha](int a) { return IM_COL32(255, 255, 255, int(alpha * float(a))); };
+    const auto col = [alpha](int a) { return IM_COL32(224, 199, 144, int(alpha * float(a))); };
     const float text_size = 0.04f * H * scale;
     const auto shadow = [alpha](int a) { return IM_COL32(0, 0, 0, int(alpha * float(a))); };
     const auto label = [&](const char* text, ImVec2 at, float size) {
@@ -289,7 +306,9 @@ void Draw(float alpha, float scale) {
             dl->AddRect(a, b, col(on ? 240 : 150), rounding, 0, line);
         }
         if (c.glyph == Glyph::Text) {
-            label(c.label, centre, c.shape == Shape::Circle ? text_size : text_size * 0.8f);
+            label(c.label, centre, c.shape == Shape::Circle ? text_size*.72f : text_size * 0.8f);
+        } else if (BbSettings::Get().touch_mobile && c.label[0]) {
+            label(c.label,ImVec2(centre.x,centre.y+c.w*H*scale*.70f),text_size*.58f);
         }
     }
     // the D-pad

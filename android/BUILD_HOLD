@@ -1,0 +1,2 @@
+User instruction: do not generate an APK or trigger a build.
+Await the corrected XML and game eboot/ELF validation, and explicit authorization to build.

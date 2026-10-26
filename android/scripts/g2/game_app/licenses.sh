@@ -24,6 +24,7 @@ section() { # <title> <file> [lines]
     echo "the uncharted-android repository with its FEX and Mesa patches."
     section "uncharted_pc, uncharted-android, shadPS4 - GNU General Public License v2" "$PORT/LICENSE"
     section "LSFG: Eden, lsfg-vk, ARMSX2, RedVorteX Android integration - GNU GPL v3 or later" "$PORT/LICENSE.GPL-3.0"
+    for license in "$WORK"/orbis-pkg/LICENSE*; do [ ! -f "$license" ] || section "orbis PKG utility (videobitva/orbis)" "$license"; done
     section "FEXCore - MIT" "$FEX/LICENSE"
     section "fmt (FEX) - MIT" "$FEX/External/fmt/LICENSE"
     section "xxHash - BSD-2-Clause" "$FEX/External/xxhash/LICENSE"

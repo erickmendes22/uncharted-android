@@ -70,6 +70,7 @@ typedef struct {
 } GuestFiberInfo;
 _Static_assert(sizeof(GuestFiberInfo)==128,"OrbisFiberInfo is 128 bytes");
 
+_Thread_local int runtime_ndgi_open;
 #if defined(__x86_64__)
 typedef struct {
     GuestFiber *current, *previous;
@@ -302,6 +303,7 @@ static ABI int32_t fiber_run_with(GuestFiber *fiber,void *addr,uint64_t size,uin
 static ABI int32_t fiber_run(GuestFiber *fiber,uint64_t arg,uint64_t *ret) { return fiber_run_with(fiber,NULL,0,arg,ret); }
 
 static ABI int32_t fiber_switch_with(GuestFiber *fiber,void *addr,uint64_t size,uint64_t arg,uint64_t *arg_on_run) {
+    runtime_ndgi_open=0;
     int32_t e=check_fiber(fiber);
     if (e) return e;
     if ((uintptr_t)addr&15) return FIBER_ERROR_ALIGNMENT;
@@ -329,6 +331,7 @@ static ABI int32_t fiber_switch_with(GuestFiber *fiber,void *addr,uint64_t size,
 static ABI int32_t fiber_switch(GuestFiber *fiber,uint64_t arg,uint64_t *arg_on_run) { return fiber_switch_with(fiber,NULL,0,arg,arg_on_run); }
 
 static ABI int32_t fiber_return_to_thread(uint64_t arg_on_return,uint64_t *arg_on_run) {
+    runtime_ndgi_open=0;
     FiberThread *t=this_thread();
     GuestFiber *current=t->current;
     if (!current) return FIBER_ERROR_PERMISSION;
@@ -411,6 +414,7 @@ static ABI int32_t fiber_run_with(GuestFiber *fiber,void *addr,uint64_t size,uin
 static ABI int32_t fiber_run(GuestFiber *fiber,uint64_t arg,uint64_t *ret) { return fiber_run_with(fiber,NULL,0,arg,ret); }
 
 static ABI int32_t fiber_switch_with(GuestFiber *fiber,void *addr,uint64_t size,uint64_t arg,uint64_t *arg_on_run) {
+    runtime_ndgi_open=0;
     int32_t e=check_fiber(fiber);
     if (e) return e;
     if ((uintptr_t)addr&15) return FIBER_ERROR_ALIGNMENT;
@@ -430,6 +434,7 @@ static ABI int32_t fiber_switch_with(GuestFiber *fiber,void *addr,uint64_t size,
 static ABI int32_t fiber_switch(GuestFiber *fiber,uint64_t arg,uint64_t *arg_on_run) { return fiber_switch_with(fiber,NULL,0,arg,arg_on_run); }
 
 static ABI int32_t fiber_return_to_thread(uint64_t arg_on_return,uint64_t *arg_on_run) {
+    runtime_ndgi_open=0;
     FiberThread *t=this_thread();
     GuestFiber *current=t->current;
     if (!current) return FIBER_ERROR_PERMISSION;

@@ -18,7 +18,11 @@
 set -euo pipefail
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HERE/../.." && pwd)
-WORK=${WORK:?WORK=<directory for the sources and the builds>}
+if [ -f "$ROOT/android/BUILD_HOLD" ]; then
+    cat "$ROOT/android/BUILD_HOLD" >&2
+    exit 2
+fi
+export WORK=${WORK:?WORK=<directory for the sources and the builds>}
 export NDK=${NDK:-$HOME/android/android-ndk-r30}
 SDK=${SDK:-$HOME/android/sdk}
 APP_ID=${APP_ID:-dev.unchartedandroid}
@@ -112,10 +116,13 @@ DEPS=$WORK/deps OUT=$WORK/build FEX_SOURCE_DIR=$WORK/fex FEX_BUILD_DIR=$WORK/fex
     { grep -E 'error|FAILED' "$WORK/port.log" | head -20; exit 1; }
 grep -A2 'libadrenotools not found' "$WORK/port.log" || true
 
+echo "== PKG installer"
+bash "$HERE/build_pkg.sh" > "$WORK/pkg.log" 2>&1 || { tail -40 "$WORK/pkg.log"; exit 1; }
 echo "== the APK"
 ASSETS=$WORK/assets
 rm -rf "$ASSETS"; mkdir -p "$ASSETS"
 bash "$HERE/fetch_gen8_driver.sh" "$ASSETS"
+bash "$HERE/fetch_art.sh" "$ASSETS"
 PORT=$ROOT FEX=$WORK/fex MESA=$WORK/mesa ADRENOTOOLS=$WORK/libadrenotools DEPS=$WORK/deps \
     bash "$HERE/g2/game_app/licenses.sh" "$ASSETS/licenses.txt" > /dev/null
 KEYSTORE=${KEYSTORE:-$WORK/debug.keystore}
@@ -128,7 +135,7 @@ HOOKS=$WORK/adrenotools-android/src/hook
 PUBLIC=1 APP_ID=$APP_ID ASSETS_DIR=$ASSETS GAME_APP_DIR=$WORK/apk BUILD=$WORK/build SDK=$SDK \
     DEPS=$WORK/deps/prefix SDLJAVA=$WORK/deps/src/sdl3/android-project/app/src/main/java \
     KEYSTORE=$KEYSTORE KEYSTORE_PASS=${KEYSTORE_PASS:-pass:android} \
-    EXTRA_LIBS="$WORK/turnip-android/libvulkan_freedreno.so $HOOKS/libmain_hook.so $HOOKS/libfile_redirect_hook.so
+    EXTRA_LIBS="$WORK/pkg/liborbis_pkg.so $WORK/turnip-android/libvulkan_freedreno.so $HOOKS/libmain_hook.so $HOOKS/libfile_redirect_hook.so
                 $HOOKS/libgsl_alloc_hook.so $HOOKS/libhook_impl.so" \
     bash "$HERE/g2/game_app/build.sh" > "$WORK/apk.log" 2>&1 || { tail -20 "$WORK/apk.log"; exit 1; }
 ls -la "$WORK/apk/uncharted-android.apk"

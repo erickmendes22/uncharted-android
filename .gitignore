@@ -41,3 +41,6 @@ CUSA*/
 *.rdc
 *.core
 *.dmp
+
+# Official UI artwork is fetched with pinned hashes by fetch_art.sh.
+/android/art/*.png

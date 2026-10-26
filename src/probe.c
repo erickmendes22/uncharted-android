@@ -873,7 +873,12 @@ static unsigned char *near_image_memory(size_t size) {
                                 size,MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
     }
 #else
-    (void)size;
+    uint64_t start=((uint64_t)(uintptr_t)image+round_page(guest_image_size ? guest_image_size : (32u<<20))+(32u<<20)+0xffff)&~UINT64_C(0xffff);
+    for (uint64_t step=0; step<(1800ull<<20); step+=1u<<16) {
+        void *p=mmap((void *)(uintptr_t)(start+step),round_page(size),PROT_READ|PROT_WRITE|PROT_EXEC,
+                     MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE,-1,0);
+        if (p!=MAP_FAILED) { memory=p; break; }
+    }
 #endif
     return memory;
 }
@@ -906,6 +911,9 @@ static void install_game_callbacks(Segment *segments, uint64_t ns, uint64_t imag
     guest_image_size=image_size;
     for (size_t i=0;i<count;++i) {
         const RuntimeGuestCallback *c=&callbacks[i];
+#if !defined(__x86_64__)
+        if(c->callback) continue; // Mouse hooks are independent of the mobile controller. NDGI uses FEX-aware hooks below.
+#endif
         if (!mapped(segments,ns,c->offset,c->signature_size) ||
             memcmp(image+c->offset,c->signature,c->signature_size)) continue;
         if (!c->callback) {
@@ -929,7 +937,7 @@ static void install_game_callbacks(Segment *segments, uint64_t ns, uint64_t imag
         }
         t[k++]=0x48; t[k++]=0x89; t[k++]=0xf9;                      /* mov rcx, rdi */
         t[k++]=0x48; t[k++]=0x89; t[k++]=0xf2;                      /* mov rdx, rsi */
-        const uintptr_t base=(uintptr_t)image, host=(uintptr_t)c->callback;
+        const uintptr_t base=(uintptr_t)image, host=guest_host_function((const void *)c->callback,c->name,GUEST_ABI_MS);
         t[k++]=0x49; t[k++]=0xb8; memcpy(t+k,&base,8); k+=8;        /* movabs r8, image */
         t[k++]=0x4d; t[k++]=0x89; t[k++]=0xf1;                      /* mov r9, r14 */
         t[k++]=0x48; t[k++]=0xb8; memcpy(t+k,&host,8); k+=8;        /* movabs rax, callback */
@@ -952,6 +960,194 @@ static void install_game_callbacks(Segment *segments, uint64_t ns, uint64_t imag
         printf("Callbacks: %s at %#" PRIx64 "\n",c->name,c->offset);
     }
 }
+static unsigned char *mobile_callback_thunk(unsigned char *f,size_t moved,const void *fn) {
+    unsigned char *t=near_image_memory(4096); if (!t) return NULL; size_t k=0;
+        /* pushfq; push rax rcx rdx r8-r11 rbx; mov rbx, rsp; and rsp, -16; sub rsp, 0xa0 (works at
+         * a function's start and inside it) */
+        static const unsigned char save[]={0x9c,0x50,0x51,0x52,0x41,0x50,0x41,0x51,0x41,0x52,0x41,0x53,0x53,
+                                           0x48,0x89,0xe3,0x48,0x83,0xe4,0xf0,0x48,0x81,0xec,0xa0,0x00,0x00,0x00};
+        memcpy(t+k,save,sizeof(save)); k+=sizeof(save);
+        for (int x=0;x<8;++x) {                                     /* movdqu [rsp+0x20+16x], xmmx */
+            const uint32_t disp=0x20u+16u*(uint32_t)x;
+            t[k++]=0xf3; t[k++]=0x0f; t[k++]=0x7f; t[k++]=(unsigned char)(0x84|x<<3); t[k++]=0x24;
+            memcpy(t+k,&disp,4); k+=4;
+        }
+        t[k++]=0x48; t[k++]=0x89; t[k++]=0xf9;                      /* mov rcx, rdi */
+        t[k++]=0x48; t[k++]=0x89; t[k++]=0xf2;                      /* mov rdx, rsi */
+        const uintptr_t base=(uintptr_t)image, host=guest_host_function((const void *)fn,"NDGI tracking",GUEST_ABI_MS);
+        t[k++]=0x49; t[k++]=0xb8; memcpy(t+k,&base,8); k+=8;        /* movabs r8, image */
+        t[k++]=0x4d; t[k++]=0x89; t[k++]=0xf1;                      /* mov r9, r14 */
+        t[k++]=0x48; t[k++]=0xb8; memcpy(t+k,&host,8); k+=8;        /* movabs rax, callback */
+        t[k++]=0xff; t[k++]=0xd0;                                   /* call rax */
+        for (int x=0;x<8;++x) {                                     /* movdqu xmmx, [rsp+0x20+16x] */
+            const uint32_t disp=0x20u+16u*(uint32_t)x;
+            t[k++]=0xf3; t[k++]=0x0f; t[k++]=0x6f; t[k++]=(unsigned char)(0x84|x<<3); t[k++]=0x24;
+            memcpy(t+k,&disp,4); k+=4;
+        }
+        /* mov rsp, rbx; pop rbx r11-r8 rdx rcx rax; popfq */
+        static const unsigned char restore[]={0x48,0x89,0xdc,0x5b,0x41,0x5b,0x41,0x5a,0x41,0x59,0x41,0x58,
+                                              0x5a,0x59,0x58,0x9d};
+        memcpy(t+k,restore,sizeof(restore)); k+=sizeof(restore);
+        memcpy(t+k,f,moved); k+=moved;                       /* the moved instructions */
+        int32_t back=(int32_t)((int64_t)(uintptr_t)(f+moved)-(int64_t)(uintptr_t)(t+k+5));
+        t[k++]=0xe9; memcpy(t+k,&back,4); k+=4;
+        int32_t to=(int32_t)((int64_t)(uintptr_t)t-(int64_t)(uintptr_t)(f+5));
+        f[0]=0xe9; memcpy(f+1,&to,4); memset(f+5,0x90,moved-5);
+    return t;
+}
+static int64_t find_unique_pattern(uint64_t image_size,const char *pattern) {
+    size_t found=0,length=0;
+    size_t count=runtime_find_guest_fix(image,(size_t)image_size,pattern,&found,&length);
+    return count==1 ? (int64_t)found : count>1 ? -2 : -1;
+}
+extern _Thread_local int runtime_ndgi_open; /* runtime_fiber.c */
+static void __attribute__((ms_abi)) ndgi_end(uint64_t rdi, uint64_t rsi, uint64_t base, uint64_t r14) {
+    (void)rdi; (void)rsi; (void)base; (void)r14;
+    runtime_ndgi_open=0;
+}
+static void __attribute__((ms_abi)) ndgi_begin(uint64_t rdi, uint64_t rsi, uint64_t base, uint64_t r14) {
+    (void)rdi; (void)rsi; (void)base; (void)r14;
+    runtime_ndgi_open=1;
+}
+static int64_t find_masked(const char *hex,uint64_t size) { return find_unique_pattern(size,hex); }
+static void install_ndgi_hooks(uint64_t image_size) {
+    const char *wait=getenv("BB_JOB_LOCK_WAIT_MS");
+    if (wait && wait[0]=='0' && !wait[1]) return; /* nothing uses the flag */
+    static const unsigned char begin[]={0x49,0x89,0x84,0x24,0x10,0xe8,0x00,0x00}; /* mov [r12+0xe810], rax */
+    int64_t begin_at=-1;
+    for (uint64_t at=0;at+16<=image_size;++at) {
+        if (image[at]!=0x49 || memcmp(image+at,begin,sizeof(begin))) continue;
+        if (begin_at>=0) { begin_at=-2; break; }
+        begin_at=(int64_t)at;
+    }
+    size_t begin_len=8;
+    if (begin_at==-1) {
+        /* US 1.02 (as CUSA02344): the worker path's mov [r15+0xe810], r12 */
+        begin_at=find_masked("4d89a710e80000",image_size);
+        begin_len=7;
+    }
+    if (begin_at<0) {
+        printf("Render contexts: begin site %s\n",begin_at==-2 ? "not unique" : "not found");
+        return;
+    }
+    /* End: mov rbx,[r14+0xe810]; call GetCurrentWorkerThreadIndex; cmp rbx,rax; je */
+    static const unsigned char head[]={0x49,0x8b,0x9e,0x10,0xe8,0x00,0x00,0xe8};
+    static const unsigned char tail[]={0x48,0x39,0xc3,0x74};
+    int64_t found=-1;
+    for (uint64_t at=0;at+16<=image_size;++at) {
+        if (image[at]!=0x49 || memcmp(image+at,head,sizeof(head)) || memcmp(image+at+12,tail,sizeof(tail))) continue;
+        if (found>=0) { printf("Render contexts: end site not unique\n"); return; }
+        found=(int64_t)at;
+    }
+    if (found<0) {
+        /* US 1.02: cmp byte [r15+0xe7dc],0; je; mov r12,[r15+0xe810] (the index call is inlined) */
+        const int64_t us=find_masked("4180bfdce70000 00 0f84???????? 4d8ba710e80000",image_size);
+        if (us>=0) found=us+14;
+    }
+    if (found<0) { printf("Render contexts: end site not found\n"); return; }
+    /* both or neither: a Begin without its End would leave the flag set. End first (alone it only
+     * clears the flag), Begin only once End is in. */
+    if (!mobile_callback_thunk(image+found,7,(const void *)ndgi_end)) { printf("Render contexts: end hook failed\n"); return; }
+    printf("Render contexts: end hooked at %#" PRIx64 "\n",(uint64_t)found);
+    if (mobile_callback_thunk(image+begin_at,begin_len,(const void *)ndgi_begin))
+        printf("Render contexts: begin hooked at %#" PRIx64 "\n",(uint64_t)begin_at);
+    else
+        printf("Render contexts: begin hook failed\n");
+}
+static uint64_t job_lock_try;
+static unsigned job_lock_wait_ms=250;
+static volatile long job_lock_fallbacks;
+static ABI int job_lock_wait(uint64_t counter, uint64_t a, uint32_t b) {
+    if (!runtime_ndgi_open) return 0;
+    const volatile uint64_t *value=(const volatile uint64_t *)(uintptr_t)(counter+0x20);
+    struct timespec start,now; clock_gettime(CLOCK_MONOTONIC,&start);
+    for (;;) {
+        const uint64_t args[]={*value,a,b};
+        __atomic_thread_fence(__ATOMIC_ACQUIRE);
+        if (guest_call((uintptr_t)job_lock_try,args,3)&0xff) return 1;
+        clock_gettime(CLOCK_MONOTONIC,&now);
+        if ((now.tv_sec-start.tv_sec)*1000+(now.tv_nsec-start.tv_nsec)/1000000>=job_lock_wait_ms) break;
+        usleep(100);
+    }
+    if (__atomic_add_fetch(&job_lock_fallbacks,1,__ATOMIC_RELAXED)<=8)
+        printf("Job wait: render job deadline %u ms, normal suspend fallback\n",job_lock_wait_ms);
+    return 0;
+}
+/* US 1.02 (CUSA02320, as CUSA02344), all three games: the try is inlined (counter r15, target r14,
+ * mode ebx) and the worker check is in al:
+ *   mov rcx,[r15+0x20]; cmp ebx,1; jne; cmp rcx,r14; setle cl; jmp; test ebx,ebx; jne; cmp rcx,r14;
+ *   sete cl; test cl,cl; jne done; test al,al; je not_a_worker; nop10; (suspend loop:) mov rdi,r15;
+ *   mov rsi,r14; mov edx,ebx; call SuspendJob
+ * The game keeps an uncalled copy of the try function, which job_lock_wait calls. */
+static void patch_job_lock_wait_us(uint64_t image_size) {
+    const int64_t at=find_masked("498b4f20 83fb01 75?? 4c39f1 0f9ec1 eb?? 85db 75?? 4c39f1 0f94c1 84c9 75?? 84c0 74?? "
+                                 "662e0f1f840000000000 4c89ff 4c89f6 89da e8????????",image_size);
+    const int64_t try_at=find_masked("83fa01 7507 4839f7 0f9ec0 c3 85d2 7507 4839f7 0f94c0 c3",image_size);
+    if (at<0 || try_at<0) { printf("Job wait: pattern not found, not patched\n"); return; }
+    unsigned char *p=image+at;
+    job_lock_try=(uint64_t)(uintptr_t)(image+try_at);
+    const uint64_t done=(uint64_t)(uintptr_t)(p+31+(int8_t)p[30]);
+    const uint64_t not_worker=(uint64_t)(uintptr_t)(p+35+(int8_t)p[34]);
+    const uint64_t suspend_loop=(uint64_t)(uintptr_t)(p+45);
+    unsigned char *t=near_image_memory(4096);
+    if (!t) { printf("Job wait: no thunk memory, not patched\n"); return; }
+    size_t k=0;
+    const uintptr_t host=guest_host_function((const void *)job_lock_wait,"render job wait",GUEST_ABI_SYSV);
+    t[k++]=0x84; t[k++]=0xc0; t[k++]=0x75; t[k++]=0x0e;                                   /* test al,al; jnz worker */
+    t[k++]=0xff; t[k++]=0x25; memset(t+k,0,4); k+=4; memcpy(t+k,&not_worker,8); k+=8;    /* jmp [rip]: not a worker */
+    static const unsigned char args[]={0x4c,0x89,0xff,0x4c,0x89,0xf6,0x89,0xda};        /* rdi=r15 (the counter), rsi=r14, edx=ebx */
+    memcpy(t+k,args,sizeof(args)); k+=sizeof(args);
+    t[k++]=0x48; t[k++]=0xb8; memcpy(t+k,&host,8); k+=8;   /* movabs rax, job_lock_wait */
+    t[k++]=0xff; t[k++]=0xd0;                              /* call rax (rsp aligned as at the original call) */
+    t[k++]=0x84; t[k++]=0xc0;                              /* test al,al */
+    t[k++]=0x74; t[k++]=0x0e;                              /* jz suspend */
+    t[k++]=0xff; t[k++]=0x25; memset(t+k,0,4); k+=4; memcpy(t+k,&done,8); k+=8;          /* jmp [rip]: there */
+    t[k++]=0xff; t[k++]=0x25; memset(t+k,0,4); k+=4; memcpy(t+k,&suspend_loop,8); k+=8;  /* jmp [rip]: suspend as before */
+    const int32_t to=(int32_t)((int64_t)(uintptr_t)t-(int64_t)(uintptr_t)(p+31+5));
+    p[31]=0xe9; memcpy(p+32,&to,4);                        /* replaces test al,al; je */
+    memset(p+36,0x90,9);
+    printf("Job wait: workers with a render context open wait for a job counter in place for up to %u ms before suspending their job (0x%" PRIx64 ", US)\n",
+           job_lock_wait_ms,(uint64_t)at);
+}
+static void patch_job_lock_wait(uint64_t image_size) {
+    const char *env=getenv("BB_JOB_LOCK_WAIT_MS");
+    if (env) job_lock_wait_ms=(unsigned)strtoul(env,NULL,10);
+    if (job_lock_wait_ms>1000) job_lock_wait_ms=1000;
+    if (!job_lock_wait_ms) { printf("Job wait: BB_JOB_LOCK_WAIT_MS=0, workers suspend at once\n"); return; }
+    /* mov rdi,[rbx+0x20]; mov rsi,r15; mov edx,r14d; call try; test al,al; jne done;
+     * test r12b,r12b; je not_a_worker; nop5; (suspend loop:) mov rdi,rbx; mov rsi,r15; mov edx,r14d; call SuspendJob */
+    const int64_t at=find_masked("488b7b20 4c89fe 4489f2 e8???????? 84c0 75?? 4584e4 74?? 0f1f440000 4889df 4c89fe 4489f2 e8????????",
+                                 image_size);
+    if (at==-1) { patch_job_lock_wait_us(image_size); return; }
+    if (at<0) { printf("Job wait: %s\n",at==-2 ? "pattern not unique, not patched" : "pattern not found, not patched"); return; }
+    unsigned char *p=image+at;
+    int32_t rel; memcpy(&rel,p+11,4);
+    job_lock_try=(uint64_t)(uintptr_t)(p+15+rel);
+    const uint64_t done=(uint64_t)(uintptr_t)(p+19+(int8_t)p[18]);
+    const uint64_t not_worker=(uint64_t)(uintptr_t)(p+24+(int8_t)p[23]);
+    const uint64_t suspend_loop=(uint64_t)(uintptr_t)(p+29);
+    unsigned char *t=near_image_memory(4096);
+    if (!t) { printf("Job wait: no thunk memory, not patched\n"); return; }
+    size_t k=0;
+    const uintptr_t host=guest_host_function((const void *)job_lock_wait,"render job wait",GUEST_ABI_SYSV);
+    static const unsigned char test_r12b[]={0x45,0x84,0xe4,0x75,0x0e};      /* test r12b,r12b; jnz worker */
+    memcpy(t+k,test_r12b,sizeof(test_r12b)); k+=sizeof(test_r12b);
+    t[k++]=0xff; t[k++]=0x25; memset(t+k,0,4); k+=4; memcpy(t+k,&not_worker,8); k+=8;  /* jmp [rip]: not a worker */
+    /* worker: */
+    static const unsigned char args[]={0x48,0x89,0xdf,0x90,0x4c,0x89,0xfe,0x44,0x89,0xf2}; /* rdi=rbx (the counter), rsi=r15, edx=r14d */
+    memcpy(t+k,args,sizeof(args)); k+=sizeof(args);
+    t[k++]=0x48; t[k++]=0xb8; memcpy(t+k,&host,8); k+=8;   /* movabs rax, job_lock_wait */
+    t[k++]=0xff; t[k++]=0xd0;                              /* call rax (rsp aligned as at the original calls) */
+    t[k++]=0x84; t[k++]=0xc0;                              /* test al,al */
+    t[k++]=0x74; t[k++]=0x0e;                              /* jz suspend */
+    t[k++]=0xff; t[k++]=0x25; memset(t+k,0,4); k+=4; memcpy(t+k,&done,8); k+=8;          /* jmp [rip]: acquired */
+    t[k++]=0xff; t[k++]=0x25; memset(t+k,0,4); k+=4; memcpy(t+k,&suspend_loop,8); k+=8;  /* jmp [rip]: suspend as before */
+    const int32_t to=(int32_t)((int64_t)(uintptr_t)t-(int64_t)(uintptr_t)(p+19+5));
+    p[19]=0xe9; memcpy(p+20,&to,4);                        /* replaces test r12b,r12b; je */
+    printf("Job wait: workers with a render context open wait for a job counter in place for up to %u ms before suspending their job (0x%" PRIx64 ")\n",
+           job_lock_wait_ms,(uint64_t)at);
+}
+
 /* Naughty Dog's FrameBegin (ndlib/render/fg-draw-mgr.cpp) asserts that the frame it recycles,
  * three back, has its GPU end-of-pipe tick (set by the game's EOP interrupt handler). It never
  * waits: on PS4 the GPU always keeps up. Here the GPU side can fall behind (shaders building on a
@@ -1048,6 +1244,21 @@ static void patch_frame_params_wait(uint64_t image_size) {
 /* Restarts the game through run.sh (the settings menu: a new render resolution is a patch
  * applied at start). Descriptors are closed first so the old GPU device and its memory are
  * released before the new process opens its own. */
+void runtime_mobile_action(int action) {
+#ifdef BB_SDL_MAIN
+    fflush(NULL);
+    JNIEnv *env=(JNIEnv *)SDL_GetAndroidJNIEnv();
+    jobject activity=(jobject)SDL_GetAndroidActivity();
+    if (env && activity) {
+        jclass cls=(*env)->GetObjectClass(env,activity);
+        jmethodID method=cls ? (*env)->GetMethodID(env,cls,action ? "quitGame" : "exportLogToFolder","()V") : NULL;
+        if (method) (*env)->CallVoidMethod(env,activity,method);
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+    }
+#else
+    if (action) { fflush(NULL); _exit(0); }
+#endif
+}
 void runtime_restart(void) {
     fflush(NULL);
 #ifdef _WIN32
@@ -1108,6 +1319,9 @@ int main(int argc, char **argv) {
         }
 #endif
     setvbuf(stdout, NULL, _IONBF, 0);
+#ifdef BB_SDL_MAIN
+    printf("UNCHARTED — Daedalus Android | diagnostics\n");
+#endif
 #ifndef _WIN32
     /* Keep host heap objects handed to the guest (thread handles, TLS) in the
        non-PIE brk heap, i.e. below 1 TiB: the guest packs pointers into 40 bits. */
@@ -1323,7 +1537,7 @@ int main(int argc, char **argv) {
     if (fread(image, 1, size, f) != size || fgetc(f) != EOF) fail("incorrect memory image size");
     fclose(f);
     if (!cpu_only) {
-        char title[128]="Bloodborne", serial[16]="UNKNOWN", sfo[4096];
+        char title[128]="Uncharted Collection", serial[16]="UNKNOWN", sfo[4096];
         uint32_t attributes=0;
         snprintf(sfo,sizeof(sfo),"%s/sce_sys/param.sfo",app0 ? app0 : ".");
         sfo_value(sfo,"TITLE",title,sizeof(title),NULL);
@@ -1372,6 +1586,8 @@ int main(int argc, char **argv) {
         for (uint64_t s=0;s<ns;++s) if (segments[s].address+segments[s].size>image_end) image_end=segments[s].address+segments[s].size;
         install_signature_fixes(segments, ns);
         install_game_callbacks(segments, ns, image_end);
+        install_ndgi_hooks(image_end);
+        patch_job_lock_wait(image_end);
         patch_eop_tick_wait(image_end);
         patch_frame_params_wait(image_end);
     }
