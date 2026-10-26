@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, android-ui-runtime-pending-xml]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
@@ -52,6 +52,8 @@ jobs:
         with:
           path: .android-work
           key: android-native-v1-${{ runner.os }}-${{ hashFiles('android/scripts/build_all.sh', 'android/scripts/port-arm64/**', '.gitmodules') }}
+          restore-keys: |
+            android-native-v1-${{ runner.os }}-
       - name: Prepare development signing key
         shell: bash
         run: base64 --decode .github/android/development-key.base64 > "$KEYSTORE"

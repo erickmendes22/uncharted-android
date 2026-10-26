@@ -18,10 +18,6 @@
 set -euo pipefail
 HERE=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HERE/../.." && pwd)
-if [ -f "$ROOT/android/BUILD_HOLD" ]; then
-    cat "$ROOT/android/BUILD_HOLD" >&2
-    exit 2
-fi
 export WORK=${WORK:?WORK=<directory for the sources and the builds>}
 export NDK=${NDK:-$HOME/android/android-ndk-r30}
 SDK=${SDK:-$HOME/android/sdk}

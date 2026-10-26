@@ -1,9 +1,7 @@
-# Uncharted 0.2.6 — source prepared, APK on hold
+# Uncharted 0.2.6 — source and patch validation
 
-The user explicitly requested finishing source changes without generating a build.
-Do not dispatch Actions, update main, or remove BUILD_HOLD without explicit build
-permission. The corrected XML and three 01.00 executables were received and checked.
-Build permission remains on hold; receiving these files does not authorize a build.
+The user authorized a test build on 2026-10-26 after the XML/executable checks.
+The build hold was removed; runtime and device validation remain pending.
 
 | Request | Source changes |
 | --- | --- |
@@ -37,8 +35,8 @@ Build permission remains on hold; receiving these files does not authorize a bui
 ## Checks and limits
 
 Java source parsing, Android manifest parsing, C syntax, shell syntax and diff
-whitespace checks pass. There has been no Android compilation/linking, new APK,
-or device validation of these changes. In particular, FSR image quality/history,
+whitespace checks pass. At the source-validation checkpoint there had been no Android compilation/linking,
+new APK or device validation of these changes. In particular, FSR image quality/history,
 video sizing, PKG extraction and crash recovery still require the later approved
 build and device test. Do not report those runtime results as confirmed.
 
@@ -60,4 +58,5 @@ original-byte hashes instead of trusting an SFO version label alone.
 Reproduce with `scripts/g2/validate_catalog.py` (under android/) and `--xml`,
 `--catalog`, one `--exe canonical-name=path` per executable, and `--report`.
 See `validation/patches-1.00-1.02.json` (under android/) for hashes and counts.
-No build was generated or dispatched.
+No build was generated during patch validation. A subsequent test build was
+authorized by the user on 2026-10-26.
