@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" /> <!-- driver packages from GitHub (the launcher) -->
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
-    <application android:label="uncharted-android" android:hasCode="true" android:extractNativeLibs="true"
+    <application android:label="Uncharted — Daedalus" android:hasCode="true" android:extractNativeLibs="true"
         android:hardwareAccelerated="true" android:requestLegacyExternalStorage="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <!-- singleTask: one launcher, which finishes when it starts the game; the icon then makes

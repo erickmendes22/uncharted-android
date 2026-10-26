@@ -47,6 +47,7 @@ jobs:
           echo "SDK=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "KEYSTORE=$RUNNER_TEMP/uncharted-development.p12" >> "$GITHUB_ENV"
       - name: Restore pinned dependency builds
+        id: native-cache
         uses: actions/cache@v4
         with:
           path: .android-work
@@ -90,3 +91,10 @@ jobs:
             .android-work/deps/build/*.log
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Keep completed dependency builds after compilation failure
+        if: failure() && steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .android-work
+          key: android-native-v1-${{ runner.os }}-${{ hashFiles('android/scripts/build_all.sh', 'android/scripts/port-arm64/**', '.gitmodules') }}

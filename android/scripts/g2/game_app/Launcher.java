@@ -195,23 +195,18 @@ public class Launcher extends Activity {
     private int accent, muted, cardColor;
 
     private void initPalette() {
-        TypedValue v = new TypedValue();
-        accent = 0xFF3D8BFF;
-        if (getTheme().resolveAttribute(android.R.attr.colorAccent, v, true)) {
-            if (v.type >= TypedValue.TYPE_FIRST_COLOR_INT && v.type <= TypedValue.TYPE_LAST_COLOR_INT)
-                accent = v.data;
-            else if (v.resourceId != 0) accent = getColor(v.resourceId);
-        }
-        boolean night = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
-                == Configuration.UI_MODE_NIGHT_YES;
-        muted = night ? 0xB3FFFFFF : 0x99000000;
-        cardColor = night ? 0x16FFFFFF : 0x0D000000;
+        accent = 0xFFCBA66B;
+        muted = 0xFFB9AC94;
+        cardColor = 0xEF191D1A;
+        getWindow().setStatusBarColor(0xFF101511);
+        getWindow().setNavigationBarColor(0xFF101511);
     }
 
     private TextView text(LinearLayout parent, String s, float size, boolean bold) {
         TextView t = new TextView(this);
         t.setText(s);
         t.setTextSize(size);
+        t.setTextColor(0xFFF4EFDF);
         if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setPadding(0, dp(6), 0, dp(2));
         parent.addView(t);
@@ -230,6 +225,7 @@ public class Launcher extends Activity {
         c.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(cardColor);
+        bg.setStroke(dp(1), 0x555F553A);
         bg.setCornerRadius(dp(16));
         c.setBackground(bg);
         c.setPadding(dp(18), dp(12), dp(18), dp(16));
@@ -243,7 +239,7 @@ public class Launcher extends Activity {
 
     private LinearLayout row(LinearLayout parent) {
         LinearLayout r = new LinearLayout(this);
-        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setOrientation(getResources().getConfiguration().screenWidthDp < 600 ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         parent.addView(r);
         return r;
     }
@@ -255,15 +251,15 @@ public class Launcher extends Activity {
         b.setOnClickListener(l);
         b.setTextColor(new ColorStateList(new int[][] {{-android.R.attr.state_enabled}, {}},
                                           new int[] {muted, accent}));
-        b.setMinHeight(dp(44));
-        b.setMinimumHeight(dp(44));
+        b.setMinHeight(dp(52));
+        b.setMinimumHeight(dp(52));
         b.setPadding(dp(18), 0, dp(18), 0);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.TRANSPARENT);
         bg.setStroke(dp(1), (accent & 0x00FFFFFF) | 0x66000000);
         bg.setCornerRadius(dp(22));
         b.setBackground(new RippleDrawable(ColorStateList.valueOf((accent & 0x00FFFFFF) | 0x33000000), bg, null));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                                                                      ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(8);
         lp.rightMargin = dp(8);
@@ -278,7 +274,7 @@ public class Launcher extends Activity {
         b.setOnClickListener(l);
         b.setTextSize(18);
         b.setTypeface(Typeface.DEFAULT_BOLD);
-        b.setTextColor(Color.WHITE);
+        b.setTextColor(0xFF181910);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(new ColorStateList(new int[][] {{-android.R.attr.state_enabled}, {}},
                                        new int[] {(accent & 0x00FFFFFF) | 0x59000000, accent}));
@@ -305,23 +301,51 @@ public class Launcher extends Activity {
 
     private void buildViews() {
         initPalette();
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            new int[] {0xFF26342A, 0xFF111713, 0xFF1D1913}));
+        TextView brand = text(shell, "UNCHARTED", 29, true);
+        brand.setTypeface(Typeface.create("serif", Typeface.BOLD));
+        brand.setLetterSpacing(0.08f);
+        brand.setPadding(dp(22), dp(14), dp(16), 0);
+        TextView subtitle = note(shell, "THE NATHAN DRAKE COLLECTION  ·  DAEDALUS");
+        subtitle.setTextSize(11);
+        subtitle.setPadding(dp(22), 0, dp(16), dp(8));
         ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(20), dp(20), dp(20), dp(28));
         scroll.addView(root);
 
-        text(root, "Uncharted: The Nathan Drake Collection", 24, true);
-        String version = "";
-        try {
-            version = " " + getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
-        } catch (Exception e) {
+        LinearLayout[] pages = new LinearLayout[4];
+        for (int n = 0; n < pages.length; n++) {
+            pages[n] = new LinearLayout(this);
+            pages[n].setOrientation(LinearLayout.VERTICAL);
+            root.addView(pages[n]);
+            pages[n].setVisibility(n == 0 ? View.VISIBLE : View.GONE);
         }
-        note(root, "uncharted-android" + version + ": uncharted_pc for Android, the PS4 game's code on "
-                 + "FEXCore and the shadPS4 renderer. It needs your own copy of the game, already "
-                 + "decrypted (a dump of CUSA02344, CUSA02320 or CUSA02343, version 01.02 for the "
-                 + "sizes below 1920x1080).");
-
+        LinearLayout home = pages[0], patches = pages[1], config = pages[2], about = pages[3];
+        LinearLayout games = card(home, "YOUR COLLECTION");
+        RadioGroup gameSelect = new RadioGroup(this);
+        String[] names = {"UNCHARTED  ·  Drake's Fortune", "UNCHARTED 2  ·  Among Thieves", "UNCHARTED 3  ·  Drake's Deception"};
+        for (int n = 0; n < GAMES.length; n++) {
+            RadioButton game = new RadioButton(this);
+            game.setId(View.generateViewId()); game.setTag(GAMES[n][0]);
+            game.setText(names[n]); game.setMinHeight(dp(56));
+            gameSelect.addView(game);
+            if (GAMES[n][0].equals(prefs.getString("selected_game", "u1"))) gameSelect.check(game.getId());
+        }
+        gameSelect.setOnCheckedChangeListener((group, id) -> {
+            RadioButton game = group.findViewById(id);
+            if (game != null) prefs.edit().putString("selected_game", (String)game.getTag()).apply();
+        });
+        games.addView(gameSelect);
+        playButton = primaryButton(games, "PLAY", v -> play());
+        statusText = note(shell, "");
+        statusText.setPadding(dp(22), 0, dp(22), dp(4));
+        root = home;
         LinearLayout folder = card(root, "Game folder");
         folderText = text(folder, "", 15, false);
         folderInfo = note(folder, "");
@@ -352,7 +376,7 @@ public class Launcher extends Activity {
         prepareButton = button(prepareCard, "Prepare", v -> prepare(false));
 
         LinearLayout page = root;
-        root = card(page, "Settings"); // the settings widgets below go into the card
+        root = card(patches, "RESOLUTION PATCHES"); // the settings widgets below go into the card
         text(root, "The game renders at:", 14, false);
         resolution = new RadioGroup(this);
         String chosen = chosenResolution();
@@ -373,6 +397,8 @@ public class Launcher extends Activity {
                  + "executables (the app ships recipes, no code of the game) and the movies play through the "
                  + "port's decoder. FSR 3.1 and TAA (the panel in the game) are anti-aliasing at that size; the port "
                  + "scales the picture to the screen.", 14, false);
+        LinearLayout displayCard = card(home, "DISPLAY & PERFORMANCE");
+        root = card(config, "GPU DRIVER");
         text(root, "Vulkan driver:", 14, false);
         driverList = new LinearLayout(this);
         driverList.setOrientation(LinearLayout.VERTICAL);
@@ -393,6 +419,7 @@ public class Launcher extends Activity {
                  + "builds by K11MCH1, MrPurple, StevenMXZ (the Gen8 ones for Adreno 8xx: Snapdragon 8 Elite) and "
                  + "others, or Qualcomm's own driver builds. They are untested with these games; if the bundled "
                  + "driver gives a black screen, try one of them.", 14, false);
+        root = displayCard;
         ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
         ((ActivityManager) getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
         // An 8 GB device shows ~7.1-7.5 GiB to apps (the G2: 7.15), a 6 GB one ~5.5.
@@ -425,6 +452,7 @@ public class Launcher extends Activity {
         root.addView(fpsLimit);
         text(root, "Off: no limit; above 120 FPS the game's movement timing breaks. The panel in the game "
                  + "has the same setting.", 14, false);
+        root = card(config, "CONTROLS");
         text(root, "On-screen gamepad:", 14, false);
         touchPad = new RadioGroup(this);
         touchPad.setOrientation(RadioGroup.HORIZONTAL);
@@ -451,6 +479,7 @@ public class Launcher extends Activity {
                  + "has the same setting with opacity and size.", 14, false);
         note(root, "In the game, swipe in from the right edge of the screen (or press L3+R3) for the settings "
                  + "panel: upscaling, sharpening, frame generation and more, applied at once.");
+        root = card(home, "FRAME GENERATION");
         text(root, "LSFG frame generation (your own Lossless.dll):", 14, false);
         button(root, "Import Lossless.dll", v -> {
             Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -465,7 +494,7 @@ public class Launcher extends Activity {
                 try { selected = Math.max(1, Math.min(3, Integer.parseInt(iniGet("frame_gen_multiplier")) - 1)); }
                 catch (Exception ignored) { selected = 1; }
             }
-            new android.app.AlertDialog.Builder(this).setTitle("Frame generation")
+            new ExpeditionDialog(this).setTitle("Frame generation")
                 .setSingleChoiceItems(modes, selected, (dialog, which) -> {
                     if (which > 0 && !new File(files, "Lossless.dll").isFile()) {
                         status("Import your own Lossless.dll first.");
@@ -479,6 +508,7 @@ public class Launcher extends Activity {
                 }).setNegativeButton("Cancel", null).show();
         });
         text(root, "No DLL or Lossless Scaling shaders are included. LSFG needs a compatible Vulkan driver and adds GPU and memory cost.", 14, false);
+        root = card(config, "ADVANCED");
         text(root, "More environment for the port (KEY=VALUE per line, optional):", 14, false);
         extraEnv = new EditText(this);
         extraEnv.setText(prefs.getString("extra_env", ""));
@@ -487,10 +517,9 @@ public class Launcher extends Activity {
         root.addView(extraEnv);
         root = page;
 
-        playButton = primaryButton(root, "Play", v -> play());
-        statusText = note(root, "");
 
-        LinearLayout savesCard = card(root, "Saves");
+
+        LinearLayout savesCard = card(config, "SAVES");
         note(savesCard, "The game's saves are in the app's own folder, which Android deletes together with the app. "
                       + "Back them up to " + backups() + " before uninstalling.");
         LinearLayout saves = row(savesCard);
@@ -499,15 +528,81 @@ public class Launcher extends Activity {
             status(done != null ? "Saves copied to " + done : "Backing up failed (no saves yet, or no access).");
         });
         button(saves, "Restore saves", v -> restoreSaves());
-        LinearLayout helpCard = card(root, "Bug reports");
+        LinearLayout helpCard = card(config, "DIAGNOSTICS");
         note(helpCard, "The game writes its log to the app's own folder, which other apps cannot read on recent "
                      + "Android. Copy it to " + backups() + " to attach it to a report.");
         button(helpCard, "Copy the log", v -> {
             String done = exportLog();
             status(done != null ? "Log copied to " + done : "No log yet (the game has not run), or no access.");
         });
-        button(root, "Licenses", v -> showLicenses());
-        setContentView(scroll);
+        text(about, "Uncharted — Daedalus Android", 22, true);
+        note(about, "Android fork by erickmendes22 / Daedalus Emulator. Based on revvv991/uncharted-android and Supermedo/uncharted_pc, with selected integrations from RedVorteX-TV/Uncharted-arm.");
+        note(about, "Use your own decrypted Nathan Drake Collection files. No game files or Lossless.dll are included.");
+        button(about, "Licenses and upstream credits", v -> showLicenses());
+        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        LinearLayout nav = new LinearLayout(this);
+        nav.setPadding(dp(8), dp(6), dp(8), dp(6));
+        nav.setBackgroundColor(0xF5101511);
+        String[] tabs = {"Home", "Patches", "Settings", "About"};
+        Button[] navButtons = new Button[4];
+        for (int n = 0; n < tabs.length; n++) {
+            final int index = n;
+            Button item = new Button(this, null, android.R.attr.borderlessButtonStyle);
+            item.setText(tabs[n]); item.setAllCaps(false); item.setTextSize(12);
+            item.setMinWidth(0); item.setMinimumWidth(0); item.setPadding(0, dp(12), 0, dp(12));
+            item.setTextColor(n == 0 ? accent : muted);
+            item.setOnClickListener(v -> {
+                prefs.edit().putString("extra_env", extraEnv.getText().toString()).apply();
+                for (int j = 0; j < pages.length; j++) {
+                    pages[j].setVisibility(j == index ? View.VISIBLE : View.GONE);
+                    navButtons[j].setTextColor(j == index ? accent : muted);
+                }
+                scroll.scrollTo(0, 0);
+            });
+            navButtons[n] = item;
+            nav.addView(item, new LinearLayout.LayoutParams(0, dp(56), 1));
+        }
+        shell.addView(nav);
+        styleChildren(shell);
+        setContentView(shell);
+    }
+
+    private final class ExpeditionDialog extends android.app.AlertDialog.Builder {
+        ExpeditionDialog(android.content.Context context) { super(context); }
+        @Override public android.app.AlertDialog show() {
+            android.app.AlertDialog dialog = super.show();
+            if (dialog.getWindow() != null) {
+                GradientDrawable background = new GradientDrawable();
+                background.setColor(0xFF191F19); background.setCornerRadius(dp(22));
+                background.setStroke(dp(1), 0xFF62563D);
+                dialog.getWindow().setBackgroundDrawable(background);
+            }
+            for (int which : new int[] {-1, -2, -3}) {
+                Button action = dialog.getButton(which);
+                if (action != null) { action.setTextColor(accent); action.setMinHeight(dp(48)); }
+            }
+            return dialog;
+        }
+    }
+
+    private void styleChildren(View view) {
+        if (view instanceof RadioButton) {
+            RadioButton radio = (RadioButton)view;
+            radio.setTextColor(0xFFF4EFDF);
+            radio.setButtonTintList(ColorStateList.valueOf(accent));
+        } else if (view instanceof CheckBox) {
+            CheckBox check = (CheckBox)view;
+            check.setTextColor(0xFFF4EFDF);
+            check.setButtonTintList(ColorStateList.valueOf(accent));
+        } else if (view instanceof EditText) {
+            ((EditText)view).setTextColor(0xFFF4EFDF);
+            ((EditText)view).setHintTextColor(muted);
+            view.setBackgroundTintList(ColorStateList.valueOf(accent));
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup)view;
+            for (int i = 0; i < group.getChildCount(); i++) styleChildren(group.getChildAt(i));
+        }
     }
 
     // ---- the game folder ----
@@ -890,7 +985,7 @@ public class Launcher extends Activity {
                 .append("--timeout\n0\n--log\n").append(d).append("/bb-probe.log\n");
             if (preset != null) args.append("--patches\n").append(preset).append('\n');
             writeText(new File(files, "args-" + g[0] + ".txt"), args.toString());
-            if (g[0].equals("u1")) writeText(new File(files, "args.txt"), args.toString());
+            if (g[0].equals(prefs.getString("selected_game", "u1"))) writeText(new File(files, "args.txt"), args.toString());
             // The movie decoder's picture size goes with a size below 1080p (port 0015).
             env[i] = preset != null && below1080 ? "BB_VDEC_CONTENT=" + width + "x" + height + "\n" : "-BB_VDEC_CONTENT\n";
             // U2's aiming autofocus reads a 1x1 render result on the CPU: copied back for U2
@@ -1028,6 +1123,7 @@ public class Launcher extends Activity {
         // The chosen package is gone: back to the default.
         if (drivers.getCheckedRadioButtonId() == -1) drivers.check(drivers.getChildAt(0).getId());
         driverList.addView(drivers);
+        styleChildren(driverList);
     }
 
     /** Unpacks a driver package (a zip with meta.json and the driver library) into
@@ -1101,7 +1197,7 @@ public class Launcher extends Activity {
                 status(errors.toString());
                 CharSequence[] items = new CharSequence[found.size()];
                 for (int i = 0; i < items.length; i++) items[i] = found.get(i)[0];
-                new android.app.AlertDialog.Builder(this).setTitle("Download a driver package")
+                new ExpeditionDialog(this).setTitle("Download a driver package")
                     .setItems(items, (d, which) -> fetchDriver(found.get(which)[1], found.get(which)[2]))
                     .setNegativeButton("Cancel", null).show();
             });
@@ -1129,7 +1225,7 @@ public class Launcher extends Activity {
             return;
         }
         File dir = new File(driversDir(), d.substring(4));
-        new android.app.AlertDialog.Builder(this).setTitle("Remove the driver package")
+        new ExpeditionDialog(this).setTitle("Remove the driver package")
             .setMessage("Remove " + dir.getName() + "?")
             .setPositiveButton("Remove", (dl, w) -> {
                 deleteTree(dir);
@@ -1203,7 +1299,7 @@ public class Launcher extends Activity {
         }
         java.util.Arrays.sort(list);
         File newest = list[list.length - 1];
-        new android.app.AlertDialog.Builder(this).setTitle("Restore saves")
+        new ExpeditionDialog(this).setTitle("Restore saves")
             .setMessage("Replace the app's saves with " + newest.getName() + "? The current ones are backed up first.")
             .setPositiveButton("Restore", (d, w) -> {
                 File user = new File(files, "user");
@@ -1254,7 +1350,7 @@ public class Launcher extends Activity {
         t.setPadding(dp(16), dp(16), dp(16), dp(16));
         t.setTextIsSelectable(true);
         scroll.addView(t);
-        new android.app.AlertDialog.Builder(this).setTitle("Licenses").setView(scroll)
+        new ExpeditionDialog(this).setTitle("Licenses").setView(scroll)
             .setPositiveButton("Close", null).show();
     }
 
