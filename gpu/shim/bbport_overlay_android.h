@@ -9,6 +9,8 @@ namespace BbOverlay {
 /// The settings panel on the right edge of the screen, finger-sized. `keep_open` goes false
 /// when its Close button is pressed. `base_scale` is the overlay's display scale (1080p = 1),
 /// `frame_ms` the recent frame time.
+void AndroidMenuButton(float base_scale);
+
 void AndroidMenu(float base_scale, float frame_ms, bool& keep_open);
 
 enum class TouchAction { None, Open, Close };

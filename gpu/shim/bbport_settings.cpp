@@ -68,6 +68,8 @@ void Set(Values& v, const std::string& key, const std::string& value) {
         v.show_fps = i != 0;
     } else if (key == "fps_limit") {
         v.fps_limit = value == "auto" ? -1 : std::clamp(i, 0, 1000);
+    } else if (key == "fullscreen") {
+        v.fullscreen = i != 0;
     } else if (key == "touch_mobile") {
         v.touch_mobile = i != 0;
     } else if (key == "hud_mode") {
@@ -242,6 +244,7 @@ void Save() {
     std::fprintf(file, "frame_gen=%s\nframe_gen_multiplier=%d\n", FrameGenName(v.frame_gen),
                  v.frame_gen_multiplier.load());
     std::fprintf(file, "lsfg_flow_scale=%d\nlsfg_fp16=%d\n", v.lsfg_flow_scale.load(), int(v.lsfg_fp16.load()));
+    std::fprintf(file,"fullscreen=%d\n",int(v.fullscreen.load()));
     std::fprintf(file,"touch_mobile=%d\nhud_mode=%d\nhud_position=%d\nhud_scale=%.2f\n",int(v.touch_mobile.load()),v.hud_mode.load(),v.hud_position.load(),v.hud_scale.load());
     // Read by run.sh at start.
     std::fprintf(file, "live_resolution=%s\n", v.live_resolution < 0 ? "auto"

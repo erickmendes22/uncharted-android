@@ -289,7 +289,7 @@ void Menu() {
         }
         if (ImGui::BeginTabItem("Controls")) {
             ImGui::Spacing();
-            Checkbox("Mobile action layout",s.touch_mobile);
+            Checkbox("Swipe camera instead of analog",s.touch_mobile);
             static const char* modes[] = {"Off", "On", "Automatic (no controller)"};
             int mode = s.touch_pad;
             if (ImGui::Combo("Touch controls", &mode, modes, 3)) Store(s.touch_pad, mode, true);
@@ -366,20 +366,30 @@ void FpsCounter() {
     const float pad=12.0f*base_scale;const int pos=settings.hud_position;
     const bool right=pos==1||pos==3,bottom=pos>=2;
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x+(right?viewport->WorkSize.x-pad:pad),viewport->WorkPos.y+(bottom?viewport->WorkSize.y-pad:pad)),ImGuiCond_Always,ImVec2(right?1.f:0.f,bottom?1.f:0.f));
-    ImGui::SetNextWindowBgAlpha(.80f);
+    ImGui::SetNextWindowBgAlpha(.76f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(14*base_scale,10*base_scale));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,8*base_scale);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0);
     ImGui::Begin("##uncharted-hud",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoFocusOnAppearing);
-    ImGui::SetWindowFontScale(settings.hud_scale.load());
-    ImGui::TextColored(ImVec4(.93f,.80f,.50f,1),"FPS %.0f",frame_ms_avg>0?1000.f/frame_ms_avg:0.f);
+    ImGui::PushFont(nullptr,22*base_scale*settings.hud_scale.load());
+    ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"FPS %.0f",frame_ms_avg>0?1000.f/frame_ms_avg:0.f);
     if(settings.hud_mode>0){
-        if(sample.gpu>=0)ImGui::Text("GPU %d%%  |  CPU %.0f%%",sample.gpu,sample.cpu_percent);
-        else ImGui::Text("GPU --  |  CPU %.0f%%",sample.cpu_percent);
-        ImGui::Text("RAM %.2f GB  |  %.1f ms",sample.ram_mib/1024.f,frame_ms_avg);
+        if(sample.gpu>=0)ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU %d%%",sample.gpu);
+        else ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU --");
+        ImGui::SameLine();ImGui::TextDisabled("|");ImGui::SameLine();
+        ImGui::TextColored(ImVec4(.12f,.86f,1,1),"CPU %.0f%%",sample.cpu_percent);
+        ImGui::Text("RAM %.2f GB",sample.ram_mib/1024.f);
     }
     if(settings.hud_mode>1) {
-        ImGui::Text("Scene %d x %d",settings.active_render_width.load(),settings.active_render_height.load());
-        ImGui::Text("%s / %s",BbSettings::UpscalerName(settings.upscaler),BbSettings::PresetName(settings.preset));
+        ImGui::Separator();
+        ImGui::Text("Frame %.1f ms",frame_ms_avg);
+        ImGui::Text("Render %d x %d",settings.active_render_width.load(),settings.active_render_height.load());
+        ImGui::Text("Display %d x %d",settings.game_display_width.load(),settings.game_display_height.load());
+        ImGui::Text("%s",BbSettings::UpscalerName(settings.upscaler));
     }
+    ImGui::PopFont();
     ImGui::End();
+    ImGui::PopStyleVar(3);
 }
 
 } // namespace
@@ -599,8 +609,7 @@ bool HandleEvent(const SDL_Event& event) {
 
 bool Visible() {
 #ifdef __ANDROID__
-    return initialized &&
-           (menu_open || text_entry_active || BbSettings::Get().show_fps || TouchPadActive());
+    return initialized; // the menu button remains available even with touch controls and HUD hidden
 #else
     return initialized && (menu_open || text_entry_active || BbSettings::Get().show_fps);
 #endif
@@ -879,6 +888,7 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent,
 #ifdef __ANDROID__
     if (!menu_open) {
         TouchPadFrame(io.DisplaySize.x, io.DisplaySize.y); // g2-arm64: the on-screen gamepad
+        AndroidMenuButton(base_scale);
     }
 #endif
     if (text_entry_active) {

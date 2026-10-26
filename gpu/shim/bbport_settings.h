@@ -75,10 +75,11 @@ struct Values {
     std::atomic<int> fps_limit{-1};
     /// g2-arm64: the on-screen gamepad (bbport_touchpad.h): 0 off, 1 on, 2 while no physical
     /// gamepad is connected (phones); its opacity and size.
-    std::atomic<bool> touch_mobile{true};
+    std::atomic<bool> touch_mobile{false};
+    std::atomic<bool> fullscreen{false};
     std::atomic<int> hud_mode{1};
     std::atomic<int> hud_position{1};
-    std::atomic<float> hud_scale{1.0f};
+    std::atomic<float> hud_scale{1.25f};
     std::atomic<int> touch_pad{2};
     std::atomic<float> touch_pad_alpha{0.55f};
     std::atomic<float> touch_pad_scale{1.0f};

@@ -142,6 +142,10 @@ public class Launcher extends Activity {
         File d = getExternalFilesDir(null);
         files = d != null ? d : getFilesDir();
         pkgInstaller = new PkgInstaller(this,(active,message)->{busy=active;status(message);refresh();});
+        if(!prefs.getBoolean("ui_v027",false)) {
+            prefs.edit().putBoolean("ui_v027",true).putInt("mobile_upscale",0).apply();
+            iniPut("touch_mobile","0");iniPut("hud_scale","1.25");iniPut("upscaler","off");
+        }
         buildViews();
         handle(getIntent());
     }
@@ -238,7 +242,13 @@ public class Launcher extends Activity {
                                                                      ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(12);
         parent.addView(c, lp);
-        if (title != null) text(c, title, 17, true).setPadding(0, 0, 0, dp(4));
+        if (title != null) {
+            TextView heading=text(c,title,15,true);heading.setTextColor(accent);
+            int kind=title.contains("CONTROL")?5:title.contains("DISPLAY")||title.contains("RESOLUTION")?1:title.contains("GAME")?0:2;
+            ExpeditionIcon icon=new ExpeditionIcon(kind,accent);icon.setBounds(0,0,dp(20),dp(20));
+            heading.setCompoundDrawables(icon,null,null,null);heading.setCompoundDrawablePadding(dp(10));
+            heading.setPadding(0,0,0,dp(8));
+        }
         return c;
     }
 
@@ -252,6 +262,9 @@ public class Launcher extends Activity {
     private Button button(LinearLayout parent, String s, View.OnClickListener l) {
         Button b = new Button(this, null, android.R.attr.borderlessButtonStyle);
         b.setText(s);
+        int iconKind=s.toLowerCase(Locale.ROOT).contains("folder")?4:s.toLowerCase(Locale.ROOT).contains("game")?5:s.toLowerCase(Locale.ROOT).contains("upscale")?1:2;
+        ExpeditionIcon icon=new ExpeditionIcon(iconKind,accent);icon.setBounds(0,0,dp(22),dp(22));
+        b.setCompoundDrawables(icon,null,null,null);b.setCompoundDrawablePadding(dp(10));
         b.setAllCaps(false);
         b.setOnClickListener(l);
         b.setTextColor(new ColorStateList(new int[][] {{-android.R.attr.state_enabled}, {}},
@@ -279,6 +292,8 @@ public class Launcher extends Activity {
         b.setText(s);
         b.setAllCaps(false);
         b.setOnClickListener(l);
+        ExpeditionIcon playIcon=new ExpeditionIcon(6,0xFF181910);playIcon.setBounds(0,0,dp(24),dp(24));
+        b.setCompoundDrawables(playIcon,null,null,null);b.setCompoundDrawablePadding(dp(12));
         b.setTextSize(18);
         b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setTextColor(0xFF181910);
@@ -402,31 +417,38 @@ public class Launcher extends Activity {
         LinearLayout page = root;
         root = card(patches, "RESOLUTION PATCHES"); // the settings widgets below go into the card
         text(root, "The game renders at:", 14, false);
-        resolution = new RadioGroup(this);
-        String chosen = chosenResolution();
-        for (String[] r : RESOLUTIONS) {
-            RadioButton b = new RadioButton(this);
-            b.setText(r[1]);
-            b.setId(View.generateViewId());
-            b.setTag(r[0]);
-            resolution.addView(b);
-            if (r[0].equals(chosen)) resolution.check(b.getId());
-        }
-        resolution.setOnCheckedChangeListener((g, id) -> {
-            RadioButton b = g.findViewById(id);
-            if (b != null) prefs.edit().putString("resolution", (String) b.getTag()).apply();
+        resolution = new RadioGroup(this); // retained for diagnostic source compatibility
+        Button resolutionChoice=button(root,"Internal resolution · "+chosenResolution(),null);
+        resolutionChoice.setOnClickListener(v->{
+            String[] labels=new String[RESOLUTIONS.length];int selected=0;
+            for(int n=0;n<labels.length;n++){labels[n]=RESOLUTIONS[n][0];if(labels[n].equals(chosenResolution()))selected=n;}
+            new ExpeditionDialog(this).setTitle("Internal resolution").setSingleChoiceItems(labels,selected,(dialog,which)->{
+                prefs.edit().putString("resolution",RESOLUTIONS[which][0]).apply();
+                resolutionChoice.setText("Internal resolution · "+RESOLUTIONS[which][0]);dialog.dismiss();
+            }).setNegativeButton("Cancel",null).show();
         });
-        root.addView(resolution);
-        note(root,"Manual resolution patches apply when temporal upscale is Off. For FSR Quality/Performance, choose a preset on Home; display and UI stay at 1080p.");
+        note(root,"Changes apply on the next game start.");
         buildPatchOptions(patches);
         LinearLayout displayCard = card(home, "DISPLAY & PERFORMANCE");
-        button(displayCard,"Upscale: Native / Quality / Performance / Ultra Performance",v->{
-            String[] labels={"Off (resolution patches)","FSR 3.1 — Native AA","FSR 3.1 — Quality (720p → 1080p)","FSR 3.1 — Balanced","FSR 3.1 — Performance (540p → 1080p)","FSR 3.1 — Ultra Performance (360p → 1080p)"};
-            new ExpeditionDialog(this).setTitle("Temporal upscale").setSingleChoiceItems(labels,prefs.getInt("mobile_upscale",0),(dialog,which)->{
-                prefs.edit().putInt("mobile_upscale",which).apply();
-                iniPut("upscaler",which==0?"off":"fsr3");iniPut("preset",Integer.toString(Math.max(0,which-1)));
-                status(labels[which]+" — applies on next start");dialog.dismiss();
+        android.widget.Switch fullscreen=new android.widget.Switch(this);
+        fullscreen.setText("Fullscreen");fullscreen.setTextColor(0xFFF4EFDF);fullscreen.setMinHeight(dp(54));
+        fullscreen.setChecked("1".equals(iniGet("fullscreen")));
+        fullscreen.setOnCheckedChangeListener((view,on)->iniPut("fullscreen",on?"1":"0"));displayCard.addView(fullscreen);
+        note(displayCard,"Off: original aspect ratio. On: fill the screen.");
+        Button upscaleChoice=button(displayCard,"Upscale · "+upscaleLabel(prefs.getInt("mobile_upscale",0)),null);
+        upscaleChoice.setOnClickListener(v->{
+            String[] labels={"Off · manual resolution","FSR 3.1 Native AA","FSR 3.1 Quality · 720p → 1080p","FSR 3.1 Performance · 540p → 1080p","FSR 3.1 Ultra Performance · 360p → 1080p"};
+            int[] values={0,1,2,4,5};int selected=0;
+            for(int n=0;n<values.length;n++)if(values[n]==prefs.getInt("mobile_upscale",0))selected=n;
+            new ExpeditionDialog(this).setTitle("Upscale").setSingleChoiceItems(labels,selected,(dialog,which)->{
+                prefs.edit().putInt("mobile_upscale",values[which]).apply();
+                upscaleChoice.setText("Upscale · "+upscaleLabel(values[which]));dialog.dismiss();
             }).setNegativeButton("Cancel",null).show();
+        });
+        button(displayCard,"Performance HUD",v->{
+            String[] labels={"Minimal · FPS","Compact · FPS / GPU / CPU / RAM","Full · metrics and resolutions"};
+            int selected=1;try{selected=Integer.parseInt(iniGet("hud_mode"));}catch(Exception ignored){}
+            new ExpeditionDialog(this).setTitle("HUD style").setSingleChoiceItems(labels,selected,(dialog,which)->{iniPut("hud_mode",Integer.toString(which));dialog.dismiss();}).setNegativeButton("Cancel",null).show();
         });
         root = card(config, "GPU DRIVER");
         text(root, "Vulkan driver:", 14, false);
@@ -575,7 +597,9 @@ public class Launcher extends Activity {
         for (int n = 0; n < tabs.length; n++) {
             final int index = n;
             Button item = new Button(this, null, android.R.attr.borderlessButtonStyle);
-            item.setText(tabs[n]); item.setAllCaps(false); item.setTextSize(12);
+            item.setText(tabs[n]); item.setAllCaps(false); item.setTextSize(11);
+            ExpeditionIcon navIcon=new ExpeditionIcon(n,n==0?accent:muted);navIcon.setBounds(0,0,dp(22),dp(22));
+            item.setCompoundDrawables(null,navIcon,null,null);item.setCompoundDrawablePadding(dp(3));
             item.setMinWidth(0); item.setMinimumWidth(0); item.setPadding(0, dp(12), 0, dp(12));
             item.setTextColor(n == 0 ? accent : muted);
             item.setOnClickListener(v -> {
@@ -583,15 +607,21 @@ public class Launcher extends Activity {
                 for (int j = 0; j < pages.length; j++) {
                     pages[j].setVisibility(j == index ? View.VISIBLE : View.GONE);
                     navButtons[j].setTextColor(j == index ? accent : muted);
+                    android.graphics.drawable.Drawable navIcon=navButtons[j].getCompoundDrawables()[1];
+                    if(navIcon!=null)navIcon.setColorFilter(j==index?accent:muted,android.graphics.PorterDuff.Mode.SRC_IN);
                 }
                 scroll.scrollTo(0, 0);
             });
             navButtons[n] = item;
-            nav.addView(item, new LinearLayout.LayoutParams(0, dp(56), 1));
+            nav.addView(item, new LinearLayout.LayoutParams(0, dp(68), 1));
         }
         shell.addView(nav);
         styleChildren(shell);
-        setContentView(shell);
+        shell.setOnApplyWindowInsetsListener((view,insets)->{
+            android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());
+            view.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;
+        });
+        setContentView(shell);shell.requestApplyInsets();
     }
 
     private final class ExpeditionDialog extends android.app.AlertDialog.Builder {
@@ -901,31 +931,48 @@ public class Launcher extends Activity {
         }
     }
 
+    private String upscaleLabel(int mode) {
+        return mode==1?"FSR Native AA":mode==2?"FSR Quality":mode>=5?"FSR Ultra Performance":mode>=3?"FSR Performance":"Off";
+    }
+
+    private void effectSwitch(LinearLayout parent,String title,String subtitle,String key) {
+        LinearLayout line=new LinearLayout(this);line.setGravity(android.view.Gravity.CENTER_VERTICAL);line.setPadding(0,dp(9),0,dp(9));
+        LinearLayout labels=new LinearLayout(this);labels.setOrientation(LinearLayout.VERTICAL);
+        TextView name=text(labels,title,15,true);name.setPadding(0,0,0,0);
+        TextView detail=note(labels,subtitle);detail.setTextSize(12);detail.setPadding(0,dp(2),0,0);
+        line.addView(labels,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        android.widget.Switch toggle=new android.widget.Switch(this);toggle.setChecked(!prefs.getBoolean(key,false));
+        toggle.setContentDescription(title);toggle.setOnCheckedChangeListener((view,on)->prefs.edit().putBoolean(key,!on).apply());
+        toggle.setThumbTintList(ColorStateList.valueOf(accent));line.addView(toggle);
+        parent.addView(line);
+        View divider=new View(this);divider.setBackgroundColor(0x225F553A);parent.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
+    }
+
     private void buildPatchOptions(LinearLayout parent) {
-        LinearLayout card = card(parent, "BACHATA PERFORMANCE PATCHES");
-        note(card, "Optional patches from Bachata S4+ 0.2.7. The original bytes are verified for each executable; incompatible patches are skipped. Changes apply on the next game start.");
-        try {
-            JSONArray options = new JSONObject(readAsset("recipes/bachata.json")).getJSONArray("patches");
-            java.util.Set<String> seen = new java.util.LinkedHashSet<>();
-            for (int i = 0; i < options.length(); i++) {
-                String name = options.getJSONObject(i).getString("name");
-                if (name.startsWith("Resolution:") || name.startsWith("Shadows:") || !seen.add(name)) continue;
-                check(card, name, "patch_" + name, false);
-            }
-            text(card, "Shadow cascades", 14, true);
-            RadioGroup shadows = new RadioGroup(this);
-            String[] modes = {"Original", "2 cascades", "1 cascade"};
-            for (int i = 0; i < 3; i++) {
-                RadioButton b = new RadioButton(this); b.setId(View.generateViewId()); b.setTag(i); b.setText(modes[i]);
-                shadows.addView(b);
-                if (i == prefs.getInt("shadow_cascades", 0)) shadows.check(b.getId());
-            }
-            shadows.setOnCheckedChangeListener((group, id) -> {
-                RadioButton b = group.findViewById(id);
-                if (b != null) prefs.edit().putInt("shadow_cascades", (Integer)b.getTag()).apply();
-            });
-            card.addView(shadows);
-        } catch (Exception ex) { note(card, "Patch catalog unavailable: " + ex.getMessage()); }
+        LinearLayout shadows=card(parent,"SHADOWS");
+        Button shadowChoice=button(shadows,"Shadow quality · "+new String[]{"Original","Reduced","Minimum"}[prefs.getInt("shadow_cascades",0)],null);
+        shadowChoice.setOnClickListener(v->{String[] labels={"Original","Reduced · 2 cascades","Minimum · 1 cascade"};
+            new ExpeditionDialog(this).setTitle("Shadow quality").setSingleChoiceItems(labels,prefs.getInt("shadow_cascades",0),(dialog,which)->{
+                prefs.edit().putInt("shadow_cascades",which).apply();shadowChoice.setText("Shadow quality · "+labels[which]);dialog.dismiss();
+            }).setNegativeButton("Cancel",null).show();
+        });
+        LinearLayout lighting=card(parent,"LIGHTING & ATMOSPHERE");
+        effectSwitch(lighting,"Water reflections","Reflections on water surfaces","patch_Disable water reflections");
+        effectSwitch(lighting,"Ambient occlusion","Contact shading · SSAO","patch_Disable SSAO");
+        effectSwitch(lighting,"Fog","Atmospheric haze","patch_Disable fog");
+        effectSwitch(lighting,"Volumetric lights","Visible light shafts","patch_Disable volumetric lights");
+        effectSwitch(lighting,"Dynamic lights","Local lighting effects","patch_Disable dynamic lights");
+        effectSwitch(lighting,"Sunlight occlusion","Shading from sunlight","patch_Disable sunlight ambient occlusion");
+        LinearLayout image=card(parent,"IMAGE & EFFECTS");
+        effectSwitch(image,"Motion blur","Blur during movement","patch_Disable motion blur");
+        effectSwitch(image,"Depth of field","Background focus effects","patch_Disable depth of field");
+        effectSwitch(image,"Bloom","Glow around bright areas","patch_Disable bloom");
+        effectSwitch(image,"Anti-aliasing","The game's original edge smoothing","patch_Disable anti-aliasing");
+        effectSwitch(image,"Texture filtering","Anisotropic filtering","patch_Disable anisotropic filtering");
+        effectSwitch(image,"Full draw distance","Off: use the reduced 40 m patch","patch_Draw distance: 40 m (extreme)");
+        LinearLayout startup=card(parent,"STARTUP");
+        effectSwitch(startup,"Intro videos","Off: skip the opening logos","patch_Skip startup logos");
+        note(startup,"Applies on next start when compatible with the installed game.");
     }
 
     /** Merge existing recipes with independently validated Bachata batches. No game bytes are changed on disk. */
@@ -1107,7 +1154,7 @@ public class Launcher extends Activity {
         prefs.edit().putString("extra_env", extraEnv.getText().toString()).apply();
         String dir = folder(), d = files.getAbsolutePath();
         int upscale=prefs.getInt("mobile_upscale",0);
-        String[] size = (upscale>0 ? "1920x1080" : chosenResolution()).split("x");
+        String[] size = (upscale==1 ? "1920x1080" : upscale==2 ? "1280x720" : upscale>=5 ? "640x360" : upscale>=3 ? "960x540" : chosenResolution()).split("x");
         int width = Integer.parseInt(size[0]), height = Integer.parseInt(size[1]);
         boolean below1080 = height < 1080;
         new File(files, "patches").mkdirs();
@@ -1142,13 +1189,16 @@ public class Launcher extends Activity {
             if (g[0].equals(prefs.getString("selected_game", "u1"))) writeText(new File(files, "args.txt"), args.toString());
             // The movie decoder's picture size goes with a size below 1080p (port 0015).
             env[i] = preset != null && below1080 ? "BB_VDEC_CONTENT=" + width + "x" + height + "\n" : "-BB_VDEC_CONTENT\n";
+            if(upscale>1 && made!=null)env[i]+="BB_RENDER_RES="+width+"x"+height+"\nBB_OUTPUT_RES=1920x1080\n";
+            else env[i]+="-BB_RENDER_RES\n-BB_OUTPUT_RES\n";
+            if(upscale>1 && made==null)env[i]+="BB_UPSCALER=none\n";
             // U2's aiming autofocus reads a 1x1 render result on the CPU: copied back for U2
             // only, as upstream does (issue #7; it costs elsewhere). More environment overrides.
             if (g[0].equals("u2") && !extraEnv.getText().toString().contains("BB_TINY_READBACK"))
                 env[i] += "BB_TINY_READBACK=1\n";
         }
         StringBuilder e = new StringBuilder();
-        e.append("BB_MOBILE_UPSCALE=").append(upscale>0?1:0).append('\n');
+        e.append("BB_MOBILE_UPSCALE=0\n");
         if(upscale>0){iniPut("upscaler","fsr3");iniPut("preset",Integer.toString(upscale-1));}
         else {iniPut("preset","0");iniPut("upscaler","off");}
         e.append("# Written by the launcher on every start; edit the settings there.\n");

@@ -1,4 +1,4 @@
-# Uncharted 0.2.6 — source and patch validation
+# Uncharted 0.2.7 — source and patch validation
 
 The user authorized a test build on 2026-10-26 after the XML/executable checks.
 The build hold was removed; runtime and device validation remain pending.
@@ -60,3 +60,20 @@ Reproduce with `scripts/g2/validate_catalog.py` (under android/) and `--xml`,
 See `validation/patches-1.00-1.02.json` (under android/) for hashes and counts.
 No build was generated during patch validation. A subsequent test build was
 authorized by the user on 2026-10-26.
+
+## Device feedback follow-up (0.2.7)
+
+The 0.2.6 log confirms FSR 960x540 -> 1920x1080 activation, followed by
+36-38 FPS samples; this alone does not establish an equivalent-scene comparison.
+The live proxy path retained native guest compute work. Android now uses the
+validated startup resolution batches with BB_RENDER_RES and BB_OUTPUT_RES,
+without live scene proxies. RunScaled uses Uncharted velocity-camera reprojection
+instead of the Bloodborne matrix path and retains the Uncharted far-plane value.
+This path needs a new device visual/performance test; FSR is off on upgrade.
+
+The actual AndroidMenu now exposes exit, export, HUD styles and fullscreen.
+The permanent menu hotspot remains visible with the HUD and virtual pad off.
+Controls use neutral PS glyphs with twin analogs, rectangular shoulder buttons
+and the original game mappings, with swipe-camera optional. Launcher graphics
+options use grouped positive switches and native vector icons; original catalog
+preference keys and both executable versions are preserved.

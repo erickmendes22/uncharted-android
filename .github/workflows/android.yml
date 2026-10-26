@@ -63,6 +63,13 @@ jobs:
           mkdir -p "$WORK"
           set -o pipefail
           bash android/scripts/build_all.sh 2>&1 | tee "$WORK/build.log"
+      - name: Verify Android touch controls and menu
+        shell: bash
+        run: |
+          g++ -std=c++20 -O0 -Igpu/third_party/imgui -I"$WORK/deps/src/sdl3/include" -Igpu/shim -Igpu/shadps4 \
+            tests/test_android_touch_menu.cpp gpu/shim/bbport_touchpad.cpp gpu/shim/bbport_overlay_android.cpp gpu/shim/bbport_settings.cpp \
+            gpu/third_party/imgui/{imgui,imgui_draw,imgui_widgets,imgui_tables}.cpp -o "$RUNNER_TEMP/touch-menu-test"
+          BB_CONFIG="$RUNNER_TEMP/touch-test.ini" "$RUNNER_TEMP/touch-menu-test"
       - name: Verify APK and record source revision
         shell: bash
         run: |
@@ -72,13 +79,13 @@ jobs:
           "$SDK/build-tools/35.0.1/aapt2" dump badging "$apk" > dist/package.txt
           grep -q "package: name='com.daedalus.uncharted'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.6.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.7.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.6
+          name: Uncharted-Daedalus-0.2.7
           path: dist/
           if-no-files-found: error
           retention-days: 30

@@ -19,6 +19,7 @@
 #include "core/emulator_settings.h"
 
 extern "C" void runtime_restart(void);
+extern "C" void runtime_mobile_action(int);
 
 namespace BbOverlay {
 
@@ -27,6 +28,7 @@ namespace {
 constexpr float TouchScale = 1.8f;   // on top of the display scale: 32 px text at 1080p
 constexpr float PanelShare = 0.45f;  // of the screen width
 
+std::atomic<float> menu_x0{.52f}, menu_x1{.58f}, menu_y0{.02f}, menu_y1{.09f};
 std::atomic<float> panel_left_norm{1.0f}; // the panel's left edge, 0..1 of the screen width
 std::atomic<float> pending_scroll{0.0f};  // a finger's travel inside the panel, 0..1 of the height
 
@@ -112,6 +114,17 @@ void Note(const char* text) {
 
 } // namespace
 
+void AndroidMenuButton(float base_scale) {
+    const auto size=ImGui::GetIO().DisplaySize;
+    const float h=size.y, x=size.x*.5f+h*.16f, y=h*.055f;
+    const ImVec2 a(x-h*.055f,y-h*.03f), b(x+h*.055f,y+h*.03f);
+    menu_x0=a.x/size.x;menu_x1=b.x/size.x;menu_y0=a.y/h;menu_y1=b.y/h;
+    auto* dl=ImGui::GetForegroundDrawList();
+    dl->AddRectFilled(a,b,IM_COL32(12,20,18,190),h*.012f);
+    dl->AddRect(a,b,IM_COL32(206,176,110,180),h*.012f,0,base_scale*1.4f);
+    for(int i=-1;i<=1;++i)dl->AddLine(ImVec2(x-h*.018f,y+i*h*.01f),ImVec2(x+h*.018f,y+i*h*.01f),IM_COL32(245,235,210,240),base_scale*2);
+}
+
 void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
     auto& s = BbSettings::Get();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -137,21 +150,27 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
                                    ImGuiWindowFlags_NoSavedSettings;
     ImGui::GetIO().MouseDrawCursor = false;
     if (ImGui::Begin("##android_menu", nullptr, flags)) {
-        if (const float travel = pending_scroll.exchange(0.0f); travel != 0.0f) {
+        ImGui::TextColored(ImVec4(.88f,.77f,.53f,1),"UNCHARTED | DAEDALUS");
+        const float action_width=(ImGui::GetContentRegionAvail().x-ImGui::GetStyle().ItemSpacing.x*2)/3;
+        if(ImGui::Button("Resume",ImVec2(action_width,0)))keep_open=false;
+        ImGui::SameLine();
+        if(ImGui::Button("Export log",ImVec2(action_width,0)))runtime_mobile_action(0);
+        ImGui::SameLine();
+        if(ImGui::Button("Exit game",ImVec2(action_width,0))){BbSettings::Save();runtime_mobile_action(1);}
+        ImGui::Separator();
+        ImGui::BeginChild("settings-scroll",ImVec2(0,0),false);
+        if (const float travel = pending_scroll.exchange(0.0f); travel != 0.0f)
             ImGui::SetScrollY(ImGui::GetScrollY() - travel * viewport->WorkSize.y);
-        }
-        ImGui::Text("%.0f FPS  %.1f ms", frame_ms > 0.0f ? 1000.0f / frame_ms : 0.0f, frame_ms);
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x * 0.45f);
-        Toggle("FPS counter", s.show_fps);
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x * 0.8f);
-        if (ImGui::Button("Close##top")) {
-            keep_open = false;
-        }
-        // Uncharted renders at the size its resolution patch sets at start (the launcher's
-        // choice; the game's display buffers carry it). The port runs Uncharted in velocity
-        // mode: FSR 3.1 and TAA are temporal anti-aliasing at that size (the upscaler writes
-        // the game's own targets) and the picture is scaled to the screen afterwards; the PC
-        // menu's quality presets (Quality, Balanced, ...) change nothing here.
+        Section("Display");
+        Toggle("Fullscreen",s.fullscreen);
+        Note(s.fullscreen ? "Fill the entire screen" : "Keep the original aspect ratio");
+        Toggle("Show performance HUD",s.show_fps);
+        static const char* hud_names[]={"Minimal","Compact","Full"};
+        int hud=s.hud_mode;if(Segmented("hud",hud,hud_names,3))Store(s.hud_mode,hud);
+        static const char* hud_corners[]={"Top L","Top R","Bottom L","Bottom R"};
+        int corner=s.hud_position;if(Segmented("hud-pos",corner,hud_corners,4))Store(s.hud_position,corner);
+        Slider("HUD size",s.hud_scale,.7f,1.6f);
+        // Actual render and output dimensions, including startup-patched FSR sessions.
         int scene_w = s.active_render_width.load(), scene_h = s.active_render_height.load();
         const bool seen = scene_w > 0; // the upscaler has met the scene
         if (!seen) {
@@ -160,7 +179,7 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
         }
         const int out_w = BbSettings::OutputWidths[s.output_res];
         const int out_h = BbSettings::OutputHeights[s.output_res];
-        const bool scene_is_output = scene_w == out_w && scene_h == out_h;
+        const bool startup_scaled = std::getenv("BB_RENDER_RES") && std::getenv("BB_RENDER_RES")[0];
         ImGui::TextDisabled("Game rendered at %d x %d%s", scene_w, scene_h,
                             seen ? "" : " (its display size; no 3D scene met yet)");
         ImGui::TextDisabled("Shown at %d x %d", out_w, out_h);
@@ -181,9 +200,8 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
         if (s.upscaler == BbSettings::UpscalerOff) {
             Note("Off: the game's own anti-aliasing");
         } else {
-            ImGui::TextDisabled("%s: temporal anti-aliasing at %d x %d",
-                                s.upscaler == BbSettings::UpscalerTaa ? "TAA" : "FSR 3.1",
-                                scene_w, scene_h);
+            if(startup_scaled)ImGui::TextDisabled("FSR 3.1: %d x %d -> 1920 x 1080",scene_w,scene_h);
+            else ImGui::TextDisabled("Temporal AA at %d x %d",scene_w,scene_h);
         }
         if (const char* problem = s.upscaler_problem.load();
             problem && s.upscaler == BbSettings::UpscalerFsr3) {
@@ -191,11 +209,7 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
             ImGui::TextWrapped("%s", problem);
             ImGui::PopStyleColor();
         }
-        if (!scene_is_output) {
-            Note("The picture is scaled to the screen by the port; upscaling by FSR itself needs "
-                 "the game's targets at the output size (not yet). A sharper picture: a bigger "
-                 "size in the launcher.");
-        }
+        Note("Resolution and FSR quality are selected in the launcher for the next start.");
 
         Section("Sharpening");
         Toggle("Sharpen (RCAS)", s.sharpen);
@@ -244,6 +258,7 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
         if (Segmented("touch_pad", pad, pads, 3)) {
             Store(s.touch_pad, pad_values[pad]);
         }
+        Toggle("Swipe camera (instead of analog)",s.touch_mobile);
         Note("Auto: shown while no gamepad is connected. Left half: a stick under the finger; "
              "right half: drag to look around; the buttons at the edges.");
         ImGui::BeginDisabled(s.touch_pad == 0);
@@ -257,12 +272,6 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
 
         ImGui::Spacing();
         if (ImGui::CollapsingHeader("Advanced")) {
-            ImGui::TextDisabled("Output size");
-            static const char* outputs[] = {"720p", "1080p", "1440p", "4K"};
-            int output = s.output_res;
-            if (Segmented("output", output, outputs, BbSettings::OutputCount)) {
-                Store(s.output_res, output);
-            }
             Toggle("Sub-pixel jitter", s.jitter);
             Toggle("Character motion vectors", s.object_motion);
             Toggle("Reactive mask", s.reactive);
@@ -293,7 +302,8 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
         if (ImGui::Button("Close##bottom", ImVec2(-FLT_MIN, 0.0f))) {
             keep_open = false;
         }
-        ImGui::TextDisabled("Swipe in from the right edge or L3+R3 to open");
+        ImGui::TextDisabled("Menu button, right-edge swipe or L3+R3");
+        ImGui::EndChild();
     }
     ImGui::End();
     ImGui::PopFont();
@@ -317,6 +327,8 @@ TouchAction AndroidTouch(const SDL_Event& event, bool open) {
     constexpr float TapSlop = 0.02f;
     switch (event.type) {
     case SDL_EVENT_FINGER_DOWN:
+        if(!open && event.tfinger.x>=menu_x0 && event.tfinger.x<=menu_x1 && event.tfinger.y>=menu_y0 && event.tfinger.y<=menu_y1)
+            return TouchAction::Open;
         if (!open && event.tfinger.x >= 1.0f - EdgeZone) {
             edge_finger = event.tfinger.fingerID;
             edge_tracking = true;
