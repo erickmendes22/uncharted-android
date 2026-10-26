@@ -146,6 +146,10 @@ public class Launcher extends Activity {
             prefs.edit().putBoolean("ui_v027",true).putInt("mobile_upscale",0).apply();
             iniPut("touch_mobile","0");iniPut("hud_scale","1.25");iniPut("upscaler","off");
         }
+        if(!prefs.getBoolean("ui_v028",false)) {
+            prefs.edit().putBoolean("ui_v028",true).apply();
+            iniPut("hud_position","0");iniPut("hud_scale","1.0");
+        }
         buildViews();
         handle(getIntent());
     }
@@ -941,9 +945,24 @@ public class Launcher extends Activity {
         TextView name=text(labels,title,15,true);name.setPadding(0,0,0,0);
         TextView detail=note(labels,subtitle);detail.setTextSize(12);detail.setPadding(0,dp(2),0,0);
         line.addView(labels,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
-        android.widget.Switch toggle=new android.widget.Switch(this);toggle.setChecked(!prefs.getBoolean(key,false));
-        toggle.setContentDescription(title);toggle.setOnCheckedChangeListener((view,on)->prefs.edit().putBoolean(key,!on).apply());
-        toggle.setThumbTintList(ColorStateList.valueOf(accent));line.addView(toggle);
+        Button state=new Button(this,null,android.R.attr.borderlessButtonStyle);
+        state.setAllCaps(false);state.setTextSize(13);state.setMinWidth(0);state.setMinimumWidth(0);
+        state.setPadding(dp(8),0,dp(8),0);
+        Runnable update=()->{
+            boolean enabled=!prefs.getBoolean(key,false);
+            state.setText(enabled?"Enabled":"Disabled");
+            state.setContentDescription(title+": "+(enabled?"Enabled in game":"Disabled in game"));
+            state.setTextColor(enabled?accent:0xFFB0AAA0);
+            GradientDrawable bg=new GradientDrawable();bg.setCornerRadius(dp(10));
+            bg.setColor(enabled?0x333D3321:0xFF222522);bg.setStroke(dp(1),enabled?accent:0xFF555B54);state.setBackground(bg);
+        };
+        state.setOnClickListener(v->{
+            String[] choices={"Enabled in game","Disabled in game"};
+            new ExpeditionDialog(this).setTitle(title).setSingleChoiceItems(choices,prefs.getBoolean(key,false)?1:0,(dialog,which)->{
+                prefs.edit().putBoolean(key,which==1).apply();update.run();dialog.dismiss();
+            }).setNegativeButton("Cancel",null).show();
+        });
+        update.run();line.addView(state,new LinearLayout.LayoutParams(dp(100),dp(44)));
         parent.addView(line);
         View divider=new View(this);divider.setBackgroundColor(0x225F553A);parent.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
     }
@@ -957,6 +976,7 @@ public class Launcher extends Activity {
             }).setNegativeButton("Cancel",null).show();
         });
         LinearLayout lighting=card(parent,"LIGHTING & ATMOSPHERE");
+        note(lighting,"Enabled keeps the effect. Disabled removes it.");
         effectSwitch(lighting,"Water reflections","Reflections on water surfaces","patch_Disable water reflections");
         effectSwitch(lighting,"Ambient occlusion","Contact shading · SSAO","patch_Disable SSAO");
         effectSwitch(lighting,"Fog","Atmospheric haze","patch_Disable fog");

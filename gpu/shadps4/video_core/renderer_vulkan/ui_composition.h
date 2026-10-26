@@ -17,6 +17,14 @@ constexpr Background Choose(bool scaled, bool ui_draw, bool scene_ready, bool fs
     return scene_ready && fsr_active ? Background::Temporal : Background::Copy;
 }
 
+// Startup patches can reduce the viewport while allocations/display remain native.
+constexpr bool UnchartedSceneTarget(uint32_t w,uint32_t h,uint32_t rw,uint32_t rh,uint32_t dw,uint32_t dh) {
+    return w && h && ((rw && rh && w>=rw && h>=rh && w-rw<8 && h-rh<8) || (w==dw && h==dh));
+}
+constexpr bool UnchartedBoundary(bool velocity,bool scaled,uint64_t ps,uint64_t display_ps) {
+    return velocity && scaled && display_ps && uint32_t(ps)==uint32_t(display_ps);
+}
+
 inline bool NativeViewport(float width, float height) {
     return std::abs(std::abs(width) - 1920.0f) < 0.5f &&
            std::abs(std::abs(height) - 1080.0f) < 0.5f;

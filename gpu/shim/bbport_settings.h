@@ -78,8 +78,8 @@ struct Values {
     std::atomic<bool> touch_mobile{false};
     std::atomic<bool> fullscreen{false};
     std::atomic<int> hud_mode{1};
-    std::atomic<int> hud_position{1};
-    std::atomic<float> hud_scale{1.25f};
+    std::atomic<int> hud_position{0};
+    std::atomic<float> hud_scale{1.0f};
     std::atomic<int> touch_pad{2};
     std::atomic<float> touch_pad_alpha{0.55f};
     std::atomic<float> touch_pad_scale{1.0f};
@@ -118,6 +118,7 @@ struct Values {
     std::atomic<const char*> frame_gen_problem{nullptr};
     /// g2-arm64: why the selected FSR 3.1 is not running (its context failed), or null.
     std::atomic<const char*> upscaler_problem{nullptr};
+    std::atomic<bool> temporal_running{false};
 
     /// Startup settings for the explicit BB_RENDER_RES compatibility patch only.
     int startup_preset = NativeAA;

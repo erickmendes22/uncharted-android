@@ -136,6 +136,7 @@ private:
     u32 expected_frame_height{1080};
 
     Frontend::WindowSDL& window;
+    u64 window_surface_revision{0};
     Instance instance;
     HostPasses::FsrPass fsr_pass;
     HostPasses::FsrPass::Settings fsr_settings{};

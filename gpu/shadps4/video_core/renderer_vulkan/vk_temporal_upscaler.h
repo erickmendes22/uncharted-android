@@ -93,6 +93,12 @@ public:
         return done_this_frame ? std::array<float, 2>{} : jitter;
     }
 
+    // Uncharted: reconstruct before its known final display-copy draw, while this
+    // frame's velocity camera and depth are still valid (OnFrameStart clears them).
+    void BeforeDisplay(u64 ps_hash, VideoCore::ImageId source);
+    [[nodiscard]] bool IsDisplayBoundary(u64 ps_hash) const { return hudless_hash && u32(ps_hash)==u32(hudless_hash); }
+    [[nodiscard]] bool MatchesSceneTarget(u32 w,u32 h) const;
+
     // Scaled presets.
 
     /// After identifying this draw's targets, before drawing any UI pixels. Menus use

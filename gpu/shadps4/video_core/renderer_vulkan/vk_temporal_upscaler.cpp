@@ -341,6 +341,7 @@ bool TemporalUpscaler::OnFrameStart() {
     applied_upscaler = upscaler;
     last_active = active;
     last_jitter = jitter_on;
+    BbSettings::Get().temporal_running = dispatched_last_frame && active;
     dispatched_last_frame = false;
 
     // The display pass of an upscaled frame reads the upscaled UI image.
@@ -1386,21 +1387,38 @@ bool TemporalUpscaler::Scaled() const {
     return scaled_session || target_width != 1920 || target_height != 1080;
 }
 
+bool TemporalUpscaler::MatchesSceneTarget(u32 w,u32 h) const {
+    return UiComposition::UnchartedSceneTarget(w,h,render_width,render_height,
+        u32(BbSettings::Get().game_display_width.load()),u32(BbSettings::Get().game_display_height.load()));
+}
+
+void TemporalUpscaler::BeforeDisplay(u64 ps_hash, VideoCore::ImageId source) {
+    if(!UiComposition::UnchartedBoundary(camera_motion.VelocityMode(),scaled_session,ps_hash,hudless_hash) ||
+       done_this_frame || !Active() || !source || !camera_motion.Ready())return;
+    ldr_target=source;
+    RunScaled();
+}
+
 void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
-    if (ui_phase || !camera_motion.Depth()) {
+    if(ui_phase || !color)return;
+    const auto& image=texture_cache.GetImage(color);
+    if(camera_motion.VelocityMode() && scaled_session) {
+        if((image.info.pixel_format==vk::Format::eR8G8B8A8Unorm || image.info.pixel_format==vk::Format::eR8G8B8A8Srgb) &&
+           MatchesSceneTarget(image.info.size.width,image.info.size.height) &&
+           !FrameCapture::IsDisplayBuffer(image.info.guest_address))ldr_target=color;
         return;
     }
-    const auto& image = texture_cache.GetImage(color);
-    const auto& depth = texture_cache.GetImage(camera_motion.Depth());
-    if (image.info.pixel_format == vk::Format::eR8G8B8A8Unorm &&
-        image.info.size.width == depth.info.size.width &&
-        image.info.size.height == depth.info.size.height) {
-        ldr_target = color;
-    }
+    if(!camera_motion.Depth())return;
+    const auto& depth=texture_cache.GetImage(camera_motion.Depth());
+    if(image.info.pixel_format==vk::Format::eR8G8B8A8Unorm &&
+       image.info.size.width==depth.info.size.width && image.info.size.height==depth.info.size.height)ldr_target=color;
 }
 
 void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
                               VideoCore::ImageId depth, bool native_viewport) {
+    // Uncharted's UI shaders differ from the Bloodborne/Scaleform list. The
+    // explicit BeforeDisplay hook owns this path; do not reconstruct a post pass.
+    if(camera_motion.VelocityMode() && scaled_session)return;
     if (!Scaled() && vs_hash == ui_trigger_vs) done_this_frame = true;
     if (!Scaled() || !color) {
         return;
@@ -1636,7 +1654,7 @@ void TemporalUpscaler::RunScaled() {
     const u32 iw = color.info.size.width, ih = color.info.size.height;
     const auto [w, h] = SceneSize(iw, ih);
     const u32 ow = target_width, oh = target_height;
-    if (depth.info.size.width != iw || depth.info.size.height != ih || w > ow || h > oh) {
+    if (w > depth.info.size.width || h > depth.info.size.height || w > ow || h > oh) {
         return;
     }
     if (!EnsureResources(w, h, ow, oh, false)) {
@@ -1650,6 +1668,7 @@ void TemporalUpscaler::RunScaled() {
     vk::Image depth_image = depth.GetImage(), color_image = color.GetImage();
     vk::ImageView depth_view{}, color_view{};
     u32 source_width = iw, source_height = ih;
+    u32 depth_source_width=depth.info.size.width,depth_source_height=depth.info.size.height;
     if (!scaled_session) {
         VideoCore::ImageViewInfo ci, di;
         ci.format = color.info.pixel_format;
@@ -1662,6 +1681,7 @@ void TemporalUpscaler::RunScaled() {
         depth_view = dp.view;
         source_width = w;
         source_height = h;
+        depth_source_width=w;depth_source_height=h;
     } else {
         depth_view = CachedView(depth, depth_format, vk::ImageAspectFlagBits::eDepth);
         color_view = CachedView(color, color.info.pixel_format, vk::ImageAspectFlagBits::eColor);
@@ -1799,7 +1819,7 @@ void TemporalUpscaler::RunScaled() {
     info.color = Describe(color_image, color.info.pixel_format, source_width, source_height,
                           color.usage_flags, vk::ImageAspectFlagBits::eColor,
                           FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);
-    info.depth = Describe(depth_image, depth_format, source_width, source_height, depth.usage_flags,
+    info.depth = Describe(depth_image, depth_format, depth_source_width, depth_source_height, depth.usage_flags,
                           vk::ImageAspectFlagBits::eDepth,
                           FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);
     info.motionVectors = Describe(vk::Image(motion_image), vk::Format::eR16G16Sfloat, w, h,
@@ -1848,6 +1868,10 @@ void TemporalUpscaler::RunScaled() {
         std::printf("Upscaler: FSR 3 scaled dispatch failed\n");
         failed = true;
     } else {
+        if(camera_motion.VelocityMode()) {
+            static unsigned reports=0;
+            if(reports<2){++reports;std::printf("Upscaler: Uncharted temporal dispatch %ux%u -> %ux%u, history %s\n",w,h,ow,oh,reset?"reset":"retained");}
+        }
         ok = true;
         reset = false;
         dispatched_last_frame = true;

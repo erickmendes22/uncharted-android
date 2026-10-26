@@ -50,33 +50,29 @@ struct Control {
 };
 
 constexpr Control ClassicControls[] = {
-    // the face buttons: a diamond at the bottom right
-    {"", BtnTriangle, 1.0f, -0.24f, 1.0f, -0.405f, 0.095f, 0.095f, Shape::Circle, Glyph::Triangle},
-    {"", BtnCircle, 1.0f, -0.135f, 1.0f, -0.30f, 0.095f, 0.095f, Shape::Circle, Glyph::Circle},
-    {"", BtnCross, 1.0f, -0.24f, 1.0f, -0.195f, 0.095f, 0.095f, Shape::Circle, Glyph::Cross},
-    {"", BtnSquare, 1.0f, -0.345f, 1.0f, -0.30f, 0.095f, 0.095f, Shape::Circle, Glyph::Square},
-    // shoulders and triggers in the top corners
-    {"L2", BtnL2, 0.0f, 0.14f, 0.0f, 0.17f, 0.16f, 0.070f, Shape::Pill, Glyph::Text},
-    {"L1", BtnL1, 0.0f, 0.14f, 0.0f, 0.27f, 0.16f, 0.070f, Shape::Pill, Glyph::Text},
-    {"R2", BtnR2, 1.0f, -0.14f, 0.0f, 0.30f, 0.16f, 0.070f, Shape::Pill, Glyph::Text},
-    {"R1", BtnR1, 1.0f, -0.14f, 0.0f, 0.40f, 0.16f, 0.070f, Shape::Pill, Glyph::Text},
-    // the top middle: the touch pad button and Options
-    {"PAD", BtnTouchpad, 0.5f, -0.17f, 0.0f, 0.06f, 0.17f, 0.07f, Shape::Pill, Glyph::Text},
-    {"II", BtnOptions, 0.5f, 0.0f, 0.0f, 0.06f, 0.10f, 0.06f, Shape::Pill, Glyph::Text},
-    // the stick clicks at the bottom middle
-    {"L3", BtnL3, 0.5f, -0.14f, 1.0f, -0.075f, 0.09f, 0.09f, Shape::Circle, Glyph::Text},
-    {"R3", BtnR3, 0.5f, 0.14f, 1.0f, -0.075f, 0.09f, 0.09f, Shape::Circle, Glyph::Text},
+    {"", BtnTriangle,1,-.24f,0,.54f,.108f,.108f,Shape::Circle,Glyph::Triangle},
+    {"", BtnCircle,1,-.135f,0,.645f,.108f,.108f,Shape::Circle,Glyph::Circle},
+    {"", BtnCross,1,-.24f,0,.75f,.108f,.108f,Shape::Circle,Glyph::Cross},
+    {"", BtnSquare,1,-.345f,0,.645f,.108f,.108f,Shape::Circle,Glyph::Square},
+    {"L2",BtnL2,0,.17f,0,.175f,.23f,.077f,Shape::Pill,Glyph::Text},
+    {"L1",BtnL1,0,.17f,0,.075f,.23f,.077f,Shape::Pill,Glyph::Text},
+    {"R2",BtnR2,1,-.17f,0,.175f,.23f,.077f,Shape::Pill,Glyph::Text},
+    {"R1",BtnR1,1,-.17f,0,.075f,.23f,.077f,Shape::Pill,Glyph::Text},
+    {"PAD",BtnTouchpad,.5f,-.17f,0,.065f,.17f,.066f,Shape::Pill,Glyph::Text},
+    {"II",BtnOptions,.5f,0,0,.065f,.085f,.066f,Shape::Pill,Glyph::Text},
+    {"L3",BtnL3,0,.17f,0,.275f,.087f,.066f,Shape::Pill,Glyph::Text},
+    {"R3",BtnR3,1,-.17f,0,.275f,.087f,.066f,Shape::Pill,Glyph::Text},
 };
 constexpr int ControlCount = int(sizeof(ClassicControls) / sizeof(ClassicControls[0]));
 #define Controls ClassicControls
 
 // The D-pad: a plus on the left, above the stick's usual place.
-constexpr float DpadX = 0.22f, DpadY = 0.47f; // centre, in H (x from the left edge)
-constexpr float DpadArm = 0.080f, DpadWidth = 0.052f, DpadDead = 0.025f;
+constexpr float DpadX = 0.22f, DpadY = 0.60f; // centre, in H (x from the left edge)
+constexpr float DpadArm = 0.105f, DpadWidth = 0.070f, DpadDead = 0.025f;
 
 // The floating left stick and the camera drag.
-constexpr float StickRadius = 0.11f, KnobRadius = 0.05f; // in H
-constexpr float StickHintX = 0.28f, StickHintY = 0.70f;  // the idle hint, in H
+constexpr float StickRadius = 0.082f, KnobRadius = 0.041f; // in H
+constexpr float StickHintX = 0.40f, StickHintY = 0.82f;  // the idle hint, in H
 // The camera drag: full right stick deflection at this finger speed (display heights per second)
 // times the sensitivity setting; slower drags turn proportionally slower. Independent of the
 // frame rate (the deflection is the finger's speed over the time since the last frame).
@@ -247,54 +243,52 @@ void Draw(float alpha, float scale) {
     const float H = Height;
     const auto col = [alpha](int a) { return IM_COL32(232, 229, 216, int(alpha * float(a))); };
     const auto fill = [alpha](bool on) { return on ? IM_COL32(187,145,68,int(alpha*170)) : IM_COL32(8,15,13,int(alpha*125)); };
-    const float text_size = 0.04f * H * scale;
+    const float text_size = 0.033f * H * scale;
     const auto shadow = [alpha](int a) { return IM_COL32(0, 0, 0, int(alpha * float(a))); };
     const auto label = [&](const char* text, ImVec2 at, float size) {
         const ImVec2 ts = font->CalcTextSizeA(size, FLT_MAX, 0.0f, text);
         const ImVec2 pos(at.x - ts.x * 0.5f, at.y - ts.y * 0.5f);
         const float o = std::max(1.0f, size * 0.05f); // a dark shadow: white text over a bright scene
         dl->AddText(font, size, ImVec2(pos.x + o, pos.y + o), shadow(200), text);
-        dl->AddText(font, size, pos, col(235), text);
+        dl->AddText(font, size, pos, col(250), text);
+        dl->AddText(font, size, ImVec2(pos.x+.45f*scale,pos.y), col(250), text);
     };
     uint32_t held = 0;
-    bool stick_down = false;
-    ImVec2 stick_base, stick_knob;
     {
         std::scoped_lock lock{fingers_mutex};
         for (const auto& f : fingers) {
             if (!f.down) continue;
             if (f.kind == Kind::Button) held |= Controls[f.control].bit;
             if (f.kind == Kind::Dpad) held |= DpadBits(f.x * Width, f.y * H, scale);
-            if (f.kind == Kind::Stick) {
-                stick_down = true;
-                stick_base = ImVec2(f.x0 * Width, f.y0 * H);
-                const float r = StickRadius * H * scale;
-                float dx = f.x * Width - stick_base.x, dy = f.y * H - stick_base.y;
-                const float len = std::sqrt(dx * dx + dy * dy);
-                if (len > r) { dx *= r / len; dy *= r / len; }
-                stick_knob = ImVec2(stick_base.x + dx, stick_base.y + dy);
-            }
+
         }
     }
-    const float line = 2.0f * scale;
+    const float line = 3.0f * scale * H/1080.0f;
     for (const auto& c : Controls) {
         const ImVec2 centre = Centre(c);
         const bool on = held & c.bit;
         if (c.shape == Shape::Circle) {
             const float r = c.w * H * scale * 0.5f;
-            dl->AddCircleFilled(centre, r, fill(on), 48);
-            dl->AddCircle(centre, r, col(on ? 240 : 150), 48, line);
-            if (c.glyph != Glyph::Text) {
-                DrawGlyph(dl, c.glyph, ImVec2(centre.x + line, centre.y + line), r * 0.42f,
-                          shadow(200), line * 1.5f);
-                DrawGlyph(dl, c.glyph, centre, r * 0.42f, col(230), line * 1.5f);
-            }
+            const auto tint=[&](int a) {
+                const int opacity=int(a*(.45f+.55f*alpha));
+                switch(c.glyph){
+                case Glyph::Triangle:return IM_COL32(133,211,181,opacity);
+                case Glyph::Circle:return IM_COL32(235,128,145,opacity);
+                case Glyph::Cross:return IM_COL32(142,168,255,opacity);
+                case Glyph::Square:return IM_COL32(210,153,214,opacity);
+                default:return col(a);
+                }
+            };
+            dl->AddCircleFilled(centre,r,tint(on?135:65),48);
+            dl->AddCircle(centre,r,tint(on?255:220),48,line);
+            if(c.glyph!=Glyph::Text)DrawGlyph(dl,c.glyph,centre,r*.43f,tint(255),line);
+
         } else {
             const ImVec2 a(centre.x - c.w * H * scale * 0.5f, centre.y - c.h * H * scale * 0.5f);
             const ImVec2 b(centre.x + c.w * H * scale * 0.5f, centre.y + c.h * H * scale * 0.5f);
             const float rounding = c.h * H * scale * 0.18f;
-            dl->AddRectFilled(a, b, fill(on), rounding);
-            dl->AddRect(a, b, col(on ? 240 : 150), rounding, 0, line);
+            dl->AddRectFilled(a,b,on?IM_COL32(151,117,58,int(170*alpha)):IM_COL32(11,17,16,int(200*alpha)),rounding);
+            dl->AddRect(a,b,IM_COL32(199,174,121,int((on?250:185)*(.5f+.5f*alpha))),rounding,0,line);
         }
         if (c.glyph == Glyph::Text) {
             label(c.label, centre, c.shape == Shape::Circle ? text_size*.72f : text_size * 0.8f);
@@ -312,15 +306,23 @@ void Draw(float alpha, float scale) {
         };
         for (const auto& a : arms) {
             const bool on = held & a.bit;
-            dl->AddRectFilled(a.a, a.b, col(on ? 150 : 55), w * 0.35f);
-            dl->AddRect(a.a, a.b, col(on ? 240 : 150), w * 0.35f, 0, line);
+            dl->AddRectFilled(a.a,a.b,fill(on),w*.30f);
+            dl->AddRect(a.a,a.b,col(on?250:190),w*.30f,0,line);
+            const ImVec2 centre((a.a.x+a.b.x)*.5f,(a.a.y+a.b.y)*.5f);
+            const float size=w*.36f;
+            ImVec2 tip,b1,b2;
+            if(a.bit==BtnUp){tip={centre.x,centre.y-size};b1={centre.x-size,centre.y+size};b2={centre.x+size,centre.y+size};}
+            else if(a.bit==BtnDown){tip={centre.x,centre.y+size};b1={centre.x-size,centre.y-size};b2={centre.x+size,centre.y-size};}
+            else if(a.bit==BtnLeft){tip={centre.x-size,centre.y};b1={centre.x+size,centre.y-size};b2={centre.x+size,centre.y+size};}
+            else {tip={centre.x+size,centre.y};b1={centre.x-size,centre.y-size};b2={centre.x-size,centre.y+size};}
+            dl->AddTriangleFilled(tip,b1,b2,col(240));
         }
     }
     // Twin analogs like the original console layout. No game-specific action names:
     // all three games and their menu prompts keep their real PlayStation mappings.
     for(int side=0;side<2;++side) {
         const float radius=StickRadius*H*scale, knob=KnobRadius*H*scale;
-        ImVec2 centre(side ? Width-.55f*H : StickHintX*H, .76f*H), point=centre;
+        ImVec2 centre(side ? Width-.52f*H : StickHintX*H, StickHintY*H), point=centre;
         bool down=false;
         {
             std::scoped_lock lock{fingers_mutex};
@@ -333,10 +335,11 @@ void Draw(float alpha, float scale) {
                 point=ImVec2(centre.x+dx,centre.y+dy);
             }
         }
-        dl->AddCircleFilled(centre,radius,fill(false),64);
+        dl->AddCircleFilled(centre,radius,IM_COL32(18,23,22,int(180*alpha)),64);
         dl->AddCircle(centre,radius,col(down?200:100),64,line);
         dl->AddCircleFilled(point,knob,fill(down),48);
         dl->AddCircle(point,knob,col(down?230:140),48,line);
+        if(!down)label(side?"R":"L",point,text_size*.62f);
     }
 }
 

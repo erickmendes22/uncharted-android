@@ -211,6 +211,9 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
         }
         Note("Resolution and FSR quality are selected in the launcher for the next start.");
 
+        if(s.upscaler!=BbSettings::UpscalerOff)
+            Note(s.temporal_running ? "Temporal reconstruction: running" : "Temporal reconstruction: waiting for a compatible scene");
+
         Section("Sharpening");
         Toggle("Sharpen (RCAS)", s.sharpen);
         ImGui::BeginDisabled(!s.sharpen);

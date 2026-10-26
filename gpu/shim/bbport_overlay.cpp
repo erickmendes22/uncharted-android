@@ -363,29 +363,33 @@ void FpsCounter() {
         sample.at=now;
     }
     const auto* viewport=ImGui::GetMainViewport();
-    const float pad=12.0f*base_scale;const int pos=settings.hud_position;
+    const float pad=14.0f*base_scale;const int pos=settings.hud_position;
     const bool right=pos==1||pos==3,bottom=pos>=2;
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x+(right?viewport->WorkSize.x-pad:pad),viewport->WorkPos.y+(bottom?viewport->WorkSize.y-pad:pad)),ImGuiCond_Always,ImVec2(right?1.f:0.f,bottom?1.f:0.f));
-    ImGui::SetNextWindowBgAlpha(.76f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(14*base_scale,10*base_scale));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,8*base_scale);
+    // Leave a shoulder-button-wide gutter. A horizontal readout stays clear of R1/R2.
+#ifdef __ANDROID__
+    const float gutter=TouchPadActive() ? viewport->WorkSize.y*.33f : pad;
+#else
+    const float gutter=pad;
+#endif
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x+(right?viewport->WorkSize.x-gutter:gutter),viewport->WorkPos.y+(bottom?viewport->WorkSize.y-pad:pad)),ImGuiCond_Always,ImVec2(right?1.f:0.f,bottom?1.f:0.f));
+    ImGui::SetNextWindowBgAlpha(.52f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(12*base_scale,7*base_scale));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,6*base_scale);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0);
     ImGui::Begin("##uncharted-hud",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoFocusOnAppearing);
-    ImGui::PushFont(nullptr,22*base_scale*settings.hud_scale.load());
-    ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"FPS %.0f",frame_ms_avg>0?1000.f/frame_ms_avg:0.f);
+    ImGui::PushFont(nullptr,21*base_scale*settings.hud_scale.load());
+    const ImVec4 gold(.90f,.78f,.52f,1),paper(.95f,.94f,.89f,1);
+    ImGui::TextColored(gold,"%.0f FPS",frame_ms_avg>0?1000.f/frame_ms_avg:0.f);
     if(settings.hud_mode>0){
-        if(sample.gpu>=0)ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU %d%%",sample.gpu);
-        else ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU --");
-        ImGui::SameLine();ImGui::TextDisabled("|");ImGui::SameLine();
-        ImGui::TextColored(ImVec4(.12f,.86f,1,1),"CPU %.0f%%",sample.cpu_percent);
-        ImGui::Text("RAM %.2f GB",sample.ram_mib/1024.f);
+        ImGui::SameLine();ImGui::TextColored(paper," |  RAM %.2f GB",sample.ram_mib/1024.f);
+        if(sample.gpu>=0)ImGui::TextColored(paper,"GPU %d%%   |   CPU %.0f%%",sample.gpu,sample.cpu_percent);
+        else ImGui::TextColored(paper,"GPU --   |   CPU %.0f%%",sample.cpu_percent);
     }
     if(settings.hud_mode>1) {
-        ImGui::Separator();
-        ImGui::Text("Frame %.1f ms",frame_ms_avg);
-        ImGui::Text("Render %d x %d",settings.active_render_width.load(),settings.active_render_height.load());
-        ImGui::Text("Display %d x %d",settings.game_display_width.load(),settings.game_display_height.load());
-        ImGui::Text("%s",BbSettings::UpscalerName(settings.upscaler));
+        const int w=settings.active_render_width.load(),h=settings.active_render_height.load();
+        if(w>0 && h>0)ImGui::TextColored(paper,"%.1f ms   |   %d x %d",frame_ms_avg,w,h);
+        else ImGui::TextColored(paper,"%.1f ms   |   Loading",frame_ms_avg);
+        ImGui::TextColored(paper,"%s%s",BbSettings::UpscalerName(settings.upscaler),settings.upscaler==BbSettings::UpscalerOff?"":settings.temporal_running?" · running":" · waiting");
     }
     ImGui::PopFont();
     ImGui::End();
@@ -432,10 +436,17 @@ void Init(const Vulkan::Instance& instance, vk::Format format, u32 image_count) 
     style.Colors[ImGuiCol_Tab] = ImVec4(0.17f, 0.21f, 0.16f, 1);
     style.Colors[ImGuiCol_TabSelected] = ImVec4(0.40f, 0.33f, 0.19f, 1);
 
-    ImFontConfig font_config;
-    font_config.FontDataOwnedByAtlas = false;
-    io.Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(bb_font_ttf),
-                                   int(bb_font_ttf_end - bb_font_ttf), 18.0f, &font_config);
+    ImFont* app_font=nullptr;
+#ifdef __ANDROID__
+    // Match the Android launcher typography instead of a desktop diagnostic font.
+    for(const char* path:{"/system/fonts/Roboto-Regular.ttf","/system/fonts/NotoSans-Regular.ttf"}) {
+        if(FILE* f=std::fopen(path,"rb")){std::fclose(f);app_font=io.Fonts->AddFontFromFileTTF(path,18.0f);if(app_font)break;}
+    }
+#endif
+    if(!app_font){
+        ImFontConfig font_config;font_config.FontDataOwnedByAtlas=false;
+        io.Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(bb_font_ttf),int(bb_font_ttf_end-bb_font_ttf),18.0f,&font_config);
+    }
 
     const vk::Instance vk_instance = instance.GetInstance();
     ImGui_ImplVulkan_LoadFunctions(

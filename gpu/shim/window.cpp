@@ -7,6 +7,9 @@
 #include "common/logging/log.h"
 #include "sdl_window.h"
 #include "bbport_overlay.h"
+#ifdef __ANDROID__
+#include "bbport_touchpad.h"
+#endif
 
 extern "C" void runtime_audio_background(int background); // g2-arm64: src/runtime_audio.c
 
@@ -50,6 +53,10 @@ extern "C" int bbgpu_mouse_sample(float* dx, float* dy, uint32_t* buttons, int* 
 namespace Frontend {
 
 WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}, height{height_} {
+#ifdef __ANDROID__
+    // SDL otherwise overrides sensorLandscape for a resizable window and permits portrait.
+    SDL_SetHint("SDL_ORIENTATIONS", "LandscapeLeft LandscapeRight");
+#endif
     // Gamepads are sampled by runtime_pad.c; their events are pumped here with the window's.
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         UNREACHABLE_MSG("Failed to initialize SDL video: {}", SDL_GetError());
@@ -135,6 +142,13 @@ void WindowSDL::UpdateTextTitle() {
 bool WindowSDL::OnAppEvent(void* userdata, SDL_Event* event) {
     auto* self = static_cast<WindowSDL*>(userdata);
     switch (event->type) {
+    case SDL_EVENT_DISPLAY_ORIENTATION:
+    case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+        self->surface_revision.fetch_add(1,std::memory_order_release);
+#ifdef __ANDROID__
+        BbOverlay::TouchPadReset();
+#endif
+        break;
     case SDL_EVENT_WILL_ENTER_BACKGROUND:
     case SDL_EVENT_DID_ENTER_BACKGROUND:
         if (!self->background.exchange(true, std::memory_order_acq_rel)) {

@@ -1,4 +1,4 @@
-# Uncharted 0.2.7 — source and patch validation
+# Uncharted 0.2.8 — source and patch validation
 
 The user authorized a test build on 2026-10-26 after the XML/executable checks.
 The build hold was removed; runtime and device validation remain pending.
@@ -77,3 +77,42 @@ Controls use neutral PS glyphs with twin analogs, rectangular shoulder buttons
 and the original game mappings, with swipe-camera optional. Launcher graphics
 options use grouped positive switches and native vector icons; original catalog
 preference keys and both executable versions are preserved.
+
+## Controls, effect labels and orientation (0.2.8)
+
+Device screenshots show portrait compression of the game and overlay, neutral
+wireframe controls, a tall HUD overlapping R2, and ambiguous effect switches.
+
+SDL allows all orientations for a resizable Android window without an orientation
+hint (SDLActivity.setOrientationBis). The native window now supplies the two
+landscape orientations explicitly; GameActivity reinforces sensorLandscape on
+resume. Surface orientation/display changes increment a revision, so a 180-degree
+turn recreates the swapchain even when dimensions stay equal. Transitional
+portrait frames are skipped; Suboptimal only ignores an unchanged transform.
+
+Controls use tinted PS faces, opaque shoulder backgrounds, D-pad arrows and
+smaller analogs arranged like the supplied console-control references. Effect
+rows explicitly say Enabled/Disabled and select Enabled/Disabled in game. HUD
+uses restrained gold/white typography, a horizontal FPS/RAM header, and a gutter
+for shoulder buttons; zero render size is shown as Loading. Android system Sans
+fonts are preferred with the embedded font retained as fallback.
+
+Device rotation, appearance and gameplay remain pending the new APK test.
+
+### Temporal follow-up from 10:38 device log
+
+The new log applies u1-960x540.bin (35 writes / 521 bytes), keeps 1080p display
+buffers, and only says FSR is available/on. No context creation or dispatch is
+recorded: this session does not demonstrate a working temporal upscaler.
+
+The reduced-session depth selector had required display-sized targets and UI
+composition depended on Bloodborne/Scaleform shader detection. The Uncharted
+path now accepts startup-render-size/aligned or native display allocations,
+reads the unique sampled RGBA8 source of the known display copy, and reconstructs before the known
+484cdbf5 display-copy pixel shader while camera/depth still belong to that frame.
+Other HUD draws no longer call OnFrameStart or clear the temporal history.
+Color/depth resource dimensions are described independently.
+
+The panel/HUD distinguish selected from running via completed-dispatch state;
+two successful Uncharted dispatches report reset/retained history once. These
+are CPU-recorded dispatch results, not a claim of correct device image quality.

@@ -527,17 +527,14 @@ void Rasterizer::PrepareRenderState(const GraphicsPipeline* pipeline) {
         // g2-arm64: the display size is the game's own (its resolution patch: 1280x720 on the
         // G2), not 1920x1080 - below 1080p the search never found the scene and the upscaler
         // stayed off (the FPS counter's "FSR 3.1" was only the setting).
-        const u32 display_w = u32(BbSettings::Get().game_display_width.load());
-        const u32 display_h = u32(BbSettings::Get().game_display_height.load());
         bool scene_pass = !cb_descs[0].first;
         if (cb_descs[0].first) {
             const auto& color = texture_cache.GetImage(cb_descs[0].first);
             scene_pass = color.info.pixel_format == vk::Format::eR16G16B16A16Sfloat &&
-                         color.info.size.width == display_w && color.info.size.height == display_h;
+                         color.info.size.width == depth.info.size.width && color.info.size.height == depth.info.size.height;
         }
-        if (scene_pass && depth.info.size.width == display_w && depth.info.size.height == display_h &&
-            (depth.info.pixel_format == vk::Format::eD32SfloatS8Uint ||
-             depth.info.pixel_format == vk::Format::eD32Sfloat)) {
+        if (scene_pass && upscaler->MatchesSceneTarget(depth.info.size.width,depth.info.size.height) &&
+            (depth.info.pixel_format == vk::Format::eD32SfloatS8Uint || depth.info.pixel_format == vk::Format::eD32Sfloat)) {
             camera_motion->OnGBufferPass(db_desc.first);
         }
     }
@@ -1816,8 +1813,39 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     const auto& regs = Regs();
     // bbport: the pass copying a finished frame to a display buffer; the previous draw's
     // target is that frame.
+    const auto* display_ps=pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
     if (camera_motion->Enabled() && regs.color_buffers[0] &&
-        FrameCapture::IsDisplayBuffer(regs.color_buffers[0].Address())) {
+        FrameCapture::IsDisplayBuffer(regs.color_buffers[0].Address()) &&
+        (!camera_motion->VelocityMode() || upscaler->IsDisplayBoundary(display_ps?display_ps->pgm_hash:0))) {
+        // Read the actual sampled source of Uncharted's final display copy. Never
+        // infer the temporal input from whichever RGBA8 post target was seen last.
+        VideoCore::ImageId temporal_source{};
+        if(display_ps && camera_motion->VelocityMode() && BbSettings::Get().upscaler!=BbSettings::UpscalerOff) {
+            const PreparedStage* prepared_display=nullptr;
+            for(u32 i=0;used_prepared && i<used_prepared->num_stages;++i) {
+                const auto& stage=used_prepared->stages[i];
+                if(&stage.program->info==display_ps && stage.num_images==display_ps->images.size())prepared_display=&stage;
+            }
+            unsigned candidates=0;
+            for(u32 i=0;i<display_ps->images.size();++i) {
+                const auto& resource=display_ps->images[i];
+                if(resource.is_written || resource.table_count)continue;
+                const auto sharp=prepared_display?prepared_display->image_sharps[i]:resource.GetSharp(*display_ps);
+                if(!sharp.Address() || !memory->IsValidGpuMapping(sharp.Address(),0) ||
+                   !IsKnownFormat(sharp.GetDataFmt(),sharp.GetNumberFmt()))continue;
+                const auto& entry=CachedImageDescEntry(sharp,resource);
+                const auto id=texture_cache.FindImage(entry.desc);
+                const auto& image=texture_cache.GetImage(id);
+                if((image.info.pixel_format==vk::Format::eR8G8B8A8Unorm || image.info.pixel_format==vk::Format::eR8G8B8A8Srgb) &&
+                   upscaler->MatchesSceneTarget(image.info.size.width,image.info.size.height) &&
+                   !FrameCapture::IsDisplayBuffer(image.info.guest_address)) {
+                    ++candidates;temporal_source=id;
+                }
+            }
+            if(candidates!=1)temporal_source={};
+            if(temporal_source)texture_cache.UpdateImage(temporal_source);
+        }
+        upscaler->BeforeDisplay(display_ps?display_ps->pgm_hash:0,temporal_source);
         scene_started = false;
         camera_motion->OnDisplayPass(cb_descs[0].first);
         if (upscaler->OnFrameStart()) {

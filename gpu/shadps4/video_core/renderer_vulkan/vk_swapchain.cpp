@@ -182,7 +182,13 @@ bool Swapchain::Present() {
     auto result = instance.GetPresentQueue().presentKHR(present_info);
 #ifdef __ANDROID__
     if (result == vk::Result::eSuboptimalKHR) {
-        result = vk::Result::eSuccess; // rotated display, see AcquireNextImage
+        // A reverse-landscape turn can keep exactly the same pixel dimensions.
+        // Only discard Suboptimal if the display transform actually stayed the same.
+        const auto [status,caps]=instance.GetPhysicalDevice().getSurfaceCapabilitiesKHR(surface);
+        if(status==vk::Result::eSuccess && quarter_turns && caps.currentTransform!=transform)
+            result=vk::Result::eErrorOutOfDateKHR;
+        else if(status==vk::Result::eErrorSurfaceLostKHR) result=status;
+        else result=vk::Result::eSuccess;
     }
 #endif
     if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {

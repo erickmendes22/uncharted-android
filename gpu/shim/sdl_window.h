@@ -25,6 +25,7 @@ public:
     ~WindowSDL();
     s32 GetWidth() const { return width.load(std::memory_order_relaxed); }
     s32 GetHeight() const { return height.load(std::memory_order_relaxed); }
+    u64 SurfaceRevision() const { return surface_revision.load(std::memory_order_acquire); }
     SDL_Window* GetSDLWindow() const { return window; }
     WindowSystemInfo GetWindowInfo() const { return window_info; }
     /// g2-arm64 (Android): the window system info with the current native window: Android takes
@@ -44,6 +45,7 @@ public:
 
 private:
     std::atomic<s32> width, height;
+    std::atomic<u64> surface_revision{0};
     std::atomic<bool> is_open{true};
     std::mutex text_mutex;
     bool text_requested{}, text_active{};

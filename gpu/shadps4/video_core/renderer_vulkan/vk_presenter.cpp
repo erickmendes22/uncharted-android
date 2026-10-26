@@ -721,9 +721,16 @@ void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame)
         return;
     }
 
-    // Recreate the swapchain if the window was resized.
-    if (window.GetWidth() != swapchain.GetWidth() || window.GetHeight() != swapchain.GetHeight()) {
+#ifdef __ANDROID__
+    // Ignore transitional portrait surface dimensions while Android applies landscape.
+    // Reverse landscape keeps the same size but changes the Vulkan surface transform.
+    if (window.GetWidth() < window.GetHeight()) { free_frame(); return; }
+#endif
+    const u64 revision=window.SurfaceRevision();
+    if (window.GetWidth() != swapchain.GetWidth() || window.GetHeight() != swapchain.GetHeight() ||
+        revision != window_surface_revision) {
         swapchain.Recreate(window.GetWidth(), window.GetHeight());
+        window_surface_revision=revision;
     }
 
     // bbport: frame generation: the generated frames first, then the game's own, evenly

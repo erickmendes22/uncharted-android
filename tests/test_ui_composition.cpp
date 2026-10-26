@@ -19,6 +19,15 @@ int main() {
     assert(MovieShader(0x34e8a281) && MovieShader(0x24042a9b));
     assert(!MovieShader(0x0b0acf50)); // fullscreen post/tonemap also has a native viewport
     assert(!MovieShader(0x6c62a79f)); // shadow geometry
+    // Resolution patch plus native allocations/display: accept either legal size.
+    assert(UnchartedSceneTarget(960,540,960,540,1920,1080));
+    assert(UnchartedSceneTarget(960,544,960,540,1920,1080));
+    assert(UnchartedSceneTarget(1920,1080,960,540,1920,1080));
+    assert(!UnchartedSceneTarget(2048,2048,960,540,1920,1080));
+    assert(!UnchartedSceneTarget(960,548,960,540,1920,1080));
+    assert(UnchartedBoundary(true,true,0x484cdbf5,0x484cdbf5));
+    assert(!UnchartedBoundary(true,true,0x12345678,0x484cdbf5));
+    assert(!UnchartedBoundary(false,true,0x484cdbf5,0x484cdbf5));
     const auto display = Scale(960, 540, 1920, 1080, false);
     assert(display[0] == 2 && display[1] == 2);
     const auto ui = Scale(960, 540, 1920, 1080, true);

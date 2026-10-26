@@ -8,7 +8,9 @@
 #include "bbport_overlay_android.h"
 
 static int last_sticks[4];
-extern "C" void runtime_touch_pad(uint32_t,const int sticks[4],uint8_t,uint8_t) {
+static uint32_t last_buttons;
+extern "C" void runtime_touch_pad(uint32_t buttons,const int sticks[4],uint8_t,uint8_t) {
+    last_buttons=buttons;
     for(int i=0;i<4;++i)last_sticks[i]=sticks[i];
 }
 extern "C" int runtime_gamepad_connected(){return 0;}
@@ -16,7 +18,7 @@ extern "C" void runtime_restart(){}
 extern "C" void runtime_mobile_action(int){}
 unsigned BbDisplayRefreshHz(){return 120;}
 
-static void frame(){ImGui::NewFrame();BbOverlay::TouchPadFrame(1920,1080);BbOverlay::AndroidMenuButton(1);ImGui::Render();}
+static void frame(float w=1920,float h=1080){ImGui::GetIO().DisplaySize=ImVec2(w,h);ImGui::NewFrame();BbOverlay::TouchPadFrame(w,h);BbOverlay::AndroidMenuButton(1);ImGui::Render();}
 static SDL_Event finger(Uint32 type,float x,float y){
     SDL_Event e{};e.type=type;e.tfinger.fingerID=42;e.tfinger.x=x;e.tfinger.y=y;return e;
 }
@@ -40,6 +42,28 @@ int main(){
     e=finger(SDL_EVENT_FINGER_MOTION,.38f,.72f);BbOverlay::TouchPadEvent(e);frame();
     assert(last_sticks[0]>128 && last_sticks[2]==-1);
     BbOverlay::TouchPadReset();
+    // Re-layout at phone/tablet landscape sizes: hit targets follow what is drawn.
+    settings.touch_pad_scale=1;
+    for(const auto size:{ImVec2(1920,1080),ImVec2(2400,1080),ImVec2(1920,1200)}) {
+        frame(size.x,size.y);
+        e=finger(SDL_EVENT_FINGER_DOWN,(size.x-.17f*size.y)/size.x,.075f);
+        BbOverlay::TouchPadEvent(e);frame(size.x,size.y);assert(last_buttons&0x800); // R1
+        BbOverlay::TouchPadReset();
+        e=finger(SDL_EVENT_FINGER_DOWN,.22f*size.y/size.x,.53f);
+        BbOverlay::TouchPadEvent(e);frame(size.x,size.y);assert(last_buttons&0x10); // D-pad up
+        BbOverlay::TouchPadReset();
+        frame(size.x,size.y);
+        bool green=false,blue=false,red=false,purple=false;
+        for(const auto* list:ImGui::GetDrawData()->CmdLists)for(const auto& v:list->VtxBuffer) {
+            const auto rgb=v.col&0xFFFFFF;
+            green|=rgb==(IM_COL32(133,211,181,255)&0xFFFFFF);
+            blue|=rgb==(IM_COL32(142,168,255,255)&0xFFFFFF);
+            red|=rgb==(IM_COL32(235,128,145,255)&0xFFFFFF);
+            purple|=rgb==(IM_COL32(210,153,214,255)&0xFFFFFF);
+        }
+        assert(green && blue && red && purple);
+    }
+    frame();
     // Draw the actual Android panel with each HUD mode, including its child/footer.
     for(int mode=0;mode<3;++mode){settings.hud_mode=mode;bool open=true;ImGui::NewFrame();BbOverlay::AndroidMenu(1,16.6f,open);ImGui::Render();}
     ImGui::DestroyContext();std::puts("Android touch/menu: PASS (menu hidden-pad access, held analog, independent sticks, panel layout)");

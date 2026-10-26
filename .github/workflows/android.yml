@@ -37,6 +37,8 @@ jobs:
         run: |
           cc -std=c11 -Wall -Wextra -Werror -Isrc tests/test_guest_fix_patterns.c src/runtime_guest_fixes.c -o "$RUNNER_TEMP/guest-pattern-tests"
           "$RUNNER_TEMP/guest-pattern-tests"
+          g++ -std=c++20 -Wall -Wextra -Werror -I. tests/test_ui_composition.cpp -o "$RUNNER_TEMP/ui-composition-test"
+          "$RUNNER_TEMP/ui-composition-test"
       - name: Install native build tools and SDK
         shell: bash
         run: |
@@ -79,13 +81,13 @@ jobs:
           "$SDK/build-tools/35.0.1/aapt2" dump badging "$apk" > dist/package.txt
           grep -q "package: name='com.daedalus.uncharted'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.7.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.8.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.7
+          name: Uncharted-Daedalus-0.2.8
           path: dist/
           if-no-files-found: error
           retention-days: 30

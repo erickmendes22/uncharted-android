@@ -34,6 +34,7 @@ public class GameActivity extends SDLActivity {
 
     @Override protected void onResume() {
         super.onResume();
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         getWindow().getDecorView().setSystemUiVisibility(
             android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
             android.view.View.SYSTEM_UI_FLAG_FULLSCREEN |
