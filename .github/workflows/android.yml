@@ -65,6 +65,13 @@ jobs:
           mkdir -p "$WORK"
           set -o pipefail
           bash android/scripts/build_all.sh 2>&1 | tee "$WORK/build.log"
+      - name: Verify shared translations and FSR preset mapping
+        shell: bash
+        run: |
+          python3 android/localization/generate.py
+          git diff --exit-code -- gpu/shim/bbport_locale.h
+          javac -d "$RUNNER_TEMP/preset-test" android/scripts/g2/game_app/UpscalePreset.java tests/TestUpscalePreset.java
+          java -cp "$RUNNER_TEMP/preset-test" dev.unchartedg2.game.TestUpscalePreset
       - name: Verify Android touch controls and menu
         shell: bash
         run: |
@@ -81,13 +88,13 @@ jobs:
           "$SDK/build-tools/35.0.1/aapt2" dump badging "$apk" > dist/package.txt
           grep -q "package: name='com.daedalus.uncharted'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.8.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.9.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.8
+          name: Uncharted-Daedalus-0.2.9
           path: dist/
           if-no-files-found: error
           retention-days: 30

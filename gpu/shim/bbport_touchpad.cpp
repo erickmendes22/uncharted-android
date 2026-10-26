@@ -54,21 +54,21 @@ constexpr Control ClassicControls[] = {
     {"", BtnCircle,1,-.135f,0,.645f,.108f,.108f,Shape::Circle,Glyph::Circle},
     {"", BtnCross,1,-.24f,0,.75f,.108f,.108f,Shape::Circle,Glyph::Cross},
     {"", BtnSquare,1,-.345f,0,.645f,.108f,.108f,Shape::Circle,Glyph::Square},
-    {"L2",BtnL2,0,.17f,0,.175f,.23f,.077f,Shape::Pill,Glyph::Text},
-    {"L1",BtnL1,0,.17f,0,.075f,.23f,.077f,Shape::Pill,Glyph::Text},
-    {"R2",BtnR2,1,-.17f,0,.175f,.23f,.077f,Shape::Pill,Glyph::Text},
-    {"R1",BtnR1,1,-.17f,0,.075f,.23f,.077f,Shape::Pill,Glyph::Text},
+    {"L2",BtnL2,0,.19f,0,.14f,.15f,.066f,Shape::Pill,Glyph::Text},
+    {"L1",BtnL1,0,.37f,0,.14f,.15f,.066f,Shape::Pill,Glyph::Text},
+    {"R2",BtnR2,1,-.19f,0,.14f,.15f,.066f,Shape::Pill,Glyph::Text},
+    {"R1",BtnR1,1,-.37f,0,.14f,.15f,.066f,Shape::Pill,Glyph::Text},
     {"PAD",BtnTouchpad,.5f,-.17f,0,.065f,.17f,.066f,Shape::Pill,Glyph::Text},
     {"II",BtnOptions,.5f,0,0,.065f,.085f,.066f,Shape::Pill,Glyph::Text},
-    {"L3",BtnL3,0,.17f,0,.275f,.087f,.066f,Shape::Pill,Glyph::Text},
-    {"R3",BtnR3,1,-.17f,0,.275f,.087f,.066f,Shape::Pill,Glyph::Text},
+    {"L3",BtnL3,0,.56f,0,.84f,.075f,.075f,Shape::Circle,Glyph::Text},
+    {"R3",BtnR3,1,-.68f,0,.84f,.075f,.075f,Shape::Circle,Glyph::Text},
 };
 constexpr int ControlCount = int(sizeof(ClassicControls) / sizeof(ClassicControls[0]));
 #define Controls ClassicControls
 
 // The D-pad: a plus on the left, above the stick's usual place.
-constexpr float DpadX = 0.22f, DpadY = 0.60f; // centre, in H (x from the left edge)
-constexpr float DpadArm = 0.105f, DpadWidth = 0.070f, DpadDead = 0.025f;
+constexpr float DpadX = 0.28f, DpadY = 0.60f; // centre, in H (x from the left edge)
+constexpr float DpadArm = 0.095f, DpadWidth = 0.104f;
 
 // The floating left stick and the camera drag.
 constexpr float StickRadius = 0.082f, KnobRadius = 0.041f; // in H
@@ -124,18 +124,14 @@ bool Hits(const Control& c, float px, float py, float scale) {
 uint32_t DpadBits(float px, float py, float scale) {
     const float cx = DpadX * Height, cy = DpadY * Height;
     const float dx = (px - cx) / (Height * scale), dy = (py - cy) / (Height * scale);
-    const float ax = std::abs(dx), ay = std::abs(dy);
-    if (ax > DpadArm + 0.02f || ay > DpadArm + 0.02f) return 0;
-    if (ax > DpadWidth * 0.5f + 0.02f && ay > DpadWidth * 0.5f + 0.02f) {
-        // a corner: both arms when the finger is clearly diagonal, nothing far out
-        if (ax < DpadArm * 0.9f && ay < DpadArm * 0.9f) {
-            return (dx < 0 ? BtnLeft : BtnRight) | (dy < 0 ? BtnUp : BtnDown);
-        }
-        return 0;
+    // Hit the four separate circular buttons, matching the visible ISS-style D-pad.
+    const struct { float x,y; uint32_t bit; } keys[] = {
+        {0,-DpadArm,BtnUp},{0,DpadArm,BtnDown},{-DpadArm,0,BtnLeft},{DpadArm,0,BtnRight}};
+    for(const auto& key:keys) {
+        const float x=dx-key.x,y=dy-key.y,r=DpadWidth*.54f;
+        if(x*x+y*y<=r*r)return key.bit;
     }
-    if (ax < DpadDead && ay < DpadDead) return 0;
-    if (ax >= ay) return dx < 0 ? BtnLeft : BtnRight;
-    return dy < 0 ? BtnUp : BtnDown;
+    return 0;
 }
 
 Finger* Find(SDL_FingerID id) {
@@ -279,9 +275,9 @@ void Draw(float alpha, float scale) {
                 default:return col(a);
                 }
             };
-            dl->AddCircleFilled(centre,r,tint(on?135:65),48);
+            dl->AddCircleFilled(centre,r,on?tint(100):IM_COL32(12,17,15,int(160*alpha)),48);
             dl->AddCircle(centre,r,tint(on?255:220),48,line);
-            if(c.glyph!=Glyph::Text)DrawGlyph(dl,c.glyph,centre,r*.43f,tint(255),line);
+            if(c.glyph!=Glyph::Text)DrawGlyph(dl,c.glyph,centre,r*.30f,tint(255),line);
 
         } else {
             const ImVec2 a(centre.x - c.w * H * scale * 0.5f, centre.y - c.h * H * scale * 0.5f);
@@ -289,6 +285,8 @@ void Draw(float alpha, float scale) {
             const float rounding = c.h * H * scale * 0.18f;
             dl->AddRectFilled(a,b,on?IM_COL32(151,117,58,int(170*alpha)):IM_COL32(11,17,16,int(200*alpha)),rounding);
             dl->AddRect(a,b,IM_COL32(199,174,121,int((on?250:185)*(.5f+.5f*alpha))),rounding,0,line);
+            // Short brass rule echoes an expedition journal without obscuring the game.
+            dl->AddLine(ImVec2(a.x+8*scale,b.y-5*scale),ImVec2(a.x+24*scale,b.y-5*scale),col(220),line);
         }
         if (c.glyph == Glyph::Text) {
             label(c.label, centre, c.shape == Shape::Circle ? text_size*.72f : text_size * 0.8f);
@@ -297,27 +295,24 @@ void Draw(float alpha, float scale) {
     // the D-pad
     {
         const ImVec2 c(DpadX * H, DpadY * H);
-        const float arm = DpadArm * H * scale, w = DpadWidth * H * scale * 0.5f;
-        const struct { uint32_t bit; ImVec2 a, b; } arms[] = {
-            {BtnUp, ImVec2(c.x - w, c.y - arm), ImVec2(c.x + w, c.y - w * 0.4f)},
-            {BtnDown, ImVec2(c.x - w, c.y + w * 0.4f), ImVec2(c.x + w, c.y + arm)},
-            {BtnLeft, ImVec2(c.x - arm, c.y - w), ImVec2(c.x - w * 0.4f, c.y + w)},
-            {BtnRight, ImVec2(c.x + w * 0.4f, c.y - w), ImVec2(c.x + arm, c.y + w)},
-        };
-        for (const auto& a : arms) {
-            const bool on = held & a.bit;
-            dl->AddRectFilled(a.a,a.b,fill(on),w*.30f);
-            dl->AddRect(a.a,a.b,col(on?250:190),w*.30f,0,line);
-            const ImVec2 centre((a.a.x+a.b.x)*.5f,(a.a.y+a.b.y)*.5f);
-            const float size=w*.36f;
+        const float arm=DpadArm*H*scale,r=DpadWidth*H*scale*.5f;
+        const struct { uint32_t bit;float x,y; } keys[] = {
+            {BtnUp,0,-1},{BtnDown,0,1},{BtnLeft,-1,0},{BtnRight,1,0}};
+        for(const auto& key:keys) {
+            const bool on=held&key.bit;
+            const ImVec2 centre(c.x+key.x*arm,c.y+key.y*arm);
+            dl->AddCircleFilled(centre,r,fill(on),48);
+            dl->AddCircle(centre,r,col(on?255:210),48,line);
+            const float size=r*.24f;
             ImVec2 tip,b1,b2;
-            if(a.bit==BtnUp){tip={centre.x,centre.y-size};b1={centre.x-size,centre.y+size};b2={centre.x+size,centre.y+size};}
-            else if(a.bit==BtnDown){tip={centre.x,centre.y+size};b1={centre.x-size,centre.y-size};b2={centre.x+size,centre.y-size};}
-            else if(a.bit==BtnLeft){tip={centre.x-size,centre.y};b1={centre.x+size,centre.y-size};b2={centre.x+size,centre.y+size};}
+            if(key.bit==BtnUp){tip={centre.x,centre.y-size};b1={centre.x-size,centre.y+size};b2={centre.x+size,centre.y+size};}
+            else if(key.bit==BtnDown){tip={centre.x,centre.y+size};b1={centre.x-size,centre.y-size};b2={centre.x+size,centre.y-size};}
+            else if(key.bit==BtnLeft){tip={centre.x-size,centre.y};b1={centre.x+size,centre.y-size};b2={centre.x+size,centre.y+size};}
             else {tip={centre.x+size,centre.y};b1={centre.x-size,centre.y-size};b2={centre.x-size,centre.y+size};}
-            dl->AddTriangleFilled(tip,b1,b2,col(240));
+            dl->AddTriangleFilled(tip,b1,b2,col(245));
         }
     }
+
     // Twin analogs like the original console layout. No game-specific action names:
     // all three games and their menu prompts keep their real PlayStation mappings.
     for(int side=0;side<2;++side) {

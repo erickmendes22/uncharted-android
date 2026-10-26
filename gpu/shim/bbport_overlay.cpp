@@ -26,6 +26,7 @@
 #include "bbport_touchpad.h"          // g2-arm64: the on-screen gamepad
 #endif
 #include "bbport_settings.h"
+#include "bbport_locale.h"
 #include "bbport_toggles.h"
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
@@ -367,30 +368,44 @@ void FpsCounter() {
     const bool right=pos==1||pos==3,bottom=pos>=2;
     // Leave a shoulder-button-wide gutter. A horizontal readout stays clear of R1/R2.
 #ifdef __ANDROID__
-    const float gutter=TouchPadActive() ? viewport->WorkSize.y*.33f : pad;
+    const float gutter=pad;
+    // Compact fits above the shoulder row; Full sits below it, away from PAD/menu.
+    const float top=TouchPadActive() && (settings.hud_mode>1 || (settings.hud_mode>0 && settings.upscaler!=BbSettings::UpscalerOff)) ? viewport->WorkSize.y*.21f : pad;
 #else
     const float gutter=pad;
+    const float top=pad;
 #endif
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x+(right?viewport->WorkSize.x-gutter:gutter),viewport->WorkPos.y+(bottom?viewport->WorkSize.y-pad:pad)),ImGuiCond_Always,ImVec2(right?1.f:0.f,bottom?1.f:0.f));
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x+(right?viewport->WorkSize.x-gutter:gutter),viewport->WorkPos.y+(bottom?viewport->WorkSize.y-pad:top)),ImGuiCond_Always,ImVec2(right?1.f:0.f,bottom?1.f:0.f));
     ImGui::SetNextWindowBgAlpha(.52f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(12*base_scale,7*base_scale));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,6*base_scale);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize,0);
     ImGui::Begin("##uncharted-hud",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoFocusOnAppearing);
     ImGui::PushFont(nullptr,21*base_scale*settings.hud_scale.load());
-    const ImVec4 gold(.90f,.78f,.52f,1),paper(.95f,.94f,.89f,1);
-    ImGui::TextColored(gold,"%.0f FPS",frame_ms_avg>0?1000.f/frame_ms_avg:0.f);
+    // Preserve the previous HUD's hierarchy and metric colors; only fix spacing/data.
+    ImGui::TextColored(ImVec4(.55f,1.f,.14f,1),"FPS %.0f",frame_ms_avg>0?1000.f/frame_ms_avg:0.f);
     if(settings.hud_mode>0){
-        ImGui::SameLine();ImGui::TextColored(paper," |  RAM %.2f GB",sample.ram_mib/1024.f);
-        if(sample.gpu>=0)ImGui::TextColored(paper,"GPU %d%%   |   CPU %.0f%%",sample.gpu,sample.cpu_percent);
-        else ImGui::TextColored(paper,"GPU --   |   CPU %.0f%%",sample.cpu_percent);
+        if(sample.gpu>=0)ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU %d%%",sample.gpu);
+        else ImGui::TextColored(ImVec4(.88f,.34f,1,1),"GPU --");
+        ImGui::SameLine();ImGui::TextDisabled("·");ImGui::SameLine();
+        ImGui::TextColored(ImVec4(.12f,.86f,1,1),"CPU %.0f%%",sample.cpu_percent);
+        if(settings.upscaler!=BbSettings::UpscalerOff) {
+            // Report the applied startup mode, not a pending launcher selection or
+            // the game's native display allocation. Every temporal preset outputs 720p.
+            const char* res=std::getenv("BB_RENDER_RES");
+            const char* mode=res && std::strcmp(res,"960x540")==0 ? "Quality"
+                :res && std::strcmp(res,"832x468")==0 ? "Balanced"
+                :res && std::strcmp(res,"640x360")==0 ? "Performance" : "Native AA";
+            if(settings.upscaler==BbSettings::UpscalerFsr3)ImGui::Text("FSR %s",BbLocale::Text(mode));
+            else ImGui::Text("TAA");
+        }
+        if(settings.hud_mode>1) {
+            ImGui::Text("RAM %.2f GB  ·  %.1f ms",sample.ram_mib/1024.f,frame_ms_avg);
+            if(settings.upscaler!=BbSettings::UpscalerOff)
+                ImGui::TextUnformatted(BbLocale::Text(settings.temporal_running?"running":"waiting"));
+        }
     }
-    if(settings.hud_mode>1) {
-        const int w=settings.active_render_width.load(),h=settings.active_render_height.load();
-        if(w>0 && h>0)ImGui::TextColored(paper,"%.1f ms   |   %d x %d",frame_ms_avg,w,h);
-        else ImGui::TextColored(paper,"%.1f ms   |   Loading",frame_ms_avg);
-        ImGui::TextColored(paper,"%s%s",BbSettings::UpscalerName(settings.upscaler),settings.upscaler==BbSettings::UpscalerOff?"":settings.temporal_running?" · running":" · waiting");
-    }
+
     ImGui::PopFont();
     ImGui::End();
     ImGui::PopStyleVar(3);
@@ -448,6 +463,12 @@ void Init(const Vulkan::Instance& instance, vk::Format format, u32 image_count) 
         io.Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(bb_font_ttf),int(bb_font_ttf_end-bb_font_ttf),18.0f,&font_config);
     }
 
+#ifdef __ANDROID__
+    // Dynamic font atlas: merge Android's script fallbacks for all offered UI locales.
+    for(const char* path:{"/system/fonts/NotoSansCJK-Regular.ttc","/system/fonts/NotoSansJP-Regular.otf","/system/fonts/NotoSansKR-Regular.otf","/system/fonts/NotoSansSC-Regular.otf"}) {
+        if(FILE* f=std::fopen(path,"rb")){std::fclose(f);ImFontConfig config;config.MergeMode=true;io.Fonts->AddFontFromFileTTF(path,18.0f,&config);}
+    }
+#endif
     const vk::Instance vk_instance = instance.GetInstance();
     ImGui_ImplVulkan_LoadFunctions(
         instance.ApiVersion(),

@@ -110,6 +110,8 @@ public class Launcher extends Activity {
     private PkgInstaller pkgInstaller;
     private int pendingPkg=-1;
 
+    @Override protected void attachBaseContext(android.content.Context base) {super.attachBaseContext(AppLanguage.attach(base));}
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -150,6 +152,7 @@ public class Launcher extends Activity {
             prefs.edit().putBoolean("ui_v028",true).apply();
             iniPut("hud_position","0");iniPut("hud_scale","1.0");
         }
+        if(prefs.getInt("mobile_upscale",0)==5)prefs.edit().putInt("mobile_upscale",4).apply();
         buildViews();
         handle(getIntent());
     }
@@ -217,7 +220,7 @@ public class Launcher extends Activity {
 
     private TextView text(LinearLayout parent, String s, float size, boolean bold) {
         TextView t = new TextView(this);
-        t.setText(s);
+        t.setText(AppLanguage.text(s));
         t.setTextSize(size);
         t.setTextColor(0xFFF4EFDF);
         if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
@@ -265,7 +268,7 @@ public class Launcher extends Activity {
 
     private Button button(LinearLayout parent, String s, View.OnClickListener l) {
         Button b = new Button(this, null, android.R.attr.borderlessButtonStyle);
-        b.setText(s);
+        b.setText(AppLanguage.text(s));
         int iconKind=s.toLowerCase(Locale.ROOT).contains("folder")?4:s.toLowerCase(Locale.ROOT).contains("game")?5:s.toLowerCase(Locale.ROOT).contains("upscale")?1:2;
         ExpeditionIcon icon=new ExpeditionIcon(iconKind,accent);icon.setBounds(0,0,dp(22),dp(22));
         b.setCompoundDrawables(icon,null,null,null);b.setCompoundDrawablePadding(dp(10));
@@ -293,7 +296,7 @@ public class Launcher extends Activity {
 
     private Button primaryButton(LinearLayout parent, String s, View.OnClickListener l) {
         Button b = new Button(this, null, android.R.attr.borderlessButtonStyle);
-        b.setText(s);
+        b.setText(AppLanguage.text(s));
         b.setAllCaps(false);
         b.setOnClickListener(l);
         ExpeditionIcon playIcon=new ExpeditionIcon(6,0xFF181910);playIcon.setBounds(0,0,dp(24),dp(24));
@@ -314,7 +317,7 @@ public class Launcher extends Activity {
 
     private CheckBox check(LinearLayout parent, String s, String key, boolean byDefault) {
         CheckBox c = new CheckBox(this);
-        c.setText(s);
+        c.setText(AppLanguage.text(s));
         c.setChecked(prefs.getBoolean(key, byDefault));
         c.setOnCheckedChangeListener((v, on) -> prefs.edit().putBoolean(key, on).apply());
         parent.addView(c);
@@ -361,7 +364,7 @@ public class Launcher extends Activity {
             artwork.setImageBitmap(android.graphics.BitmapFactory.decodeStream(in,null,options));
         } catch(Exception ignored) {}
         hero.addView(artwork,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        TextView heroCaption=new TextView(this);heroCaption.setText("THE NATHAN DRAKE COLLECTION\nDAEDALUS ANDROID");
+        TextView heroCaption=new TextView(this);heroCaption.setText(AppLanguage.text("THE NATHAN DRAKE COLLECTION\nDAEDALUS ANDROID"));
         heroCaption.setTextColor(0xFFF3DCA6);heroCaption.setTextSize(15);heroCaption.setTypeface(Typeface.DEFAULT_BOLD);
         heroCaption.setGravity(android.view.Gravity.BOTTOM);heroCaption.setPadding(dp(18),dp(16),dp(18),dp(16));
         heroCaption.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0x0015110C,0xE615110C}));
@@ -373,7 +376,7 @@ public class Launcher extends Activity {
         for (int n = 0; n < GAMES.length; n++) {
             RadioButton game = new RadioButton(this);
             game.setId(View.generateViewId()); game.setTag(GAMES[n][0]);
-            game.setText(names[n]); game.setMinHeight(dp(56));
+            game.setText(AppLanguage.text(names[n])); game.setMinHeight(dp(56));
             gameSelect.addView(game);
             if (GAMES[n][0].equals(prefs.getString("selected_game", "u1"))) gameSelect.check(game.getId());
         }
@@ -384,6 +387,8 @@ public class Launcher extends Activity {
         games.addView(gameSelect);
         playButton = primaryButton(games, "CONTINUE ADVENTURE", v -> play());
         button(games,"Choose game folder",v->{startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),PICK_FOLDER);});
+        button(games,"Install game PKG",v->installPkg(false));
+        button(games,"Install update PKG",v->installPkg(true));
         statusText = note(shell, "");
         statusText.setPadding(dp(22), 0, dp(22), dp(4));
         root = home;
@@ -401,7 +406,7 @@ public class Launcher extends Activity {
             startActivity(i);
         });
         pathEdit = new EditText(this);
-        pathEdit.setHint("or type the path, e.g. /storage/XXXX-XXXX/PS4/CUSA02344");
+        pathEdit.setHint(AppLanguage.text("or type the path, e.g. /storage/XXXX-XXXX/PS4/CUSA02344"));
         pathEdit.setSingleLine(true);
         pathEdit.setTextSize(14);
         pathEdit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -412,8 +417,6 @@ public class Launcher extends Activity {
             refresh();
         });
 
-        button(folder,"Install game PKG",v->installPkg(false));
-        button(folder,"Install update PKG",v->installPkg(true));
         LinearLayout prepareCard = card(config, "PREPARE GAME FILES");
         prepareInfo = note(prepareCard, "");
         prepareButton = button(prepareCard, "Prepare", v -> prepare(false));
@@ -426,34 +429,37 @@ public class Launcher extends Activity {
         resolutionChoice.setOnClickListener(v->{
             String[] labels=new String[RESOLUTIONS.length];int selected=0;
             for(int n=0;n<labels.length;n++){labels[n]=RESOLUTIONS[n][0];if(labels[n].equals(chosenResolution()))selected=n;}
-            new ExpeditionDialog(this).setTitle("Internal resolution").setSingleChoiceItems(labels,selected,(dialog,which)->{
+            new ExpeditionDialog(this).setTitle(AppLanguage.text("Internal resolution")).setSingleChoiceItems(labels,selected,(dialog,which)->{
                 prefs.edit().putString("resolution",RESOLUTIONS[which][0]).apply();
-                resolutionChoice.setText("Internal resolution · "+RESOLUTIONS[which][0]);dialog.dismiss();
+                resolutionChoice.setText(AppLanguage.text("Internal resolution · "+RESOLUTIONS[which][0]));dialog.dismiss();
             }).setNegativeButton("Cancel",null).show();
         });
         note(root,"Changes apply on the next game start.");
         buildPatchOptions(patches);
         LinearLayout displayCard = card(home, "DISPLAY & PERFORMANCE");
         android.widget.Switch fullscreen=new android.widget.Switch(this);
-        fullscreen.setText("Fullscreen");fullscreen.setTextColor(0xFFF4EFDF);fullscreen.setMinHeight(dp(54));
+        fullscreen.setText(AppLanguage.text("Fullscreen"));fullscreen.setTextColor(0xFFF4EFDF);fullscreen.setMinHeight(dp(54));
         fullscreen.setChecked("1".equals(iniGet("fullscreen")));
         fullscreen.setOnCheckedChangeListener((view,on)->iniPut("fullscreen",on?"1":"0"));displayCard.addView(fullscreen);
         note(displayCard,"Off: original aspect ratio. On: fill the screen.");
         Button upscaleChoice=button(displayCard,"Upscale · "+upscaleLabel(prefs.getInt("mobile_upscale",0)),null);
         upscaleChoice.setOnClickListener(v->{
-            String[] labels={"Off · manual resolution","FSR 3.1 Native AA","FSR 3.1 Quality · 720p → 1080p","FSR 3.1 Performance · 540p → 1080p","FSR 3.1 Ultra Performance · 360p → 1080p"};
-            int[] values={0,1,2,4,5};int selected=0;
+            String[] labels={"Off · manual resolution","FSR 3.1 Native AA · 720p","FSR 3.1 Quality · 540p → 720p","FSR 3.1 Balanced · 468p → 720p","FSR 3.1 Performance · 360p → 720p"};
+            int[] values={0,1,2,3,4};int selected=0;
             for(int n=0;n<values.length;n++)if(values[n]==prefs.getInt("mobile_upscale",0))selected=n;
-            new ExpeditionDialog(this).setTitle("Upscale").setSingleChoiceItems(labels,selected,(dialog,which)->{
+            new ExpeditionDialog(this).setTitle(AppLanguage.text("Upscale")).setSingleChoiceItems(labels,selected,(dialog,which)->{
                 prefs.edit().putInt("mobile_upscale",values[which]).apply();
-                upscaleChoice.setText("Upscale · "+upscaleLabel(values[which]));dialog.dismiss();
+                upscaleChoice.setText(AppLanguage.text("Upscale · "+upscaleLabel(values[which])));dialog.dismiss();
             }).setNegativeButton("Cancel",null).show();
         });
         button(displayCard,"Performance HUD",v->{
-            String[] labels={"Minimal · FPS","Compact · FPS / GPU / CPU / RAM","Full · metrics and resolutions"};
+            String[] labels={"Minimal · FPS","Compact · FPS / GPU / CPU / RAM","Full · FPS / GPU / CPU / RAM / FSR"};
             int selected=1;try{selected=Integer.parseInt(iniGet("hud_mode"));}catch(Exception ignored){}
-            new ExpeditionDialog(this).setTitle("HUD style").setSingleChoiceItems(labels,selected,(dialog,which)->{iniPut("hud_mode",Integer.toString(which));dialog.dismiss();}).setNegativeButton("Cancel",null).show();
+            new ExpeditionDialog(this).setTitle(AppLanguage.text("HUD style")).setSingleChoiceItems(labels,selected,(dialog,which)->{iniPut("hud_mode",Integer.toString(which));dialog.dismiss();}).setNegativeButton("Cancel",null).show();
         });
+        LinearLayout languageCard=card(config,"LANGUAGE");
+        button(languageCard,AppLanguage.summary(this),v->AppLanguage.show(this));
+        note(languageCard,"Language changes apply on next game start.");
         root = card(config, "GPU DRIVER");
         text(root, "Vulkan driver:", 14, false);
         driverList = new LinearLayout(this);
@@ -492,7 +498,7 @@ public class Launcher extends Activity {
         if (current == null || current.equals("auto")) current = prefs.getString("fps_limit", defaultFpsLimit());
         for (String l : new String[] {"30", "60", "120", "Off"}) {
             RadioButton b = new RadioButton(this);
-            b.setText(l);
+            b.setText(AppLanguage.text(l));
             b.setId(View.generateViewId());
             b.setTag(l.equals("Off") ? "0" : l);
             fpsLimit.addView(b);
@@ -516,7 +522,7 @@ public class Launcher extends Activity {
         if (pad == null) pad = prefs.getString("touch_pad", "auto");
         for (String[] o : new String[][] {{"0", "Off"}, {"auto", "Auto"}, {"1", "On"}}) {
             RadioButton b = new RadioButton(this);
-            b.setText(o[1]);
+            b.setText(AppLanguage.text(o[1]));
             b.setId(View.generateViewId());
             b.setTag(o[0]);
             touchPad.addView(b);
@@ -550,7 +556,7 @@ public class Launcher extends Activity {
                 try { selected = Math.max(1, Math.min(3, Integer.parseInt(iniGet("frame_gen_multiplier")) - 1)); }
                 catch (Exception ignored) { selected = 1; }
             }
-            new ExpeditionDialog(this).setTitle("Frame generation")
+            new ExpeditionDialog(this).setTitle(AppLanguage.text("Frame generation"))
                 .setSingleChoiceItems(modes, selected, (dialog, which) -> {
                     if (which > 0 && !new File(files, "Lossless.dll").isFile()) {
                         status("Import your own Lossless.dll first.");
@@ -601,7 +607,7 @@ public class Launcher extends Activity {
         for (int n = 0; n < tabs.length; n++) {
             final int index = n;
             Button item = new Button(this, null, android.R.attr.borderlessButtonStyle);
-            item.setText(tabs[n]); item.setAllCaps(false); item.setTextSize(11);
+            item.setText(AppLanguage.text(tabs[n])); item.setAllCaps(false); item.setTextSize(11);
             ExpeditionIcon navIcon=new ExpeditionIcon(n,n==0?accent:muted);navIcon.setBounds(0,0,dp(22),dp(22));
             item.setCompoundDrawables(null,navIcon,null,null);item.setCompoundDrawablePadding(dp(3));
             item.setMinWidth(0); item.setMinimumWidth(0); item.setPadding(0, dp(12), 0, dp(12));
@@ -630,6 +636,12 @@ public class Launcher extends Activity {
 
     private final class ExpeditionDialog extends android.app.AlertDialog.Builder {
         ExpeditionDialog(android.content.Context context) { super(context); }
+        @Override public android.app.AlertDialog.Builder setSingleChoiceItems(CharSequence[] labels,int checked,android.content.DialogInterface.OnClickListener listener) {
+            CharSequence[] translated=new CharSequence[labels.length];for(int i=0;i<labels.length;i++)translated[i]=AppLanguage.text(labels[i]);
+            return super.setSingleChoiceItems(translated,checked,listener);
+        }
+        @Override public android.app.AlertDialog.Builder setNegativeButton(CharSequence label,android.content.DialogInterface.OnClickListener listener) {return super.setNegativeButton(AppLanguage.text(label),listener);}
+        @Override public android.app.AlertDialog.Builder setPositiveButton(CharSequence label,android.content.DialogInterface.OnClickListener listener) {return super.setPositiveButton(AppLanguage.text(label),listener);}
         @Override public android.app.AlertDialog show() {
             android.app.AlertDialog dialog = super.show();
             if (dialog.getWindow() != null) {
@@ -796,14 +808,14 @@ public class Launcher extends Activity {
         String dir = folder();
         boolean access = Environment.isExternalStorageManager();
         accessButton.setVisibility(access ? View.GONE : View.VISIBLE);
-        folderText.setText(dir.isEmpty() ? "(none)" : dir);
+        folderText.setText(AppLanguage.text(dir.isEmpty() ? "(none)" : dir));
         String problem = access ? problems(dir) : "Allow the app to read all files first (the game's folder is opened by path).";
         if (problem == null) {
             // (APP_VER is the base game's even when the folder has the patched executables.)
             String title = sfoValue(dir, "TITLE"), id = sfoValue(dir, "TITLE_ID");
-            folderInfo.setText((title != null ? title : "?") + "  " + (id != null ? id : "?"));
+            folderInfo.setText(AppLanguage.text((title != null ? title : "?") + "  " + (id != null ? id : "?")));
         } else {
-            folderInfo.setText(problem);
+            folderInfo.setText(AppLanguage.text(problem));
         }
         boolean ready = problem == null && prepared();
         String presets = "";
@@ -818,14 +830,14 @@ public class Launcher extends Activity {
                       + " (another version of the executables): " + String.join(", ", not)
                       + " run at 1920x1080 without patches.";
         }
-        prepareInfo.setText(problem != null ? "-" : ready ? "Prepared for this folder." + presets
-                                                     : "Not prepared yet: the app makes the loader's files from the game (a few seconds).");
+        prepareInfo.setText(AppLanguage.text(problem != null ? "-" : ready ? "Prepared for this folder." + presets
+                                                     : "Not prepared yet: the app makes the loader's files from the game (a few seconds)."));
         prepareButton.setEnabled(problem == null && !busy);
         playButton.setEnabled(problem == null && !busy);
     }
 
     private void status(String s) {
-        runOnUiThread(() -> statusText.setText(s));
+        runOnUiThread(() -> statusText.setText(AppLanguage.text(s)));
     }
 
     // ---- preparing ----
@@ -855,7 +867,7 @@ public class Launcher extends Activity {
             final String failure = error;
             runOnUiThread(() -> {
                 busy = false;
-                statusText.setText(failure == null ? "The game's files are ready." : "Preparing failed: " + failure);
+                statusText.setText(AppLanguage.text(failure == null ? "The game's files are ready." : "Preparing failed: " + failure));
                 refresh();
                 if (failure == null && thenPlay) play();
             });
@@ -936,29 +948,29 @@ public class Launcher extends Activity {
     }
 
     private String upscaleLabel(int mode) {
-        return mode==1?"FSR Native AA":mode==2?"FSR Quality":mode>=5?"FSR Ultra Performance":mode>=3?"FSR Performance":"Off";
+        return UpscalePreset.label(mode);
     }
 
     private void effectSwitch(LinearLayout parent,String title,String subtitle,String key) {
         LinearLayout line=new LinearLayout(this);line.setGravity(android.view.Gravity.CENTER_VERTICAL);line.setPadding(0,dp(9),0,dp(9));
         LinearLayout labels=new LinearLayout(this);labels.setOrientation(LinearLayout.VERTICAL);
         TextView name=text(labels,title,15,true);name.setPadding(0,0,0,0);
-        TextView detail=note(labels,subtitle);detail.setTextSize(12);detail.setPadding(0,dp(2),0,0);
+
         line.addView(labels,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
         Button state=new Button(this,null,android.R.attr.borderlessButtonStyle);
         state.setAllCaps(false);state.setTextSize(13);state.setMinWidth(0);state.setMinimumWidth(0);
         state.setPadding(dp(8),0,dp(8),0);
         Runnable update=()->{
             boolean enabled=!prefs.getBoolean(key,false);
-            state.setText(enabled?"Enabled":"Disabled");
-            state.setContentDescription(title+": "+(enabled?"Enabled in game":"Disabled in game"));
+            state.setText(AppLanguage.text(enabled?"Enabled":"Disabled"));
+            state.setContentDescription(AppLanguage.text(title)+": "+AppLanguage.text(enabled?"Enabled in game":"Disabled in game"));
             state.setTextColor(enabled?accent:0xFFB0AAA0);
             GradientDrawable bg=new GradientDrawable();bg.setCornerRadius(dp(10));
             bg.setColor(enabled?0x333D3321:0xFF222522);bg.setStroke(dp(1),enabled?accent:0xFF555B54);state.setBackground(bg);
         };
         state.setOnClickListener(v->{
             String[] choices={"Enabled in game","Disabled in game"};
-            new ExpeditionDialog(this).setTitle(title).setSingleChoiceItems(choices,prefs.getBoolean(key,false)?1:0,(dialog,which)->{
+            new ExpeditionDialog(this).setTitle(AppLanguage.text(title)).setSingleChoiceItems(choices,prefs.getBoolean(key,false)?1:0,(dialog,which)->{
                 prefs.edit().putBoolean(key,which==1).apply();update.run();dialog.dismiss();
             }).setNegativeButton("Cancel",null).show();
         });
@@ -971,8 +983,8 @@ public class Launcher extends Activity {
         LinearLayout shadows=card(parent,"SHADOWS");
         Button shadowChoice=button(shadows,"Shadow quality · "+new String[]{"Original","Reduced","Minimum"}[prefs.getInt("shadow_cascades",0)],null);
         shadowChoice.setOnClickListener(v->{String[] labels={"Original","Reduced · 2 cascades","Minimum · 1 cascade"};
-            new ExpeditionDialog(this).setTitle("Shadow quality").setSingleChoiceItems(labels,prefs.getInt("shadow_cascades",0),(dialog,which)->{
-                prefs.edit().putInt("shadow_cascades",which).apply();shadowChoice.setText("Shadow quality · "+labels[which]);dialog.dismiss();
+            new ExpeditionDialog(this).setTitle(AppLanguage.text("Shadow quality")).setSingleChoiceItems(labels,prefs.getInt("shadow_cascades",0),(dialog,which)->{
+                prefs.edit().putInt("shadow_cascades",which).apply();shadowChoice.setText(AppLanguage.text("Shadow quality · "+labels[which]));dialog.dismiss();
             }).setNegativeButton("Cancel",null).show();
         });
         LinearLayout lighting=card(parent,"LIGHTING & ATMOSPHERE");
@@ -1174,7 +1186,7 @@ public class Launcher extends Activity {
         prefs.edit().putString("extra_env", extraEnv.getText().toString()).apply();
         String dir = folder(), d = files.getAbsolutePath();
         int upscale=prefs.getInt("mobile_upscale",0);
-        String[] size = (upscale==1 ? "1920x1080" : upscale==2 ? "1280x720" : upscale>=5 ? "640x360" : upscale>=3 ? "960x540" : chosenResolution()).split("x");
+        String[] size = UpscalePreset.input(upscale,chosenResolution()).split("x");
         int width = Integer.parseInt(size[0]), height = Integer.parseInt(size[1]);
         boolean below1080 = height < 1080;
         new File(files, "patches").mkdirs();
@@ -1209,9 +1221,9 @@ public class Launcher extends Activity {
             if (g[0].equals(prefs.getString("selected_game", "u1"))) writeText(new File(files, "args.txt"), args.toString());
             // The movie decoder's picture size goes with a size below 1080p (port 0015).
             env[i] = preset != null && below1080 ? "BB_VDEC_CONTENT=" + width + "x" + height + "\n" : "-BB_VDEC_CONTENT\n";
-            if(upscale>1 && made!=null)env[i]+="BB_RENDER_RES="+width+"x"+height+"\nBB_OUTPUT_RES=1920x1080\n";
+            if(upscale>0 && made!=null)env[i]+="BB_RENDER_RES="+width+"x"+height+"\nBB_OUTPUT_RES="+UpscalePreset.OUTPUT+"\n";
             else env[i]+="-BB_RENDER_RES\n-BB_OUTPUT_RES\n";
-            if(upscale>1 && made==null)env[i]+="BB_UPSCALER=none\n";
+            if(upscale>0 && made==null)env[i]+="BB_UPSCALER=none\n";
             // U2's aiming autofocus reads a 1x1 render result on the CPU: copied back for U2
             // only, as upstream does (issue #7; it costs elsewhere). More environment overrides.
             if (g[0].equals("u2") && !extraEnv.getText().toString().contains("BB_TINY_READBACK"))
@@ -1219,7 +1231,7 @@ public class Launcher extends Activity {
         }
         StringBuilder e = new StringBuilder();
         e.append("BB_MOBILE_UPSCALE=0\n");
-        if(upscale>0){iniPut("upscaler","fsr3");iniPut("preset",Integer.toString(upscale-1));}
+        if(upscale>0){iniPut("output_res","1280x720");iniPut("upscaler","fsr3");iniPut("preset",Integer.toString(upscale-1));}
         else {iniPut("preset","0");iniPut("upscaler","off");}
         e.append("# Written by the launcher on every start; edit the settings there.\n");
         e.append("BB_FULLSCREEN=1\nBB_FPS_LOG=1\nBB_MIDFRAME_FLUSH=10\nBB_DEFERRED_SUBMIT=1\nBB_SKIN_BATCH=1\n");
@@ -1341,7 +1353,7 @@ public class Launcher extends Activity {
         String current = prefs.getString("driver", "auto");
         for (String[] o : options) {
             RadioButton b = new RadioButton(this);
-            b.setText(o[1]);
+            b.setText(AppLanguage.text(o[1]));
             b.setId(View.generateViewId());
             b.setTag(o[0]);
             drivers.addView(b);
@@ -1424,7 +1436,7 @@ public class Launcher extends Activity {
                 status(errors.toString());
                 CharSequence[] items = new CharSequence[found.size()];
                 for (int i = 0; i < items.length; i++) items[i] = found.get(i)[0];
-                new ExpeditionDialog(this).setTitle("Download a driver package")
+                new ExpeditionDialog(this).setTitle(AppLanguage.text("Download a driver package"))
                     .setItems(items, (d, which) -> fetchDriver(found.get(which)[1], found.get(which)[2]))
                     .setNegativeButton("Cancel", null).show();
             });
@@ -1452,8 +1464,8 @@ public class Launcher extends Activity {
             return;
         }
         File dir = new File(driversDir(), d.substring(4));
-        new ExpeditionDialog(this).setTitle("Remove the driver package")
-            .setMessage("Remove " + dir.getName() + "?")
+        new ExpeditionDialog(this).setTitle(AppLanguage.text("Remove the driver package"))
+            .setMessage(AppLanguage.text("Remove " + dir.getName() + "?"))
             .setPositiveButton("Remove", (dl, w) -> {
                 deleteTree(dir);
                 prefs.edit().putString("driver", new File("/dev/kgsl-3d0").exists() ? "turnip" : "system").apply();
@@ -1526,8 +1538,8 @@ public class Launcher extends Activity {
         }
         java.util.Arrays.sort(list);
         File newest = list[list.length - 1];
-        new ExpeditionDialog(this).setTitle("Restore saves")
-            .setMessage("Replace the app's saves with " + newest.getName() + "? The current ones are backed up first.")
+        new ExpeditionDialog(this).setTitle(AppLanguage.text("Restore saves"))
+            .setMessage(AppLanguage.text("Replace the app's saves with " + newest.getName() + "? The current ones are backed up first."))
             .setPositiveButton("Restore", (d, w) -> {
                 File user = new File(files, "user");
                 if (user.isDirectory() && backupSaves() == null) {
@@ -1571,13 +1583,13 @@ public class Launcher extends Activity {
         String text = readAsset("licenses.txt");
         ScrollView scroll = new ScrollView(this);
         TextView t = new TextView(this);
-        t.setText(text.isEmpty() ? "This build has no license file (build.sh PUBLIC=1 with licenses.sh's output)." : text);
+        t.setText(AppLanguage.text(text.isEmpty() ? "This build has no license file (build.sh PUBLIC=1 with licenses.sh's output)." : text));
         t.setTextSize(12);
         t.setTypeface(Typeface.MONOSPACE);
         t.setPadding(dp(16), dp(16), dp(16), dp(16));
         t.setTextIsSelectable(true);
         scroll.addView(t);
-        new ExpeditionDialog(this).setTitle("Licenses").setView(scroll)
+        new ExpeditionDialog(this).setTitle(AppLanguage.text("Licenses")).setView(scroll)
             .setPositiveButton("Close", null).show();
     }
 

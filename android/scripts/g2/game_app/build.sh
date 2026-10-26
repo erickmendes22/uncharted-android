@@ -33,6 +33,7 @@ if [ "$PUBLIC" = 1 ]; then
 fi
 rm -rf "$W"; mkdir -p "$W/classes" "$W/lib/arm64-v8a" "$W/assets"
 cp -r "$HERE/../recipes" "$W/assets/"
+cp "$HERE/../../../localization/strings.json" "$W/assets/translations.json"
 mkdir -p "$W/res/drawable"
 if [ -n "$ASSETS_DIR" ]; then cp -r "$ASSETS_DIR"/. "$W/assets/"; fi
 if [ ! -f "$W/assets/art/collection.png" ]; then bash "$HERE/../../fetch_art.sh" "$W/assets"; fi

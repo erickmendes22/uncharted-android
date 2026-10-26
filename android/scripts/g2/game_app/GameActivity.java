@@ -24,6 +24,7 @@ import org.libsdl.app.SDLActivity;
  *  arguments (--guest-argv). Environment: files/env.txt, then env-u1.txt, env-u2.txt or env-u3.txt
  *  for the game started (KEY=VALUE per line; -KEY removes KEY). */
 public class GameActivity extends SDLActivity {
+    @Override protected void attachBaseContext(android.content.Context base) {super.attachBaseContext(AppLanguage.attach(base));}
     private final List<String> bootArgs = new ArrayList<>();
 
     public void exportLogToFolder() { runOnUiThread(()->LogExport.pick(this)); }
@@ -136,6 +137,7 @@ public class GameActivity extends SDLActivity {
             Os.setenv("HOME", d + "/home", true);
             Os.setenv("XDG_DATA_HOME", d + "/home/.local/share", true);
             Os.setenv("BB_CONFIG", d + "/bbport.ini", true);
+            Os.setenv("BB_UI_LANGUAGE",AppLanguage.code(),true);
             // The collection's shaders the upscaler hooks (docs/upscaler.md; run.py sets the same
             // on a PC): the camera velocity pass, the first compute after the lit scene, the
             // first draw into the display buffer. Without them the port never finds the scene and

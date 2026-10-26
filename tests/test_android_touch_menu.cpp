@@ -46,10 +46,10 @@ int main(){
     settings.touch_pad_scale=1;
     for(const auto size:{ImVec2(1920,1080),ImVec2(2400,1080),ImVec2(1920,1200)}) {
         frame(size.x,size.y);
-        e=finger(SDL_EVENT_FINGER_DOWN,(size.x-.17f*size.y)/size.x,.075f);
+        e=finger(SDL_EVENT_FINGER_DOWN,(size.x-.37f*size.y)/size.x,.14f);
         BbOverlay::TouchPadEvent(e);frame(size.x,size.y);assert(last_buttons&0x800); // R1
         BbOverlay::TouchPadReset();
-        e=finger(SDL_EVENT_FINGER_DOWN,.22f*size.y/size.x,.53f);
+        e=finger(SDL_EVENT_FINGER_DOWN,.28f*size.y/size.x,.505f);
         BbOverlay::TouchPadEvent(e);frame(size.x,size.y);assert(last_buttons&0x10); // D-pad up
         BbOverlay::TouchPadReset();
         frame(size.x,size.y);

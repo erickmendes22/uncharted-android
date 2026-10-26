@@ -23,7 +23,7 @@ final class PkgInstaller {
   update=replacing;
   activity.startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),replacing?UPDATE:BASE);
  }
- private static String text(String en,String pt){return en;}
+ private static String text(String en,String pt){return AppLanguage.text(en);}
  private File game(){return new File(activity.getSharedPreferences("launcher",0).getString("game_dir",""));}
  boolean result(int request,int result,Intent data){
   if(request!=BASE&&request!=UPDATE&&request!=DESTINATION)return false;
@@ -160,6 +160,14 @@ final class PkgInstaller {
   }
   if(!directory){try(android.database.Cursor c=activity.getContentResolver().query(uri,new String[]{"_data"},null,null,null)){if(c!=null&&c.moveToFirst())path=c.getString(0);}catch(Exception ignored){}
    if(path==null)try{String id=DocumentsContract.getDocumentId(uri);if(id.startsWith("raw:"))path=id.substring(4);}catch(Exception ignored){}
+  }
+  // Android Downloads/media providers may omit _data even for a local file.
+  // Resolve the user's opened descriptor without copying a multi-GB PKG into app storage.
+  if(path==null&&!directory){
+   try(android.os.ParcelFileDescriptor fd=activity.getContentResolver().openFileDescriptor(uri,"r")){
+    if(fd!=null){String resolved=android.system.Os.readlink("/proc/self/fd/"+fd.getFd());
+     File local=new File(resolved);if(local.isFile()&&local.canRead())return local.getCanonicalFile();}
+   }catch(Exception ignored){}
   }
   if(path!=null){File file=new File(path).getCanonicalFile();if(file.toPath().startsWith(new File("/storage").getCanonicalFile().toPath()))return file;}
   throw new IOException(text("Select a local folder or PKG. Cloud files do not support direct installation.", "Selecione uma pasta ou PKG local. Arquivos em nuvem não permitem instalação direta."));

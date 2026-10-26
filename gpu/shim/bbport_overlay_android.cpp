@@ -5,6 +5,7 @@
 // only what applies on Android (no DLSS, FSR 4 or XeSS). Opened with a swipe in from the right
 // edge, L3+R3 or Insert; closed with a tap outside it, the B button or its Close button.
 
+#include "bbport_locale.h"
 #include <algorithm>
 #include <atomic>
 #include <cfloat>
@@ -70,7 +71,7 @@ bool Segmented(const char* id, int& value, const char* const* labels, int count,
             ImGui::PushStyleColor(ImGuiCol_Button, style.Colors[ImGuiCol_ButtonActive]);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, style.Colors[ImGuiCol_ButtonActive]);
         }
-        if (ImGui::Button(labels[i], ImVec2(width, 0.0f)) && !selected) {
+        if (ImGui::Button(BbLocale::Text(labels[i]), ImVec2(width, 0.0f)) && !selected) {
             value = i;
             changed = true;
         }
@@ -86,12 +87,12 @@ bool Segmented(const char* id, int& value, const char* const* labels, int count,
 
 void Section(const char* title) {
     ImGui::Spacing();
-    ImGui::SeparatorText(title);
+    ImGui::SeparatorText(BbLocale::Text(title));
 }
 
 void Toggle(const char* label, std::atomic<bool>& value) {
     bool v = value.load();
-    if (ImGui::Checkbox(label, &v)) {
+    if (ImGui::Checkbox(BbLocale::Text(label), &v)) {
         value.store(v);
         Changed();
     }
@@ -100,7 +101,7 @@ void Toggle(const char* label, std::atomic<bool>& value) {
 void Slider(const char* label, std::atomic<float>& value, float lo, float hi) {
     float v = value.load();
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::SliderFloat(label, &v, lo, hi, "%.2f")) {
+    if (ImGui::SliderFloat(BbLocale::Text(label), &v, lo, hi, "%.2f")) {
         value.store(v);
         Changed();
     }
@@ -108,7 +109,7 @@ void Slider(const char* label, std::atomic<float>& value, float lo, float hi) {
 
 void Note(const char* text) {
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-    ImGui::TextWrapped("%s", text);
+    ImGui::TextWrapped("%s", BbLocale::Text(text));
     ImGui::PopStyleColor();
 }
 
@@ -152,11 +153,11 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
     if (ImGui::Begin("##android_menu", nullptr, flags)) {
         ImGui::TextColored(ImVec4(.88f,.77f,.53f,1),"UNCHARTED | DAEDALUS");
         const float action_width=(ImGui::GetContentRegionAvail().x-ImGui::GetStyle().ItemSpacing.x*2)/3;
-        if(ImGui::Button("Resume",ImVec2(action_width,0)))keep_open=false;
+        if(ImGui::Button(BbLocale::Text("Resume"),ImVec2(action_width,0)))keep_open=false;
         ImGui::SameLine();
-        if(ImGui::Button("Export log",ImVec2(action_width,0)))runtime_mobile_action(0);
+        if(ImGui::Button(BbLocale::Text("Export log"),ImVec2(action_width,0)))runtime_mobile_action(0);
         ImGui::SameLine();
-        if(ImGui::Button("Exit game",ImVec2(action_width,0))){BbSettings::Save();runtime_mobile_action(1);}
+        if(ImGui::Button(BbLocale::Text("Exit game"),ImVec2(action_width,0))){BbSettings::Save();runtime_mobile_action(1);}
         ImGui::Separator();
         ImGui::BeginChild("settings-scroll",ImVec2(0,0),false);
         if (const float travel = pending_scroll.exchange(0.0f); travel != 0.0f)
@@ -180,9 +181,9 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
         const int out_w = BbSettings::OutputWidths[s.output_res];
         const int out_h = BbSettings::OutputHeights[s.output_res];
         const bool startup_scaled = std::getenv("BB_RENDER_RES") && std::getenv("BB_RENDER_RES")[0];
-        ImGui::TextDisabled("Game rendered at %d x %d%s", scene_w, scene_h,
+        ImGui::TextDisabled(BbLocale::Text("Game rendered at %d x %d%s"), scene_w, scene_h,
                             seen ? "" : " (its display size; no 3D scene met yet)");
-        ImGui::TextDisabled("Shown at %d x %d", out_w, out_h);
+        ImGui::TextDisabled(BbLocale::Text("Shown at %d x %d"), startup_scaled ? 1280 : out_w, startup_scaled ? 720 : out_h);
 
         Section("Upscaling");
         static const char* upscalers[] = {"Off", "FSR 3.1", "TAA"};
@@ -200,8 +201,8 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
         if (s.upscaler == BbSettings::UpscalerOff) {
             Note("Off: the game's own anti-aliasing");
         } else {
-            if(startup_scaled)ImGui::TextDisabled("FSR 3.1: %d x %d -> 1920 x 1080",scene_w,scene_h);
-            else ImGui::TextDisabled("Temporal AA at %d x %d",scene_w,scene_h);
+            if(startup_scaled)ImGui::TextDisabled(BbLocale::Text("FSR 3.1: %d x %d -> 1280 x 720"),scene_w,scene_h);
+            else ImGui::TextDisabled(BbLocale::Text("Temporal AA at %d x %d"),scene_w,scene_h);
         }
         if (const char* problem = s.upscaler_problem.load();
             problem && s.upscaler == BbSettings::UpscalerFsr3) {
@@ -231,7 +232,7 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
             ImGui::TextWrapped("%s", problem);
             ImGui::PopStyleColor();
         } else if (frame_gen) {
-            ImGui::TextDisabled("One generated frame between two of the game's");
+            ImGui::TextDisabled("%s",BbLocale::Text("One generated frame between two of the game's"));
         }
 
         Section("Frame rate limit");
@@ -248,10 +249,9 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
             Store(s.fps_limit, limit_values[limit]);
         }
         if (effective == 0) {
-            ImGui::TextDisabled("No limit; above 120 FPS the game's movement timing breaks "
-                                "(screen: %u Hz)", BbDisplayRefreshHz());
+            ImGui::TextDisabled(BbLocale::Text("No limit; above 120 FPS the game's movement timing breaks (screen: %u Hz)"), BbDisplayRefreshHz());
         } else {
-            ImGui::TextDisabled("%d FPS at most (screen: %u Hz)", effective, BbDisplayRefreshHz());
+            ImGui::TextDisabled(BbLocale::Text("%d FPS at most (screen: %u Hz)"), effective, BbDisplayRefreshHz());
         }
 
         Section("On-screen gamepad");
@@ -265,25 +265,25 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
         Note("Auto: shown while no gamepad is connected. Left half: a stick under the finger; "
              "right half: drag to look around; the buttons at the edges.");
         ImGui::BeginDisabled(s.touch_pad == 0);
-        ImGui::TextDisabled("Opacity");
+        ImGui::TextDisabled("%s",BbLocale::Text("Opacity"));
         Slider("##touch_alpha", s.touch_pad_alpha, 0.1f, 1.0f);
-        ImGui::TextDisabled("Size");
+        ImGui::TextDisabled("%s",BbLocale::Text("Size"));
         Slider("##touch_scale", s.touch_pad_scale, 0.6f, 1.6f);
-        ImGui::TextDisabled("Camera drag sensitivity");
+        ImGui::TextDisabled("%s",BbLocale::Text("Camera drag sensitivity"));
         Slider("##touch_look", s.touch_pad_look, 0.25f, 4.0f);
         ImGui::EndDisabled();
 
         ImGui::Spacing();
-        if (ImGui::CollapsingHeader("Advanced")) {
+        if (ImGui::CollapsingHeader(BbLocale::Text("Advanced"))) {
             Toggle("Sub-pixel jitter", s.jitter);
             Toggle("Character motion vectors", s.object_motion);
             Toggle("Reactive mask", s.reactive);
             ImGui::BeginDisabled(!s.reactive);
-            ImGui::TextDisabled("Scale");
+            ImGui::TextDisabled("%s",BbLocale::Text("Scale"));
             Slider("##reactive_scale", s.reactive_scale, 0.0f, 4.0f);
-            ImGui::TextDisabled("Threshold");
+            ImGui::TextDisabled("%s",BbLocale::Text("Threshold"));
             Slider("##reactive_threshold", s.reactive_threshold, 0.0f, 1.0f);
-            ImGui::TextDisabled("Maximum");
+            ImGui::TextDisabled("%s",BbLocale::Text("Maximum"));
             Slider("##reactive_max", s.reactive_max, 0.0f, 1.0f);
             ImGui::EndDisabled();
         }
@@ -295,17 +295,17 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.75f, 0.3f, 1.0f));
             ImGui::TextWrapped("Some of these take effect after a restart.");
             ImGui::PopStyleColor();
-            if (ImGui::Button("Apply and restart the game", ImVec2(-FLT_MIN, 0.0f))) {
+            if (ImGui::Button(BbLocale::Text("Apply and restart the game"), ImVec2(-FLT_MIN, 0.0f))) {
                 BbSettings::Save();
                 runtime_restart();
             }
         }
 
         ImGui::Spacing();
-        if (ImGui::Button("Close##bottom", ImVec2(-FLT_MIN, 0.0f))) {
+        if (ImGui::Button(BbLocale::Text("Close##bottom"), ImVec2(-FLT_MIN, 0.0f))) {
             keep_open = false;
         }
-        ImGui::TextDisabled("Menu button, right-edge swipe or L3+R3");
+        ImGui::TextDisabled("%s",BbLocale::Text("Menu button, right-edge swipe or L3+R3"));
         ImGui::EndChild();
     }
     ImGui::End();
