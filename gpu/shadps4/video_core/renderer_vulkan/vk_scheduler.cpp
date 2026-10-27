@@ -18,6 +18,7 @@
 
 #include "bbport_copy.h"
 #include "bbport_owner_wait.h"
+#include "video_core/landing_gate.h"
 #include "video_core/renderer_vulkan/vk_gpu_profiler.h"
 #include "bbport_toggles.h"
 #include "common/assert.h"
@@ -307,18 +308,28 @@ std::unique_ptr<RecordChunk> Scheduler::AcquireChunk() {
     return chunk;
 }
 
-void Scheduler::SignalAfterHostCopies(std::function<void()> signal) {
+void Scheduler::SignalAfterHostCopies(std::function<void()> signal, u64 landing_seq) {
     if (!IsRecordingDeferred()) {
         WaitHostCopies();
+        if (VideoCore::LandingGate::Active()) {
+            WaitDeferredSignals();
+        }
+        VideoCore::LandingGate::Wait(landing_seq);
         signal();
         return;
     }
     BbCopy::FlushBatch();
     deferred_signals_issued.fetch_add(1, std::memory_order_relaxed);
-    Record([signal = std::move(signal), done = deferred_signals_done](vk::CommandBuffer) mutable {
-        BbCopy::AfterCopies([signal = std::move(signal), done = std::move(done)] {
-            signal();
-            done->fetch_add(1, std::memory_order_release);
+    Record([signal = std::move(signal), done = deferred_signals_done,
+            landing_seq](vk::CommandBuffer) mutable {
+        BbCopy::AfterCopies([signal = std::move(signal), done = std::move(done), landing_seq] {
+            auto fire = [signal = std::move(signal), done = std::move(done)] {
+                signal();
+                done->fetch_add(1, std::memory_order_release);
+            };
+            // A signal behind deferred raycaster copies waits for them on the landing thread:
+            // this thread must not block (submissions wait for the copy threads).
+            VideoCore::LandingGate::Run(landing_seq, std::move(fire));
         });
     });
     KickRecording(true);
@@ -334,6 +345,7 @@ void Scheduler::WaitDeferredSignals() {
     const BbOwnerWait::Scope owner_waits; // g2-arm64: the signals may need the owner
     KickRecording(true);
     while (deferred_signals_done->load(std::memory_order_acquire) < issued) {
+        if (VideoCore::LandingGate::Stopped()) break;
         // Helps the copy threads the signals wait for.
         BbCopy::WaitAsync();
         std::this_thread::yield();

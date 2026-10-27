@@ -31,6 +31,7 @@
 #include "video_core/amdgpu/pm4_cmds.h"
 #include "video_core/renderdoc.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
+#include "video_core/landing_gate.h"
 
 namespace AmdGpu {
 
@@ -503,6 +504,7 @@ void Liverpool::Process(std::stop_token stoken) {
             // waits for them here, BB_DEFERRED_SUBMIT).
             rasterizer->WaitHostCopies();
             rasterizer->WaitDeferredSignals();
+            VideoCore::LandingGate::Wait(VideoCore::LandingGate::Pending());
         }
         if (frame_end) {
             IdleStatsFrame(g_idle.submit_done_ns.load(std::memory_order_relaxed), t_decoded,
@@ -627,6 +629,7 @@ void SignalEop(const PM4CmdEventWriteEop& eop) {
 // bbport: end-of-pipe/-shader events run in order with the draws (Rasterizer::RunInOrder: on
 // the draw recording thread when the draw pipeline is in use).
 void RunEventWriteEop(Vulkan::Rasterizer& rasterizer, const u8* data) {
+    const u64 landing_seq = VideoCore::LandingGate::Pending();
     const auto eop = reinterpret_cast<const EopTask*>(data)->eop;
     const u64 seq = reinterpret_cast<const EopTask*>(data)->seq;
     rasterizer.ProcessDownloadImages();
@@ -657,9 +660,11 @@ void RunEventWriteEop(Vulkan::Rasterizer& rasterizer, const u8* data) {
         return env && env[0] == '1';
     }();
     if (async_fences && !BbToggle::Disabled(BbToggle::AsyncFences)) {
-        BbCopy::AfterCopies([eop, seq] {
-            SignalEop(eop);
-            FenceWritten(seq);
+        BbCopy::AfterCopies([eop, seq, landing_seq] {
+            VideoCore::LandingGate::Run(landing_seq, [eop, seq] {
+                SignalEop(eop);
+                FenceWritten(seq);
+            });
         });
     } else if (Vulkan::DrawPipe::OnStageB() && !BbToggle::Disabled(BbToggle::RecorderFences)) {
         // The draw recording thread does not wait: the Vulkan recording thread signals the
@@ -667,11 +672,12 @@ void RunEventWriteEop(Vulkan::Rasterizer& rasterizer, const u8* data) {
         rasterizer.SignalAfterHostCopies([eop, seq] {
             SignalEop(eop);
             FenceWritten(seq);
-        });
+        }, landing_seq);
     } else {
         // Labels are written in order: not before the ones deferred to the recording thread.
         rasterizer.WaitHostCopies();
         rasterizer.WaitDeferredSignals();
+        VideoCore::LandingGate::Wait(VideoCore::LandingGate::Pending());
         SignalEop(eop);
         FenceWritten(seq);
     }
@@ -694,6 +700,7 @@ void SignalAscReleaseMem(const AscReleaseMem& release) {
 }
 
 void RunAscReleaseMem(Vulkan::Rasterizer& rasterizer, const u8* data) {
+    const u64 landing_seq = VideoCore::LandingGate::Pending();
     const auto release = *reinterpret_cast<const AscReleaseMem*>(data);
     rasterizer.ProcessDownloadImages();
     rasterizer.GetBufferCache().CheckStableBindings();
@@ -703,10 +710,11 @@ void RunAscReleaseMem(Vulkan::Rasterizer& rasterizer, const u8* data) {
         rasterizer.SignalAfterHostCopies([release] {
             SignalAscReleaseMem(release);
             FenceWritten(release.seq);
-        });
+        }, landing_seq);
     } else {
         rasterizer.WaitHostCopies();
         rasterizer.WaitDeferredSignals();
+        VideoCore::LandingGate::Wait(VideoCore::LandingGate::Pending());
         SignalAscReleaseMem(release);
         FenceWritten(release.seq);
     }
@@ -795,9 +803,20 @@ void NoteTaskStep(u32 step, u64 begin_ns, u64 end_ns) {
 }
 
 void SignalFlip(Vulkan::Rasterizer& rasterizer, const u8*) {
+    const u64 landing_seq = VideoCore::LandingGate::Pending();
+    if (VideoCore::LandingGate::Active() && Vulkan::DrawPipe::OnStageB() &&
+        !BbToggle::Disabled(BbToggle::RecorderFences)) {
+        rasterizer.OnGuestFlip();
+        rasterizer.GetBufferCache().CheckStableBindings();
+        rasterizer.CheckConstants();
+        rasterizer.SignalAfterHostCopies(
+            [] { Platform::IrqC::Instance()->Signal(Platform::InterruptId::GfxFlip); }, landing_seq);
+        return;
+    }
     const bool steps = TaskStepsOn();
     const u64 t0 = steps ? SteadyNs() : 0;
     rasterizer.WaitDeferredSignals();
+    VideoCore::LandingGate::Wait(VideoCore::LandingGate::Pending());
     const u64 t1 = steps ? SteadyNs() : 0;
     rasterizer.OnGuestFlip();
     rasterizer.GetBufferCache().CheckStableBindings();
@@ -830,6 +849,7 @@ void RunWriteData(Vulkan::Rasterizer& rasterizer, const u8* data) {
     rasterizer.WaitHostCopies();
     const u64 t1 = steps ? SteadyNs() : 0;
     rasterizer.WaitDeferredSignals();
+    VideoCore::LandingGate::Wait(VideoCore::LandingGate::Pending());
     const u64 t2 = steps ? SteadyNs() : 0;
     rasterizer.GetBufferCache().CheckStableBindings();
     rasterizer.CheckConstants();
@@ -867,6 +887,7 @@ bool EosDeferred() {
 }
 
 void RunEventWriteEos(Vulkan::Rasterizer& rasterizer, const u8* data) {
+    const u64 landing_seq = VideoCore::LandingGate::Pending();
     const auto& event_eos = reinterpret_cast<const EosTask*>(data)->eos;
     const u64 eos_seq = reinterpret_cast<const EosTask*>(data)->seq;
     if (event_eos.command != PM4CmdEventWriteEos::Command::GdsStore && EosDeferred() &&
@@ -877,12 +898,13 @@ void RunEventWriteEos(Vulkan::Rasterizer& rasterizer, const u8* data) {
         rasterizer.SignalAfterHostCopies([eos = event_eos, eos_seq] {
             SignalEos(eos);
             FenceWritten(eos_seq);
-        });
+        }, landing_seq);
         return;
     }
     // Copies deferred to the recording thread precede writes the guest sees.
     rasterizer.WaitHostCopies();
     rasterizer.WaitDeferredSignals();
+    VideoCore::LandingGate::Wait(VideoCore::LandingGate::Pending());
     rasterizer.ProcessDownloadImages();
     rasterizer.GetBufferCache().CheckStableBindings();
     rasterizer.CheckConstants();
@@ -1344,6 +1366,7 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 rasterizer->DrainDrawPipe(static_cast<u32>(opcode));
                 // They may write guest memory: not before fences deferred earlier.
                 rasterizer->WaitDeferredSignals();
+                VideoCore::LandingGate::Wait(VideoCore::LandingGate::Pending());
             }
             switch (opcode) {
             case PM4ItOpcode::Nop: {
@@ -2279,6 +2302,7 @@ Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, u32 vqid) {
             if (rasterizer) {
                 rasterizer->WaitHostCopies();
                 rasterizer->WaitDeferredSignals();
+                VideoCore::LandingGate::Wait(VideoCore::LandingGate::Pending());
             }
             const auto* write_data = reinterpret_cast<const PM4CmdWriteData*>(header);
             ASSERT(write_data->dst_sel.Value() == 2 || write_data->dst_sel.Value() == 5);
@@ -2343,6 +2367,7 @@ Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, u32 vqid) {
             if (rasterizer) {
                 rasterizer->WaitHostCopies();
                 rasterizer->WaitDeferredSignals();
+                VideoCore::LandingGate::Wait(VideoCore::LandingGate::Pending());
                 rasterizer->GetBufferCache().CheckStableBindings();
                 rasterizer->CheckConstants();
             }

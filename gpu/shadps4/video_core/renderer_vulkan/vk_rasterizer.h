@@ -145,8 +145,8 @@ public:
         scheduler.WaitDeferredSignals();
     }
     /// Runs `signal` after the guest memory copies issued so far, without waiting here.
-    void SignalAfterHostCopies(std::function<void()> signal) {
-        scheduler.SignalAfterHostCopies(std::move(signal));
+    void SignalAfterHostCopies(std::function<void()> signal, u64 landing_seq = 0) {
+        scheduler.SignalAfterHostCopies(std::move(signal), landing_seq);
     }
     /// The GPU command thread or the draw recording thread (fault handling runs inline there).
     bool IsGpuSideThread() const;

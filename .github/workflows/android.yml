@@ -54,6 +54,7 @@ jobs:
           "$RUNNER_TEMP/guest-fault-test"
       - name: Verify protected file reads and mesh results
         run: |
+          python3 tests/test_landing_order.py
           cc -std=c11 -O2 -Wall -Wextra -Werror -Isrc tests/test_file_protected_read.c -pthread -o "$RUNNER_TEMP/protected-read-test"
           "$RUNNER_TEMP/protected-read-test"
           cc -std=c11 -O2 -Isrc tests/test_file_mods.c -pthread -o "$RUNNER_TEMP/file-mods-test"
@@ -130,13 +131,13 @@ jobs:
           grep -q "versionName='0.2.5'" dist/package.txt
           grep -q "versionCode='100205'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.5-U2-LoadingFix.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.5-U2-AsyncResults.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.5-U2-LoadingFix
+          name: Uncharted-Daedalus-0.2.5-U2-AsyncResults
           path: dist/
           if-no-files-found: error
           retention-days: 30

@@ -36,11 +36,30 @@ the actual source bytes, synchronizing GPU-written sources when needed. GPU-only
 destinations and the 1-dword copy shader keep their existing policy. U1/U3 do not
 enable this mode. BB_GPU_MERGE and global readback policy are not changed.
 
-This base lacks upstream's complete deferred landing/gate mechanism. Consequently
-these U2 64-dword copies drain the draw pipe, and the targeted source read occurs
-on the GPU command thread before later SRT walks. Blocking on the recorder itself
-would risk a self-wait. The targeted synchronization may cost performance; this
-build does not claim the deferred implementation or a measured FPS gain.
+The synchronous build was confirmed by the user to stop the crash, with a U2
+performance regression. Add ordered asynchronous CPU result landing, based on
+upstream's landing gates. Unlike its side-queue reads of a live source arena,
+capture the exact GPU-written source ranges into an owned host-visible snapshot
+on the graphics queue, with a transfer-to-host barrier, before later commands can
+reuse the source. Submit without waiting for completion; a worker waits for the
+snapshot's timeline tick and copies the completed bytes into the CPU record array.
+
+EOP/EOS, ASC release, direct guest writes, flip and idle completion are gated so
+the game never receives completion before those CPU records land. Recording and
+copy threads enqueue completion callbacks rather than blocking GPU submissions.
+Preserve the fork's existing fence sequence tracking and owner-wait scopes.
+
+At most 16 snapshots are pending, each at most 2 MiB including alignment. Capacity
+fallback waits for preceding landings before the original synchronous correction.
+This bounds transient owned staging to 32 MiB, excluding driver allocation granularity.
+U1/U3 do not enable the worker. Global readback mode is unchanged. The protected
+file-read correction is preserved. GPU staging allocation/submission and required
+completion waits still have a cost; a phone test must establish the net FPS gain.
+
+The concurrency regression compiles the actual production landing worker and gates
+with deterministic fake GPU completion. It verifies data-before-label, label order,
+overlap with a later blocked copy, direct waits and shutdown cancellation. Android
+CI compiles the complete Vulkan path and repeats the existing release checks.
 
 Sources:
 - https://github.com/Supermedo/uncharted_pc/issues/695
@@ -51,5 +70,5 @@ Sources:
 No assertion is removed. Resolution/FSR, shaders, CPU clock/FPS limits, audio,
 fonts and the three optional optimization controls remain as before. The earlier
 crash-only live FEX capture remains available if the null-access crash recurs.
-App version/package/signing identity remain 0.2.5. Compilation/regression checks
-do not establish that both observed gameplay crashes are eliminated on a phone.
+App version/package/signing identity remain 0.2.5. The previous synchronous build
+was reported to resolve the crash; the asynchronous build requires a new phone test.

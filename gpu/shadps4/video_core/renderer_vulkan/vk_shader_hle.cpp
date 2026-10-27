@@ -335,10 +335,15 @@ static bool ExecuteScalarCopyHLE(const Shader::Info& info, const AmdGpu::Compute
             const bool mesh_copy=group_size==64 && MeshCopyResultsEnabled();
             const bool copy_sync=sync || (mesh_copy && BbMeshCopy::NeedsGuestResult(
                 64,true,buffer_cache.IsRegionCpuModified(dst.base_address,size)));
-            if (src_written && copy_sync) {
+            bool deferred = false;
+            if (src_written && copy_sync && mesh_copy && !sync) {
+                deferred = buffer_cache.DeferGuestCopy(src.base_address, dst.base_address, size);
+            }
+            if (src_written && copy_sync && !deferred) {
+                buffer_cache.WaitLanding(buffer_cache.PendingLanding());
                 buffer_cache.ReadMemory(src.base_address, size, false, true);
             }
-            if ((!src_written || copy_sync) && memory->IsValidGpuMapping(src.base_address, size) &&
+            if (!deferred && (!src_written || copy_sync) && memory->IsValidGpuMapping(src.base_address, size) &&
                 memory->IsValidGpuMapping(dst.base_address, size)) {
                 memory->TryWriteBacking(reinterpret_cast<void*>(dst.base_address),
                                         reinterpret_cast<const void*>(src.base_address), size);
@@ -407,9 +412,9 @@ bool PipelineGuestMemoryShaderHLE(const Shader::Info& info,
         return false;
     }
     const u64 group_size = info.pgm_hash == SCALAR_COPY64_SHADER_HASH ? 64 : 1;
-    // The CPU result must land before the command thread's next SRT walk.
-    // This path has no landing-gate/deferred-copy integration, so drain only
-    // these U2 copies rather than issuing a blocking read on the recorder.
+    // Registration must follow the preceding dispatches. GPU waiting happens
+    // on the landing worker; guest labels wait for CPU-visible results.
+    // Keep synchronous fallback off the recorder when staging is unavailable.
     if(group_size==64 && MeshCopyResultsEnabled())return false;
     const auto ud = info.UserData();
     if (ud.size() <= 6) {
