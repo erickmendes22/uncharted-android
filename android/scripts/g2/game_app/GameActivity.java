@@ -175,6 +175,12 @@ public class GameActivity extends SDLActivity {
             // The selected locale must reach Orbis, not just Android/ImGui. Set after
             // old per-game environment files so their stale defaults cannot force English.
             Os.setenv("BB_LANGUAGE",Integer.toString(GameLanguage.id(AppLanguage.code(),android.content.res.Resources.getSystem().getConfiguration().getLocales().get(0))),true);
+            try {
+                java.util.Map<String,String> applied=new java.util.LinkedHashMap<>();
+                for(String key:GraphicsProfile.ENV){String value=Os.getenv(key);if(value!=null)applied.put(key,value);}
+                String device=android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+"; Android "+android.os.Build.VERSION.RELEASE+"; SDK "+android.os.Build.VERSION.SDK_INT;
+                GraphicsProfile.write(new File(d,"graphics-session.txt"),GraphicsProfile.snapshot(new File(d),getSharedPreferences("launcher",MODE_PRIVATE).getAll(),applied,device,game));
+            } catch(IOException unavailable){new File(d,"graphics-session.txt").delete();}
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

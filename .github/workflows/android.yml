@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, android-ui-runtime-pending-xml]
+    branches: [main, android-ui-runtime-pending-xml, investigate/s25-graphics-recovery]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
@@ -68,6 +68,8 @@ jobs:
       - name: Verify shared translations and FSR preset mapping
         shell: bash
         run: |
+          javac -d "$RUNNER_TEMP/graphics-profile-test" android/scripts/g2/game_app/GraphicsProfile.java tests/TestGraphicsProfile.java
+          java -cp "$RUNNER_TEMP/graphics-profile-test" dev.unchartedg2.game.TestGraphicsProfile
           python3 android/localization/generate.py
           git diff --exit-code -- gpu/shim/bbport_locale.h
           javac -d "$RUNNER_TEMP/preset-test" android/scripts/g2/game_app/UpscalePreset.java tests/TestUpscalePreset.java android/scripts/g2/game_app/GameLanguage.java tests/TestGameLanguage.java
@@ -117,13 +119,13 @@ jobs:
           grep -q "versionName='0.2.5'" dist/package.txt
           grep -q "versionCode='100205'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.5.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.5-Graphics-Recovery.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.5
+          name: Uncharted-Daedalus-0.2.5-Graphics-Recovery
           path: dist/
           if-no-files-found: error
           retention-days: 30

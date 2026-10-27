@@ -4790,5 +4790,44 @@
     "zh": "尚无游戏日志。",
     "tr": "Henüz oyun günlüğü yok.",
     "pl": "Brak logu gry."
+  },
+  "Restore graphics defaults": {
+    "pt": "Restaurar padrões gráficos",
+    "es": "Restaurar valores gráficos",
+    "fr": "Rétablir les paramètres graphiques",
+    "de": "Grafikeinstellungen zurücksetzen",
+    "it": "Ripristina impostazioni grafiche",
+    "ru": "Сбросить настройки графики",
+    "ja": "グラフィック設定を初期化",
+    "ko": "그래픽 설정 초기화",
+    "zh": "恢复图形默认设置",
+    "tr": "Grafik varsayılanlarını geri yükle",
+    "pl": "Przywróć domyślne ustawienia grafiki"
+  },
+  "Graphics defaults restored. Saves, drivers and controls are preserved.": {
+    "pt": "Padrões gráficos restaurados. Saves, drivers e controles foram preservados.",
+    "es": "Gráficos restaurados. Partidas, controladores y controles conservados.",
+    "fr": "Paramètres graphiques rétablis. Sauvegardes, pilotes et commandes conservés.",
+    "de": "Grafik zurückgesetzt. Spielstände, Treiber und Steuerung bleiben erhalten.",
+    "it": "Grafica ripristinata. Salvataggi, driver e comandi conservati.",
+    "ru": "Графика сброшена. Сохранения, драйверы и управление сохранены.",
+    "ja": "グラフィック設定を初期化しました。セーブ、ドライバー、操作設定は保持されます。",
+    "ko": "그래픽 설정을 초기화했습니다. 저장 데이터, 드라이버 및 조작 설정은 유지됩니다.",
+    "zh": "已恢复图形默认设置。存档、驱动和控制设置已保留。",
+    "tr": "Grafik ayarları sıfırlandı. Kayıtlar, sürücüler ve kontroller korundu.",
+    "pl": "Przywrócono ustawienia grafiki. Zapisy, sterowniki i sterowanie zachowano."
+  },
+  "Graphics reset failed": {
+    "pt": "Falha ao restaurar os gráficos",
+    "es": "Error al restaurar gráficos",
+    "fr": "Échec de la réinitialisation graphique",
+    "de": "Zurücksetzen der Grafik fehlgeschlagen",
+    "it": "Ripristino grafica non riuscito",
+    "ru": "Не удалось сбросить графику",
+    "ja": "グラフィック設定の初期化に失敗しました",
+    "ko": "그래픽 초기화 실패",
+    "zh": "图形设置恢复失败",
+    "tr": "Grafik sıfırlama başarısız",
+    "pl": "Nie udało się zresetować grafiki"
   }
 }

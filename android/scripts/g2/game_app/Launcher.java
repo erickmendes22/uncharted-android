@@ -605,6 +605,19 @@ public class Launcher extends Activity {
         extraEnv.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         extraEnv.setMinLines(2);
         root.addView(extraEnv);
+        button(root,"Restore graphics defaults",v->{
+            try {
+                GraphicsProfile.backup(files,prefs.getAll());
+                GraphicsProfile.resetIni(iniFile());
+                android.content.SharedPreferences.Editor edit=prefs.edit();
+                for(String key:prefs.getAll().keySet())if(GraphicsProfile.graphicsPreference(key))edit.remove(key);
+                String overrides=GraphicsProfile.cleanOverrides(extraEnv.getText().toString());
+                edit.putString("resolution","1280x720").putInt("mobile_upscale",0).putInt("shadow_cascades",0).putString("extra_env",overrides).apply();
+                extraEnv.setText(overrides);
+                buildViews();refresh();
+                status("Graphics defaults restored. Saves, drivers and controls are preserved.");
+            } catch(IOException failure){status(AppLanguage.text("Graphics reset failed")+": "+failure.getMessage());}
+        });
         root = page;
 
 
@@ -1261,7 +1274,7 @@ public class Launcher extends Activity {
         StringBuilder e = new StringBuilder();
         e.append("BB_MOBILE_UPSCALE=0\n");
         if(upscale>0){iniPut("output_res","1280x720");iniPut("upscaler","fsr3");iniPut("preset",Integer.toString(upscale-1));}
-        else {iniPut("preset","0");iniPut("upscaler","off");}
+        else {iniPut("preset","0");iniPut("upscaler","off");iniPut("output_res",UpscalePreset.OUTPUT);}
         e.append("# Written by the launcher on every start; edit the settings there.\n");
         e.append("BB_FULLSCREEN=1\nBB_FPS_LOG=0\nBB_THERMAL_LOG=0\nBB_MIDFRAME_FLUSH=10\nBB_DEFERRED_SUBMIT=1\nBB_SKIN_BATCH=1\n");
         e.append("BB_CS_SPLIT=256:8f067540\nBB_OBJECT_MOTION=0\nBB_THREAD_NICE=0\n");

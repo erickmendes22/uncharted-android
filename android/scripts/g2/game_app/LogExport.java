@@ -47,7 +47,7 @@ final class LogExport {
   android.net.Uri uri=intent.getData();
   new Thread(()->{String message;try(InputStream in=new FileInputStream(source(a));OutputStream out=a.getContentResolver().openOutputStream(uri,"wt")){
    if(out==null)throw new IOException("Cannot open destination");
-   out.write(previousExit(a).getBytes(java.nio.charset.StandardCharsets.UTF_8));byte[] buf=new byte[65536];for(int n;(n=in.read(buf))!=-1;)out.write(buf,0,n);message=AppLanguage.text("Log exported successfully.");
+   out.write(previousExit(a).getBytes(java.nio.charset.StandardCharsets.UTF_8));File profile=new File(source(a).getParentFile(),"graphics-session.txt");if(profile.isFile()&&profile.length()<65536)out.write(java.nio.file.Files.readAllBytes(profile.toPath()));byte[] buf=new byte[65536];for(int n;(n=in.read(buf))!=-1;)out.write(buf,0,n);message=AppLanguage.text("Log exported successfully.");
   }catch(Exception e){message=AppLanguage.text("Log export failed")+": "+e.getMessage();}
   final String text=message;a.runOnUiThread(()->Toast.makeText(a,text,Toast.LENGTH_LONG).show());
   },"uncharted-log-export").start();return true;
