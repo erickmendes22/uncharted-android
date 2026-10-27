@@ -81,7 +81,7 @@ struct HostFunction {
 std::mutex g_functions_mutex;
 std::vector<HostFunction> g_functions; // id = index
 std::atomic<uintptr_t> g_veneer_begin {0}, g_veneer_end {0};
-struct PauseHook { uintptr_t address; GuestHook callback; };
+struct PauseHook { uintptr_t address; GuestPauseHook callback; };
 std::array<PauseHook, 16> g_pause_hooks{};
 std::atomic<size_t> g_pause_hook_count{0};
 uint8_t* g_chunk = nullptr;
@@ -452,7 +452,7 @@ void ProfStart() {
 
 extern "C" {
 
-int guest_cpu_hook(uintptr_t address, size_t size, GuestHook hook) {
+int guest_cpu_hook(uintptr_t address, size_t size, GuestPauseHook hook) {
   // Only validated PAUSE instructions, before module initializers/guest execution.
   if(!hook || size != 2 || !address) return 0;
   std::scoped_lock lock{g_functions_mutex};

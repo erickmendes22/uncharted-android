@@ -1,10 +1,10 @@
 #define BB_JOB_SPIN_TEST 1
 #include "../src/runtime_jobspin.c"
 #include <assert.h>
-static GuestHook installed[16];
+static GuestPauseHook installed[16];
 static uintptr_t sites[16];
 static unsigned registered;
-int guest_cpu_hook(uintptr_t address,size_t size,GuestHook callback){
+int guest_cpu_hook(uintptr_t address,size_t size,GuestPauseHook callback){
     assert(size==2 && registered<16);
     unsigned char *p=(void*)address;assert(p[0]==0xf3 && p[1]==0x90);
     installed[registered]=callback;sites[registered++]=address;

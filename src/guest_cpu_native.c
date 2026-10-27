@@ -5,7 +5,7 @@
 typedef uint64_t (ABI *Fn8)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
 
 int guest_cpu_init(void) { return 0; }
-int guest_cpu_hook(uintptr_t address, size_t size, GuestHook hook) {
+int guest_cpu_hook(uintptr_t address, size_t size, GuestPauseHook hook) {
     (void)address; (void)size; (void)hook; return 0;
 }
 uintptr_t guest_host_function(const void *fn, const char *name, GuestAbi abi) {
