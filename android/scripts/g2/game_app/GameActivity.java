@@ -165,12 +165,25 @@ public class GameActivity extends SDLActivity {
             Os.setenv("BB_PEEK_FILE", d + "/peek.txt", false);
             // files/env.txt: extra environment (KEY=VALUE per line), e.g. BB_DUMP_SHADERS=1; then
             // the started game's env-u1.txt, env-u2.txt or env-u3.txt (-KEY removes KEY).
+            // Do not carry compatibility flags from the previous game/process.
+            for(String key:ArmCompatibility.OWNED)Os.unsetenv(key);
             for (String name : new String[] {"env.txt", "env-" + game + ".txt"}) {
-                for (String line : lines(new File(d, name), true)) {
+                java.util.List<String> configured=lines(new File(d,name),true);
+                // Discard stale flags written by the previous integration, including
+                // forced precise readback. Global manual overrides remain unchanged.
+                if(!name.equals("env.txt"))configured=ArmCompatibility.cleanPerGame(configured);
+                for (String line : configured) {
                     int eq = line.indexOf('=');
                     if (line.startsWith("-")) Os.unsetenv(line.substring(1));
                     else if (eq > 0) Os.setenv(line.substring(0, eq), line.substring(eq + 1), true);
                 }
+            }
+            android.content.SharedPreferences options=getSharedPreferences("launcher",MODE_PRIVATE);
+            String compatibility=ArmCompatibility.environment(game,options.getBoolean("arm_uma_readback",false),
+                options.getBoolean("arm_flush_draws",false),options.getBoolean("arm_job_spin",false));
+            for(String line:compatibility.split("\n")){
+                int eq=line.indexOf('=');
+                if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
             }
             // The selected locale must reach Orbis, not just Android/ImGui. Set after
             // old per-game environment files so their stale defaults cannot force English.

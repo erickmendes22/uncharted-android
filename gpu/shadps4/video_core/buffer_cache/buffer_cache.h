@@ -212,6 +212,12 @@ private:
     struct SideQueue;
     std::unique_ptr<SideQueue> side_queue;
     bool DownloadOnSideQueue(VAddr page, u64 length);
+    // RedVorteX ARM readbacks: mappings are used only after GPU timeline completion.
+    bool uma_read_back=false, uma_coherent=false;
+    std::mutex mapped_mutex;
+    std::unordered_map<VkDeviceMemory,u8*> mapped_backings;
+    void MapBacking(vk::DeviceMemory memory,u32 type_index);
+    bool ReadMapped(VAddr address,u64 size);
 
     std::unique_ptr<FaultManager> fault_manager;
     std::unique_ptr<Buffer> bda_pagetable_buffer;

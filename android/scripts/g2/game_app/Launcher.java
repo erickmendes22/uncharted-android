@@ -598,6 +598,11 @@ public class Launcher extends Activity {
                 }).setNegativeButton("Cancel", null).show();
         });
         text(root, "Lossless.dll is not included. Frame generation increases GPU and memory usage.", 14, false);
+        root = card(config, "Compatibility");
+        compatibilitySwitch(root,"Fast GPU memory reads (U2/U3)","arm_uma_readback");
+        compatibilitySwitch(root,"Send GPU work in small batches (U2/U3)","arm_flush_draws");
+        compatibilitySwitch(root,"Let idle game threads sleep","arm_job_spin");
+        note(root,"Changes apply on the next game start. Disable one option at a time to compare.");
         root = card(config, "ADVANCED");
         text(root, "Additional environment variables (optional):", 14, false);
         extraEnv = new EditText(this);
@@ -977,6 +982,15 @@ public class Launcher extends Activity {
 
     private String upscaleLabel(int mode) {
         return UpscalePreset.label(mode);
+    }
+
+    private void compatibilitySwitch(LinearLayout parent,String title,String key) {
+        android.widget.Switch control=new android.widget.Switch(this);
+        control.setText(AppLanguage.text(title));control.setTextColor(0xffeee2cc);
+        control.setPadding(dp(8),dp(12),dp(8),dp(12));
+        control.setChecked(prefs.getBoolean(key,false));
+        control.setOnCheckedChangeListener((button,on)->prefs.edit().putBoolean(key,on).apply());
+        parent.addView(control);
     }
 
     private void effectSwitch(LinearLayout parent,String title,String subtitle,String key) {

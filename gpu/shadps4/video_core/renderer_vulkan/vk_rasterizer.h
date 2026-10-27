@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
+#include <algorithm>
+#include <cstdlib>
+#include "bbport_readback_policy.h"
 
 #include "common/recursive_lock.h"
 #include "common/shared_first_mutex.h"
@@ -74,7 +77,17 @@ public:
         } else {
             func();
         }
+        // Bound readback latency by draw count, rather than guest submission size.
+        const u32 every=FlushEveryDraws();
+        if(every && ++draws_since_flush>=every)Flush();
     }
+    static u32 FlushEveryDraws(){
+        static const u32 every=[] {
+            return BbReadback::DrawFlushLimit(std::getenv("BB_FLUSH_DRAWS"),g_host_read_barrier);
+        }();
+        return every;
+    }
+    u32 draws_since_flush=0;
 
     void ScopeMarkerBegin(const std::string_view& str, bool from_guest = false);
     void ScopeMarkerEnd(bool from_guest = false);

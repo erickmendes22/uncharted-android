@@ -28,6 +28,8 @@ typedef void (ABI *GuestCallback)(void);
 void runtime_start(uint64_t capabilities);
 uintptr_t runtime_resolve(const char *name, int is_data);
 void runtime_report(void);
+void runtime_job_spin_install(unsigned char *image, uint64_t start, uint64_t size);
+void runtime_job_spin_report(void);
 void runtime_finalize(void *dso);
 uintptr_t runtime_mutex_resolve(const char *name);
 void runtime_mutex_report(void);

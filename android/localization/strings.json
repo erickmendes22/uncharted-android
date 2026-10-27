@@ -4790,5 +4790,70 @@
     "zh": "尚无游戏日志。",
     "tr": "Henüz oyun günlüğü yok.",
     "pl": "Brak logu gry."
+  },
+  "Compatibility": {
+    "pt": "Compatibilidade",
+    "es": "Compatibilidad",
+    "fr": "Compatibilité",
+    "de": "Kompatibilität",
+    "it": "Compatibilità",
+    "ru": "Совместимость",
+    "ja": "互換性",
+    "ko": "호환성",
+    "zh": "兼容性",
+    "tr": "Uyumluluk",
+    "pl": "Zgodność"
+  },
+  "Fast GPU memory reads (U2/U3)": {
+    "pt": "Leitura rápida da memória da GPU (U2/U3)",
+    "es": "Lectura rápida de memoria de GPU (U2/U3)",
+    "fr": "Lecture rapide de la mémoire GPU (U2/U3)",
+    "de": "Schnelles Lesen des GPU-Speichers (U2/U3)",
+    "it": "Lettura rapida della memoria GPU (U2/U3)",
+    "ru": "Быстрое чтение памяти GPU (U2/U3)",
+    "ja": "GPUメモリの高速読み取り（U2/U3）",
+    "ko": "GPU 메모리 고속 읽기 (U2/U3)",
+    "zh": "快速读取 GPU 内存（U2/U3）",
+    "tr": "Hızlı GPU belleği okuma (U2/U3)",
+    "pl": "Szybki odczyt pamięci GPU (U2/U3)"
+  },
+  "Send GPU work in small batches (U2/U3)": {
+    "pt": "Enviar trabalho à GPU em lotes menores (U2/U3)",
+    "es": "Enviar trabajo a la GPU en lotes pequeños (U2/U3)",
+    "fr": "Envoyer le travail GPU par petits lots (U2/U3)",
+    "de": "GPU-Aufgaben in kleinen Paketen senden (U2/U3)",
+    "it": "Invia il lavoro GPU in piccoli lotti (U2/U3)",
+    "ru": "Отправлять задачи GPU небольшими пакетами (U2/U3)",
+    "ja": "GPU処理を小分けに送信（U2/U3）",
+    "ko": "GPU 작업을 작은 단위로 전송 (U2/U3)",
+    "zh": "分小批次提交 GPU 工作（U2/U3）",
+    "tr": "GPU işlerini küçük gruplarla gönder (U2/U3)",
+    "pl": "Wysyłaj zadania GPU w małych partiach (U2/U3)"
+  },
+  "Let idle game threads sleep": {
+    "pt": "Permitir que threads ociosas do jogo durmam",
+    "es": "Permitir que los hilos inactivos del juego duerman",
+    "fr": "Mettre en veille les threads de jeu inactifs",
+    "de": "Inaktive Spielthreads schlafen lassen",
+    "it": "Sospendi i thread di gioco inattivi",
+    "ru": "Приостанавливать неактивные потоки игры",
+    "ja": "待機中のゲームスレッドを休止",
+    "ko": "유휴 게임 스레드 절전",
+    "zh": "让空闲游戏线程休眠",
+    "tr": "Boştaki oyun iş parçacıklarını uyut",
+    "pl": "Usypiaj bezczynne wątki gry"
+  },
+  "Changes apply on the next game start. Disable one option at a time to compare.": {
+    "pt": "As alterações valem no próximo início do jogo. Desative uma opção por vez para comparar.",
+    "es": "Los cambios se aplican al reiniciar el juego. Desactiva una opción a la vez para comparar.",
+    "fr": "Les modifications prennent effet au prochain lancement. Désactivez une option à la fois pour comparer.",
+    "de": "Änderungen gelten beim nächsten Spielstart. Zum Vergleichen jeweils eine Option deaktivieren.",
+    "it": "Le modifiche si applicano al prossimo avvio. Disattiva una sola opzione alla volta per confrontare.",
+    "ru": "Изменения вступят в силу при следующем запуске. Для сравнения отключайте по одной настройке.",
+    "ja": "変更は次回のゲーム起動時に適用されます。比較するには1項目ずつ無効にしてください。",
+    "ko": "변경 사항은 다음 게임 실행 시 적용됩니다. 비교하려면 한 번에 하나씩 끄세요.",
+    "zh": "更改在下次启动游戏时生效。每次关闭一个选项进行比较。",
+    "tr": "Değişiklikler oyunun sonraki açılışında uygulanır. Karşılaştırmak için seçenekleri tek tek kapatın.",
+    "pl": "Zmiany obowiązują od następnego uruchomienia gry. Porównuj, wyłączając jedną opcję naraz."
   }
 }

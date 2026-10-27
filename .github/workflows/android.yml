@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, android-ui-runtime-pending-xml]
+    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
@@ -39,6 +39,15 @@ jobs:
           "$RUNNER_TEMP/guest-pattern-tests"
           g++ -std=c++20 -Wall -Wextra -Werror -I. tests/test_ui_composition.cpp -o "$RUNNER_TEMP/ui-composition-test"
           "$RUNNER_TEMP/ui-composition-test"
+      - name: Verify release base and optional optimization controls
+        run: |
+          python3 tests/test_release025_base.py
+          javac -d "$RUNNER_TEMP/compat-test" android/scripts/g2/game_app/ArmCompatibility.java tests/TestArmCompatibility.java
+          java -cp "$RUNNER_TEMP/compat-test" dev.unchartedg2.game.TestArmCompatibility
+          cc -std=c11 -Wall -Wextra -Werror -O2 -pthread tests/test_uncharted_jobspin.c -o "$RUNNER_TEMP/jobspin-test"
+          "$RUNNER_TEMP/jobspin-test"
+          g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_readback_policy.cpp -o "$RUNNER_TEMP/batch-test"
+          "$RUNNER_TEMP/batch-test"
       - name: Install native build tools and SDK
         shell: bash
         run: |
@@ -109,13 +118,13 @@ jobs:
           grep -q "versionName='0.2.5'" dist/package.txt
           grep -q "versionCode='100205'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.5.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.5-ReleaseBase.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.5
+          name: Uncharted-Daedalus-0.2.5-ReleaseBase
           path: dist/
           if-no-files-found: error
           retention-days: 30

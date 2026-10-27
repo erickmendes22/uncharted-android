@@ -81,6 +81,9 @@ struct HostFunction {
 std::mutex g_functions_mutex;
 std::vector<HostFunction> g_functions; // id = index
 std::atomic<uintptr_t> g_veneer_begin {0}, g_veneer_end {0};
+struct PauseHook { uintptr_t address; GuestPauseHook callback; };
+std::array<PauseHook, 16> g_pause_hooks{};
+std::atomic<size_t> g_pause_hook_count{0};
 uint8_t* g_chunk = nullptr;
 size_t g_chunk_used = kChunk;
 
@@ -197,6 +200,19 @@ public:
 
   uint64_t HandleSyscall(FEXCore::Core::CpuStateFrame* frame, FEXCore::HLE::SyscallArguments*) override {
     auto& st = frame->State;
+    // OS_GENERIC spills all registers before entering this handler. The original
+    // PAUSE sites are validated at startup and resume at their next instruction.
+    for (size_t i=0,n=g_pause_hook_count.load(std::memory_order_acquire);i<n;++i) {
+      if(g_pause_hooks[i].address != st.rip) continue;
+      GuestContext registers{};
+      std::memcpy(registers.gpr,st.gregs,sizeof(registers.gpr));
+      registers.rip=st.rip;registers.mxcsr=st.mxcsr;registers.fcw=st.FCW;
+      g_pause_hooks[i].callback(&registers);
+      if(registers.rip != st.rip+2) Fatal("PAUSE hook attempted to redirect control flow");
+      std::memcpy(st.gregs,registers.gpr,sizeof(registers.gpr));
+      st.rip=registers.rip;st.mxcsr=registers.mxcsr;st.FCW=registers.fcw;
+      return st.gregs[REG_RAX];
+    }
     const uint32_t id = static_cast<uint32_t>(st.gregs[REG_RAX]);
     HostFunction f;
     {
@@ -435,6 +451,23 @@ void ProfStart() {
 } // namespace
 
 extern "C" {
+
+int guest_cpu_hook(uintptr_t address, size_t size, GuestPauseHook hook) {
+  // Only validated PAUSE instructions, before module initializers/guest execution.
+  if(!hook || size != 2 || !address) return 0;
+  std::scoped_lock lock{g_functions_mutex};
+  const size_t n=g_pause_hook_count.load(std::memory_order_relaxed);
+  if(n>=g_pause_hooks.size())return 0;
+  for(size_t i=0;i<n;++i)if(g_pause_hooks[i].address==address)return 0;
+  auto* code=reinterpret_cast<uint8_t*>(address);
+  if(code[0]!=0xf3 || code[1]!=0x90)return 0;
+  g_pause_hooks[n]={address,hook};
+  // The loader still owns writable guest mappings here. It applies final segment
+  // protections afterwards; no already-compiled code is patched or invalidated.
+  code[0]=0xcd;code[1]=0x82;
+  g_pause_hook_count.store(n+1,std::memory_order_release);
+  return 1;
+}
 
 int guest_cpu_init(void) {
   if (g_context) return 0;

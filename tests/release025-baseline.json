@@ -1,0 +1,6 @@
+{
+  "src/runtime_audio.c": "d0504994de5596a9a40da35994ed9b7df3d47bceb9b4154bc955b357929f9b52",
+  "gpu/shim/bbport_overlay.cpp": "35a178759a6cd953c96c736998fb197a7bc1fc11cf8938054bd1df5f42744601",
+  "android/scripts/g2/game_app/LogExport.java": "1f21bab594eaf05e5632b38ecfc8170dfaa35eb372a8ceadff4616224b0dfee6",
+  "gpu/CMakeLists.txt": "b27d038c3660a43f8b5ffb4dc8193e638f03547ae89a766140a7390834b12af2"
+}

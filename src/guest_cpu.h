@@ -42,6 +42,11 @@ typedef struct {
     uint32_t mxcsr;
     uint16_t fcw;
 } GuestContext;
+/* Startup-only hooks for validated two-byte PAUSE sites. Our pinned FEX's
+ * OS_GENERIC INT 0x82 hook preserves RCX/R11 (fex-0004). The hook must
+ * advance RIP by two; arbitrary control-flow redirection is not supported here. */
+typedef void (*GuestPauseHook)(GuestContext *registers);
+int guest_cpu_hook(uintptr_t address, size_t size, GuestPauseHook hook);
 int guest_context_get(GuestContext *out);
 int guest_context_set(const GuestContext *in);
 /* Diagnostics (thread dumps): the current thread's guest state as text, e.g. the host function

@@ -1,0 +1,18 @@
+Subject: [PATCH] Add an isolated register-preserving PAUSE hook trap for OS_GENERIC
+
+--- a/FEXCore/Source/Interface/Core/OpcodeDispatcher.cpp
++++ b/FEXCore/Source/Interface/Core/OpcodeDispatcher.cpp
+@@ -4777,6 +4777,13 @@
+   case 0xCD: { // INT imm8
+     uint8_t Literal = Op->Src[0].Literal();
+ 
++    // Embedded PAUSE hooks use a private trap without SYSCALL's RCX/R11 clobbers.
++    // All original SYSCALL instructions and other interrupt vectors are unchanged.
++    if (Literal == 0x82 && CTX->SyscallHandler->GetOSABI() == FEXCore::HLE::SyscallOSABI::OS_GENERIC) {
++      SyscallOp(Op, false);
++      return;
++    }
++
+     if (CTX->HostFeatures.HostType == FEXCore::HostFeatures::HostTypeEnum::Linux) {
+       constexpr uint8_t SYSCALL_LITERAL = 0x80;
+       if (Literal == SYSCALL_LITERAL) {

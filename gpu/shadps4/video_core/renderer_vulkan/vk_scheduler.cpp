@@ -29,6 +29,18 @@
 #include "bbport_threads.h"
 
 namespace Vulkan {
+// A timeline wait provides completion; HOST_READ makes prior device writes visible.
+static void PrepareMappedHostReads(vk::CommandBuffer command){
+    if(!g_host_read_barrier)return;
+    const vk::MemoryBarrier2 barrier{
+        .srcStageMask=vk::PipelineStageFlagBits2::eAllCommands,
+        .srcAccessMask=vk::AccessFlagBits2::eMemoryWrite,
+        .dstStageMask=vk::PipelineStageFlagBits2::eHost,
+        .dstAccessMask=vk::AccessFlagBits2::eHostRead,
+    };
+    command.pipelineBarrier2({.memoryBarrierCount=1,.pMemoryBarriers=&barrier});
+}
+
 
 std::mutex Scheduler::submit_mutex;
 
@@ -689,6 +701,7 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
     SyncRecording();
     // Guest memory copies into staging read by this submission (copy threads).
     WaitHostCopies();
+    PrepareMappedHostReads(current_cmdbuf);
     Check(current_cmdbuf.end());
     QueueSubmit(current_cmdbuf, info, signal_value);
     work_semaphore.Refresh();
@@ -702,6 +715,7 @@ void Scheduler::SubmitRecorded(vk::CommandBuffer cmdbuf, SubmitInfo& info, u64 s
     // Guest memory copies into staging read by this submission: this thread ran its own
     // (RecordHostCopy) before; the copy threads' may still run.
     BbCopy::WaitAsync();
+    PrepareMappedHostReads(cmdbuf);
     Check(cmdbuf.end());
     {
         std::scoped_lock lk{submit_mutex};
