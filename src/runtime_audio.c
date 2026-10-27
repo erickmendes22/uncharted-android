@@ -38,20 +38,25 @@ typedef struct {
     uint64_t next_deadline_ns; /* next return of sceAudioOutOutput */
     int64_t adjust_ns; int window_min, window_count; /* queue level control */
     uint64_t last_output_us;
-    pthread_mutex_t lock;
     FILE *dump;                     /* BB_AUDIO_DUMP: raw converted PCM per port */
     int stats;
     uint64_t stat_start_ns, stat_last_ns, stat_max_gap_ns; /* BB_AUDIO_STATS */
     unsigned stat_starved, stat_buffers; int stat_min_queued;
     int generation; unsigned drops; /* g2-arm64: the foreground seen last; stale queues dropped */
+    pthread_mutex_t lock; /* lifetime is the process, never memset/reinitialized on reopen */
 } Port;
 typedef struct { uint16_t output; uint8_t channel, reserved; int16_t volume; uint16_t reroute; uint64_t flag, reserved64[2]; } PortState;
 _Static_assert(sizeof(PortState)==32,"AudioOut port state layout");
 
 static pthread_mutex_t table_lock=PTHREAD_MUTEX_INITIALIZER;
 static Port ports[PORTS];
-static int initialized, sdl_ready=-1;
-static size_t buffers_out, ports_opened;
+static atomic_int initialized;
+static int sdl_ready=-1;
+static atomic_size_t buffers_out, ports_opened;
+static pthread_once_t port_locks_once=PTHREAD_ONCE_INIT;
+static void init_port_locks(void) {
+    for (int i=0;i<PORTS;++i) pthread_mutex_init(&ports[i].lock,NULL);
+}
 /* g2-arm64: Android's app lifecycle (gpu/shim/window.cpp). In the background SDL pauses the
    device while sceAudioOutOutput keeps the game's clock: the queue grew by every second the CPU
    stayed awake (26 s after the sleep button) and played that late afterwards, the cadence
@@ -100,7 +105,18 @@ static Port *port_of(int32_t handle, int32_t *error) {
     return &ports[id];
 }
 
+/* Pin the port before releasing the table. Close/reopen must not invalidate a
+   stream or overwrite a mutex between handle lookup and acquisition. */
+static Port *lock_port(int32_t handle, int32_t *error) {
+    pthread_mutex_lock(&table_lock);
+    Port *p=port_of(handle,error);
+    if (p) pthread_mutex_lock(&p->lock);
+    pthread_mutex_unlock(&table_lock);
+    return p;
+}
+
 static ABI int32_t audio_init(void) {
+    pthread_once(&port_locks_once,init_port_locks);
     pthread_mutex_lock(&table_lock);
     int32_t r=initialized ? ERR_ALREADY_INIT : 0;
     initialized=1;
@@ -122,8 +138,8 @@ static ABI int32_t audio_open(int32_t user, int32_t type, int32_t index, uint32_
     for (int i=first;i<=last;++i) if (!ports[i].used) { id=i; break; }
     if (id<0) { pthread_mutex_unlock(&table_lock); return ERR_PORT_FULL; }
     Port *p=&ports[id];
-    memset(p,0,sizeof(*p));
-    pthread_mutex_init(&p->lock,NULL);
+    pthread_mutex_lock(&p->lock);
+    memset(p,0,offsetof(Port,lock));
     p->used=1; p->type=type; p->channels=channels[format]; p->is_float=format>=3 && format!=6;
     p->generation=atomic_load(&foreground_generation);
     p->sample_bytes=p->is_float ? 4 : 2; p->frames=(int)length; p->std_layout=format>=6;
@@ -150,9 +166,10 @@ static ABI int32_t audio_open(int32_t user, int32_t type, int32_t index, uint32_
         p->dump=fopen(path,"wb");
     }
     ++ports_opened;
-    pthread_mutex_unlock(&table_lock);
     printf("Runtime: audio port %d opened (type %d, %d ch, %s, %u frames%s)\n",id,type,p->channels,p->is_float ? "float" : "s16",length,
            p->fold_stereo ? ", folded to stereo" : "");
+    pthread_mutex_unlock(&p->lock);
+    pthread_mutex_unlock(&table_lock);
     return (type<<16) | id | 0x20000000;
 }
 static ABI int32_t audio_close(int32_t handle) {
@@ -173,11 +190,8 @@ static ABI int32_t audio_close(int32_t handle) {
 /* `pace`: wait for this port's next period. sceAudioOutOutputs waits once for all its ports. */
 static int32_t output_port(int32_t handle, const void *data, int pace) {
     int32_t error=0;
-    pthread_mutex_lock(&table_lock);
-    Port *p=port_of(handle,&error);
-    pthread_mutex_unlock(&table_lock);
+    Port *p=lock_port(handle,&error);
     if (!p) return error;
-    pthread_mutex_lock(&p->lock);
     size_t samples=(size_t)p->frames*(size_t)p->channels, bytes=samples*(size_t)p->sample_bytes;
     uint64_t period=(uint64_t)p->frames*1000000000u/48000u;
     if (data) {
@@ -284,12 +298,9 @@ static ABI int32_t audio_outputs(const OutputParam *params, uint32_t count) {
 }
 static ABI int32_t audio_volume(int32_t handle, int32_t flags, const int32_t *volume) {
     int32_t error=0;
-    pthread_mutex_lock(&table_lock);
-    Port *p=port_of(handle,&error);
-    pthread_mutex_unlock(&table_lock);
-    if (!p) return error;
     if (!volume) return ERR_INVALID_POINTER;
-    pthread_mutex_lock(&p->lock);
+    Port *p=lock_port(handle,&error);
+    if (!p) return error;
     for (int c=0;c<8;++c) if (flags & (1<<c)) {
         if (volume[c]<0 || volume[c]>VOLUME_0DB) { pthread_mutex_unlock(&p->lock); return ERR_INVALID_VOLUME; }
         p->volume[c]=volume[c];
@@ -299,27 +310,26 @@ static ABI int32_t audio_volume(int32_t handle, int32_t flags, const int32_t *vo
 }
 static ABI int32_t audio_state(int32_t handle, PortState *state) {
     int32_t error=0;
-    pthread_mutex_lock(&table_lock);
-    Port *p=port_of(handle,&error);
-    pthread_mutex_unlock(&table_lock);
-    if (!p) return error;
     if (!state) return ERR_INVALID_POINTER;
+    Port *p=lock_port(handle,&error);
+    if (!p) return error;
     memset(state,0,sizeof(*state));
     switch (p->type) {
     case 2: case 3: state->output=0x40; state->channel=1; break;          /* headphone */
     case 4: state->output=0x04; state->channel=1; state->volume=127; break; /* pad speaker */
     default: state->output=0x01; state->channel=(uint8_t)(p->channels>2 ? 2 : p->channels); break;
     }
+    pthread_mutex_unlock(&p->lock);
     return 0;
 }
 static ABI int32_t audio_last_time(int32_t handle, uint64_t *time) {
     int32_t error=0;
-    pthread_mutex_lock(&table_lock);
-    Port *p=port_of(handle,&error);
-    pthread_mutex_unlock(&table_lock);
-    if (!p) return error;
     if (!time) return ERR_INVALID_POINTER;
-    *time=p->last_output_us; return 0;
+    Port *p=lock_port(handle,&error);
+    if (!p) return error;
+    *time=p->last_output_us;
+    pthread_mutex_unlock(&p->lock);
+    return 0;
 }
 
 static const RuntimeExport exports[]={

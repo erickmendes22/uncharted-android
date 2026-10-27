@@ -93,6 +93,14 @@ jobs:
             tests/test_android_touch_menu.cpp gpu/shim/bbport_touchpad.cpp gpu/shim/bbport_overlay_android.cpp gpu/shim/bbport_settings.cpp \
             gpu/third_party/imgui/{imgui,imgui_draw,imgui_widgets,imgui_tables}.cpp -o "$RUNNER_TEMP/touch-menu-test"
           BB_CONFIG="$RUNNER_TEMP/touch-test.ini" "$RUNNER_TEMP/touch-menu-test"
+      - name: Verify font fallback and concurrent audio port lifetime
+        shell: bash
+        run: |
+          g++ -std=c++20 -O0 -Igpu/shim -Igpu/third_party/imgui tests/test_android_font_loader.cpp gpu/shim/bbport_font_loader.cpp gpu/third_party/imgui/{imgui,imgui_draw,imgui_widgets,imgui_tables}.cpp -o "$RUNNER_TEMP/font-loader-test"
+          "$RUNNER_TEMP/font-loader-test"
+          cc -std=c11 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -I"$WORK/deps/src/sdl3/include" -Isrc tests/test_audio_port_lifetime.c -pthread -o "$RUNNER_TEMP/audio-lifetime-test"
+          ASAN_OPTIONS=detect_leaks=0:abort_on_error=1 "$RUNNER_TEMP/audio-lifetime-test" > "$RUNNER_TEMP/audio-lifetime.log"
+          tail -1 "$RUNNER_TEMP/audio-lifetime.log"
       - name: Verify APK and record source revision
         shell: bash
         run: |

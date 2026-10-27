@@ -1,5 +1,6 @@
 #include "bbport_fps_meter.h"
 #include "bbport_hud_text.h"
+#include "bbport_font_loader.h"
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "bbport_overlay.h"
 
@@ -463,18 +464,19 @@ void Init(const Vulkan::Instance& instance, vk::Format format, u32 image_count) 
 #ifdef __ANDROID__
     // Match the Android launcher typography instead of a desktop diagnostic font.
     for(const char* path:{"/system/fonts/Roboto-Regular.ttf","/system/fonts/NotoSans-Regular.ttf"}) {
-        if(FILE* f=std::fopen(path,"rb")){std::fclose(f);app_font=io.Fonts->AddFontFromFileTTF(path,18.0f);if(app_font)break;}
+        if((app_font=BbFontLoader::AddFile(*io.Fonts,path,18.0f)))break;
     }
 #endif
     if(!app_font){
-        ImFontConfig font_config;font_config.FontDataOwnedByAtlas=false;
-        io.Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(bb_font_ttf),int(bb_font_ttf_end-bb_font_ttf),18.0f,&font_config);
+        app_font=BbFontLoader::AddMemory(*io.Fonts,bb_font_ttf,size_t(bb_font_ttf_end-bb_font_ttf),18.0f);
+        if(!app_font)io.Fonts->AddFontDefault();
     }
 
 #ifdef __ANDROID__
-    // Dynamic font atlas: merge Android's script fallbacks for all offered UI locales.
+    // One compatible CJK source is enough. Avoid loading several large overlapping
+    // fonts or letting an unsupported system font corrupt the atlas.
     for(const char* path:{"/system/fonts/NotoSansCJK-Regular.ttc","/system/fonts/NotoSansJP-Regular.otf","/system/fonts/NotoSansKR-Regular.otf","/system/fonts/NotoSansSC-Regular.otf"}) {
-        if(FILE* f=std::fopen(path,"rb")){std::fclose(f);ImFontConfig config;config.MergeMode=true;io.Fonts->AddFontFromFileTTF(path,18.0f,&config);}
+        if(BbFontLoader::AddFile(*io.Fonts,path,18.0f,true))break;
     }
 #endif
     const vk::Instance vk_instance = instance.GetInstance();
