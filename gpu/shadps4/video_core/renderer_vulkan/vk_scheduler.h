@@ -34,6 +34,7 @@ class VkCtxScope;
 }
 
 namespace Vulkan {
+inline bool g_host_read_barrier=false; // mapped GPU data becomes visible to the CPU
 
 class Instance;
 

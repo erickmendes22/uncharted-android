@@ -14,7 +14,8 @@ final class GraphicsProfile {
         "frame_gen", "frame_gen_multiplier", "lsfg_flow_scale", "lsfg_fp16", "fps_limit"));
     static final String[] ENV = {"BB_UPSCALER", "BB_RENDER_RES", "BB_OUTPUT_RES",
         "BB_UPSCALE_PRESET", "BB_MOBILE_UPSCALE", "BB_FRAME_GEN", "BB_FRAME_GEN_MULTIPLIER",
-        "BB_JITTER", "BB_REACTIVE", "BB_OBJECT_MOTION", "BB_DEFERRED_SUBMIT", "BB_DRAW_PIPE"};
+        "BB_JITTER", "BB_REACTIVE", "BB_OBJECT_MOTION", "BB_DEFERRED_SUBMIT", "BB_DRAW_PIPE",
+        "BB_GPU_MERGE", "BB_SIDE_DOWNLOAD", "BB_UMA_READBACK", "BB_FLUSH_DRAWS", "BB_JOB_SPIN"};
 
     static LinkedHashMap<String,String> read(File file) throws IOException {
         LinkedHashMap<String,String> values=new LinkedHashMap<>();
@@ -44,7 +45,8 @@ final class GraphicsProfile {
         write(file,out.toString());
     }
     static boolean graphicsPreference(String key) {
-        return key.startsWith("patch_")||Arrays.asList("resolution","native","mobile_upscale","shadow_cascades").contains(key);
+        return key.startsWith("patch_")||Arrays.asList("resolution","native","mobile_upscale","shadow_cascades",
+            "arm_uma_readback","arm_flush_draws","arm_job_spin").contains(key);
     }
     static String cleanOverrides(String text) {
         StringBuilder out=new StringBuilder();

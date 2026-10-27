@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, android-ui-runtime-pending-xml, investigate/s25-graphics-recovery]
+    branches: [main, android-ui-runtime-pending-xml, investigate/s25-graphics-recovery, integrate/redvortex-0.1.6]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
@@ -35,10 +35,16 @@ jobs:
       - name: Validate signature patch safety
         shell: bash
         run: |
+          cc -std=c11 -Wall -Wextra -Werror -O2 -pthread tests/test_uncharted_jobspin.c -o "$RUNNER_TEMP/jobspin-test"
+          "$RUNNER_TEMP/jobspin-test"
           cc -std=c11 -Wall -Wextra -Werror -Isrc tests/test_guest_fix_patterns.c src/runtime_guest_fixes.c -o "$RUNNER_TEMP/guest-pattern-tests"
           "$RUNNER_TEMP/guest-pattern-tests"
           g++ -std=c++20 -Wall -Wextra -Werror -I. tests/test_ui_composition.cpp -o "$RUNNER_TEMP/ui-composition-test"
           "$RUNNER_TEMP/ui-composition-test"
+      - name: Verify GPU readback wait policy
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_readback_policy.cpp -o "$RUNNER_TEMP/readback-test"
+          "$RUNNER_TEMP/readback-test"
       - name: Install native build tools and SDK
         shell: bash
         run: |
@@ -68,6 +74,8 @@ jobs:
       - name: Verify shared translations and FSR preset mapping
         shell: bash
         run: |
+          javac -d "$RUNNER_TEMP/arm-test" android/scripts/g2/game_app/ArmCompatibility.java tests/TestArmCompatibility.java
+          java -cp "$RUNNER_TEMP/arm-test" dev.unchartedg2.game.TestArmCompatibility
           javac -d "$RUNNER_TEMP/graphics-profile-test" android/scripts/g2/game_app/GraphicsProfile.java tests/TestGraphicsProfile.java
           java -cp "$RUNNER_TEMP/graphics-profile-test" dev.unchartedg2.game.TestGraphicsProfile
           python3 android/localization/generate.py
@@ -119,13 +127,13 @@ jobs:
           grep -q "versionName='0.2.5'" dist/package.txt
           grep -q "versionCode='100205'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.5-Graphics-Recovery.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.5-Compatibility.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.5-Graphics-Recovery
+          name: Uncharted-Daedalus-0.2.5-Compatibility
           path: dist/
           if-no-files-found: error
           retention-days: 30

@@ -598,6 +598,11 @@ public class Launcher extends Activity {
                 }).setNegativeButton("Cancel", null).show();
         });
         text(root, "Lossless.dll is not included. Frame generation increases GPU and memory usage.", 14, false);
+        root = card(config, "Compatibility");
+        compatibilitySwitch(root,"Fast GPU memory reads (U2/U3)","arm_uma_readback");
+        compatibilitySwitch(root,"Send GPU work in small batches (U2/U3)","arm_flush_draws");
+        compatibilitySwitch(root,"Let idle game threads sleep","arm_job_spin");
+        note(root,"Changes apply on the next game start. Disable one option at a time to compare.");
         root = card(config, "ADVANCED");
         text(root, "Additional environment variables (optional):", 14, false);
         extraEnv = new EditText(this);
@@ -992,6 +997,16 @@ public class Launcher extends Activity {
         return UpscalePreset.label(mode);
     }
 
+    private void compatibilitySwitch(LinearLayout parent,String title,String key) {
+        android.widget.Switch control=new android.widget.Switch(this);
+        control.setText(AppLanguage.text(title));
+        control.setTextColor(0xffeee2cc);
+        control.setPadding(dp(8),dp(12),dp(8),dp(12));
+        control.setChecked(prefs.getBoolean(key,true));
+        control.setOnCheckedChangeListener((button,on)->prefs.edit().putBoolean(key,on).apply());
+        parent.addView(control);
+    }
+
     private void effectSwitch(LinearLayout parent,String title,String subtitle,String key) {
         LinearLayout line=new LinearLayout(this);line.setGravity(android.view.Gravity.CENTER_VERTICAL);line.setPadding(0,dp(9),0,dp(9));
         LinearLayout labels=new LinearLayout(this);labels.setOrientation(LinearLayout.VERTICAL);
@@ -1268,6 +1283,8 @@ public class Launcher extends Activity {
             if(upscale>0 && made==null)env[i]+="BB_UPSCALER=none\n";
             // U2's aiming autofocus reads a 1x1 render result on the CPU: copied back for U2
             // only, as upstream does (issue #7; it costs elsewhere). More environment overrides.
+            env[i]+=ArmCompatibility.environment(g[0],prefs.getBoolean("arm_uma_readback",true),
+                prefs.getBoolean("arm_flush_draws",true),prefs.getBoolean("arm_job_spin",true));
             if (g[0].equals("u2") && !extraEnv.getText().toString().contains("BB_TINY_READBACK"))
                 env[i] += "BB_TINY_READBACK=1\n";
         }

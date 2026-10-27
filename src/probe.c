@@ -1593,6 +1593,9 @@ int main(int argc, char **argv) {
         patch_job_lock_wait(image_end);
         patch_eop_tick_wait(image_end);
         patch_frame_params_wait(image_end);
+        for(uint64_t s=0;s<ns;++s)
+            if(segments[s].flags&1)runtime_job_spin_install(image,segments[s].address,segments[s].size);
+        runtime_job_spin_report();
     }
 #ifdef _WIN32
     printf("Guest TCB loads redirected to the TEB TLS slot: %" PRIu64 "\n", patch_tcb_loads(segments, ns));

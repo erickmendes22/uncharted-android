@@ -1,0 +1,15 @@
+Subject: [PATCH] Preserve RCX/R11 in the embedded OS_GENERIC hook ABI
+
+--- a/FEXCore/Source/Interface/Core/OpcodeDispatcher.cpp
++++ b/FEXCore/Source/Interface/Core/OpcodeDispatcher.cpp
+@@ -79,7 +79,9 @@
+     Arguments[i] = LoadGPRRegister(GPRIndexes->at(i));
+   }
+ 
+-  if (IsSyscallInst) {
++  // OS_GENERIC also serves validated PAUSE hooks: preserve their RCX/R11.
++  // Normal host-call veneers already save the fourth argument in R10.
++  if (IsSyscallInst && OSABI != FEXCore::HLE::SyscallOSABI::OS_GENERIC) {
+     // If this is the `Syscall` instruction rather than `int 0x80` then we need to do some additional work.
+     // RCX = RIP after this instruction
+     // R11 = EFlags

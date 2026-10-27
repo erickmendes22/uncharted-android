@@ -1,3 +1,4 @@
+#include "bbport_readback_policy.h"
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -143,6 +144,13 @@ BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& s
                        reqs.memoryTypeBits)
             .value();
 
+    const auto flags=instance.GetMemoryProperties().memoryTypes[arena_memory_type_index].propertyFlags;
+    const char* merge=std::getenv("BB_GPU_MERGE");
+    const char* uma=std::getenv("BB_UMA_READBACK");
+    uma_read_back=merge && merge[0]=='0' && !(uma && uma[0]=='0') &&
+                  bool(flags & vk::MemoryPropertyFlagBits::eHostVisible);
+    uma_coherent=bool(flags & vk::MemoryPropertyFlagBits::eHostCoherent);
+
     const u64 bda_pagetable_size =
         (blocks_per_arena_page * num_arena_pages) * sizeof(vk::DeviceAddress);
     fault_manager = std::make_unique<FaultManager>(instance, scheduler, *this, block_shift,
@@ -160,13 +168,16 @@ BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& s
     write_scheduler = &scheduler;
     g_gpu_write_done_tick = [] { return write_scheduler->CurrentTick() + 1; };
     const char* side_env = std::getenv("BB_SIDE_DOWNLOAD");
-    if (instance.GetSideQueue() && !(side_env && side_env[0] == '0')) {
+    if (!uma_read_back && instance.GetSideQueue() && !(side_env && side_env[0] == '0')) {
         side_queue = std::make_unique<SideQueue>(instance, instance.GetSideQueue());
     }
+    Vulkan::g_host_read_barrier=uma_read_back;
+    std::printf("GPU read backs: %s\n",uma_read_back ? "mapped GPU memory after completed writes" :
+                side_queue ? "side queue" : "graphics queue (compatibility)");
 }
 
 bool BufferCache::DownloadOnSideQueue(VAddr page, u64 length) {
-    if (!side_queue) {
+    if (!side_queue && !uma_read_back) {
         return false;
     }
     const auto start_time = std::chrono::steady_clock::now();
@@ -182,6 +193,22 @@ bool BufferCache::DownloadOnSideQueue(VAddr page, u64 length) {
         arena->cpu_addr + arena->size_bytes);
     boost::container::small_vector<VAddr, 16> pages;
     u64 write_tick = 0;
+    static const bool wait_writes=[] {
+        const char* merge=std::getenv("BB_GPU_MERGE");
+        const char* side=std::getenv("BB_SIDE_WAIT");
+        return merge && merge[0]=='0' && !(side && side[0]=='0');
+    }();
+    if(wait_writes){
+        u64 fault_tick=0;
+        {
+            std::scoped_lock lk{shadow_mutex};
+            for(VAddr at=page;at<page+length;at+=TRACKER_BYTES_PER_PAGE)
+                if(memory_tracker->IsRegionGpuModified(at,TRACKER_BYTES_PER_PAGE))
+                    fault_tick=std::max(fault_tick,memory_tracker->LatestGpuWriteTick(at,TRACKER_BYTES_PER_PAGE));
+        }
+        if(BbReadback::CanWaitProducer(fault_tick,scheduler.CurrentTick(),scheduler.IsFree(fault_tick)))
+            scheduler.Wait(fault_tick);
+    }
     {
         std::scoped_lock lk{shadow_mutex};
         for (VAddr at = window_start; at < window_end; at += TRACKER_BYTES_PER_PAGE) {
@@ -225,6 +252,10 @@ bool BufferCache::DownloadOnSideQueue(VAddr page, u64 length) {
             total += end - start;
         });
     }
+    if(!side_queue){
+        for(const auto& copy:copies)
+            if(!ReadMapped(arena->cpu_addr+copy.srcOffset,copy.size))return false;
+    }else{
     auto& side = *side_queue;
     if (total > SideQueue::StagingSize) {
         return false;
@@ -267,6 +298,7 @@ bool BufferCache::DownloadOnSideQueue(VAddr page, u64 length) {
                                     side.staging.mapped_data.data() + copy.dstOffset, copy.size);
         }
     }
+    }
     for (const VAddr at : pages) {
         gpu_modified_ranges.Subtract(at, TRACKER_BYTES_PER_PAGE);
         memory_tracker->UnmarkRegionAsGpuModified(at, TRACKER_BYTES_PER_PAGE);
@@ -285,6 +317,67 @@ void BufferCache::ForceUpload(VAddr device_addr, u64 size) {
     if (!IsRegionGpuModified(device_addr, size)) {
         memory_tracker->MarkRegionAsCpuModified(device_addr, size);
     }
+}
+
+void BufferCache::MapBacking(vk::DeviceMemory device_memory, u32 type_index) {
+    const auto flags = instance.GetMemoryProperties().memoryTypes[type_index].propertyFlags;
+    if (!uma_read_back || !(flags & vk::MemoryPropertyFlagBits::eHostVisible)) {
+        return;
+    }
+    void* data = nullptr;
+    if (instance.GetDevice().mapMemory(device_memory, 0, VK_WHOLE_SIZE, {}, &data) ==
+            vk::Result::eSuccess &&
+        data) {
+        std::scoped_lock lk{mapped_mutex};
+        mapped_backings[static_cast<VkDeviceMemory>(device_memory)] = static_cast<u8*>(data);
+    }
+}
+
+bool BufferCache::ReadMapped(VAddr addr, u64 size) {
+    const VAddr end = addr + size;
+    VAddr at = addr;
+    bool ok = true;
+    resident_ranges.ForEachInRange(addr >> block_shift, ((end - 1) >> block_shift) + 1,
+                                   [&](const Backing& backing) {
+        if (!ok || at >= end) {
+            return;
+        }
+        const VAddr from = std::max<VAddr>(at, backing.start << block_shift);
+        const VAddr to = std::min<VAddr>(end, backing.end << block_shift);
+        if (from != at || from >= to) { // not resident in between
+            ok = false;
+            return;
+        }
+        u8* mapped = nullptr;
+        {
+            std::scoped_lock lk{mapped_mutex};
+            const auto it = mapped_backings.find(static_cast<VkDeviceMemory>(backing.memory));
+            mapped = it == mapped_backings.end() ? nullptr : it->second;
+        }
+        if (!mapped) {
+            ok = false;
+            return;
+        }
+        const u64 offset = backing.offset + (from - (backing.start << block_shift));
+        if (!uma_coherent) {
+            const u64 atom = instance.NonCoherentAtomSize();
+            const u64 first = Common::AlignDown(offset, atom);
+            const vk::MappedMemoryRange range = {
+                .memory = backing.memory,
+                .offset = first,
+                .size = Common::AlignUp(offset + (to - from), atom) - first,
+            };
+            if (instance.GetDevice().invalidateMappedMemoryRanges(range) != vk::Result::eSuccess) {
+                ok = false;
+                return;
+            }
+        }
+        if(!memory->TryWriteBacking(std::bit_cast<u8*>(from), mapped + offset, to - from)){
+            ok=false;return;
+        }
+        at = to;
+    });
+    return ok && at == end;
 }
 
 namespace {
@@ -1057,6 +1150,7 @@ void BufferCache::EnsureResident(const Buffer* arena, u64 first_block, u64 last_
         .memoryTypeIndex = arena_memory_type_index,
     };
     const auto device_memory = Vulkan::Check(instance.GetDevice().allocateMemory(alloc_info));
+    MapBacking(device_memory,alloc_info.memoryTypeIndex);
     BbStats::arena_bytes += alloc_info.allocationSize;
     ++BbStats::arena_allocations;
     static const bool arena_log = [] {

@@ -69,6 +69,12 @@ if todo deps; then
     DEPS=$WORK/deps bash "$HERE/port-arm64/android_deps.sh"
     done_step deps
 fi
+# Cached native builds must not hide changes to the FEX hook ABI.
+FEX_INPUT_HASH=$(printf '%s\n' "$FEX_REV"; cat "$PATCHES"/fex-*.patch)
+FEX_INPUT_HASH=$(printf '%s' "$FEX_INPUT_HASH" | sha256sum | cut -d' ' -f1)
+if [ "$(cat "$WORK/done/fex-inputs" 2>/dev/null || true)" != "$FEX_INPUT_HASH" ]; then
+    rm -f "$WORK/done/fex"
+fi
 if todo fex; then
     echo "== FEXCore"
     fetch_rev "$WORK/fex" "$FEX_URL" "$FEX_REV"
@@ -79,6 +85,7 @@ if todo fex; then
     SRC=$WORK/fex OUT=$WORK/fex-android SMOKE= bash "$HERE/port-arm64/build_fex_android.sh" > "$WORK/fex.log" 2>&1 ||
         { tail -20 "$WORK/fex.log"; exit 1; }
     done_step fex
+    printf '%s\n' "$FEX_INPUT_HASH" > "$WORK/done/fex-inputs"
 fi
 if todo turnip; then
     echo "== Turnip"
