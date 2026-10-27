@@ -1321,6 +1321,11 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
 #ifdef BB_SDL_MAIN
     printf("Uncharted Daedalus | diagnostics\n");
+    if (getenv("BB_DIAGNOSTIC_PROFILE")) {
+        printf("Diagnostic profile: %s; BB_DRAW_PIPE=%s\n",
+               getenv("BB_DIAGNOSTIC_PROFILE"), getenv("BB_DRAW_PIPE") ? getenv("BB_DRAW_PIPE") : "default");
+        printf("Device: %s\n", getenv("BB_DEVICE_DESCRIPTION") ? getenv("BB_DEVICE_DESCRIPTION") : "unknown");
+    }
 #endif
 #ifndef _WIN32
     /* Keep host heap objects handed to the guest (thread handles, TLS) in the

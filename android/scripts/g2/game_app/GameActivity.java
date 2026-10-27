@@ -175,6 +175,13 @@ public class GameActivity extends SDLActivity {
             // The selected locale must reach Orbis, not just Android/ImGui. Set after
             // old per-game environment files so their stale defaults cannot force English.
             Os.setenv("BB_LANGUAGE",Integer.toString(GameLanguage.id(AppLanguage.code(),android.content.res.Resources.getSystem().getConfiguration().getLocales().get(0))),true);
+            // Diagnostic branch only: isolate the two-stage draw queue. Keep the
+            // shader-preparation workers, FSR, driver and game patches unchanged.
+            Os.setenv("BB_DRAW_PIPE", "0", true);
+            Os.setenv("BB_DIAGNOSTIC_PROFILE", "s25-serial-draw", true);
+            Os.setenv("BB_DEVICE_DESCRIPTION", android.os.Build.MANUFACTURER + " "
+                + android.os.Build.MODEL + "; Android " + android.os.Build.VERSION.RELEASE
+                + "; SDK " + android.os.Build.VERSION.SDK_INT, true);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
