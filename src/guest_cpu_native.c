@@ -1,5 +1,9 @@
 /* g2-arm64: guest_cpu.h on x86-64 hosts: guest code runs natively (the port's original model). */
 #include "guest_cpu.h"
+int guest_cpu_fault_context(uintptr_t pc,const uint64_t *regs,GuestContext *out) {
+    (void)pc;(void)regs;(void)out;return 0;
+}
+int guest_cpu_describe_last_call(char *out,size_t size){(void)out;(void)size;return 0;}
 #if defined(__x86_64__) || defined(_M_X64)
 #define ABI __attribute__((sysv_abi))
 typedef uint64_t (ABI *Fn8)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);

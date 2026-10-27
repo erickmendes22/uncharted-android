@@ -10,6 +10,7 @@
 // Host -> guest: ExecuteThread up to a hlt (outermost call on a host thread) or HandleCallback
 // (a nested call from inside a host function).
 #include "guest_cpu.h"
+#include "guest_fault_arm64.h"
 extern "C" {
 void runtime_report(void);
 int runtime_fiber_describe(char* out, size_t size, uint64_t rsp);
@@ -185,6 +186,8 @@ struct HostThread {
   int depth = 0;                                // guest code running below this host frame
   FEXCore::Core::CpuStateFrame* hle_frame = nullptr; // inside a host function the guest called
   uint32_t hle_id = 0;
+  const char* last_call_name = nullptr;
+  uint64_t last_call_return = 0;
   bool hle_replaced = false;                    // guest_context_set during that call
 };
 thread_local HostThread t_host;
@@ -241,6 +244,9 @@ public:
     const bool saved_replaced = t.hle_replaced;
     t.hle_frame = frame; t.hle_id = id; t.hle_replaced = false;
     bb_call_host(f.fn, x, d, out, stack);
+    // Two thread-local stores; no logging or sampling on the execution path.
+    t.last_call_return=out[0];
+    t.last_call_name=f.name;
     const bool replaced = t.hle_replaced;
     t.hle_frame = saved_frame; t.hle_id = saved_id; t.hle_replaced = saved_replaced;
     if (replaced) return st.gregs[REG_RAX]; // guest_context_set wrote the whole state
@@ -745,6 +751,23 @@ int guest_cpu_describe_registers(char* out, size_t size) {
                                  (unsigned long long)words[i + 2], (unsigned long long)words[i + 3]);
   }
   return (int)n;
+}
+
+int guest_cpu_fault_context(uintptr_t pc,const uint64_t* host,GuestContext* out) {
+  HostThread& t=t_host;
+  if(!out || !host || !g_context || !t.fex || !g_context->IsAddressInCodeBuffer(t.fex,pc))return 0;
+  const uint64_t rip=g_context->RestoreRIPFromHostPC(t.fex,pc);
+  if(!rip)return 0;
+  *out={};
+  guest_fault_arm64_gprs(out,host,rip);
+  return 1;
+}
+
+int guest_cpu_describe_last_call(char* out,size_t size) {
+  const auto& t=t_host;
+  if(!t.last_call_name)return 0;
+  return std::snprintf(out,size,"  last completed runtime call: %s, return=%#llx\n",
+      t.last_call_name,(unsigned long long)t.last_call_return);
 }
 
 uint64_t guest_cpu_guest_rsp(void) {

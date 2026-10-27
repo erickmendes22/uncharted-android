@@ -59,6 +59,10 @@ int guest_cpu_describe_stack(char *out, size_t size);
 /* g2-arm64: crash reports: all 16 guest registers (the state of the last host function call, or of
  * the last sync in guest code) and 256 bytes of guest memory at rbx; the guest rsp. */
 int guest_cpu_describe_registers(char *out, size_t size);
+/* Fatal-report only: recover live translated PC/GPRs from the interrupted ARM context.
+ * Never changes the guest state or resumes/skips a faulting instruction. */
+int guest_cpu_fault_context(uintptr_t host_pc,const uint64_t *host_gpr,GuestContext *out);
+int guest_cpu_describe_last_call(char *out,size_t size);
 uint64_t guest_cpu_guest_rsp(void);
 #define GUEST_CALL(entry, ...) \
     guest_call((uintptr_t)(entry), (const uint64_t[]){__VA_ARGS__}, \

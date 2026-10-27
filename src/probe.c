@@ -414,6 +414,50 @@ static void fault(int sig, siginfo_t *info, void *context) {
     else
         snprintf(line, sizeof(line), "Fault (signal %d) at RIP %p, address %p\n", sig, (void *)rip, info->si_addr);
     { ssize_t written_=write(2, line, strlen(line)); (void)written_; }
+#if defined(__aarch64__)
+    /* Recover from the interrupted JIT, not CPUState's last syscall snapshot. */
+    GuestContext actual;
+    if(guest_cpu_fault_context(rip,(const uint64_t *)uc->uc_mcontext.regs,&actual)) {
+        char text[512];
+        int n=snprintf(text,sizeof(text),"  translated guest PC at fault=%#llx; live FEX SRA registers:\n",
+                       (unsigned long long)actual.rip);
+        { ssize_t w_=write(2,text,(size_t)n);(void)w_; }
+        static const char *const names[16]={"rax","rcx","rdx","rbx","rsp","rbp","rsi","rdi",
+                                           "r8","r9","r10","r11","r12","r13","r14","r15"};
+        for(int r=0;r<16;r+=4){
+            n=0;
+            for(int k=r;k<r+4;++k)n+=snprintf(text+n,sizeof(text)-(size_t)n," %s=%016llx",names[k],(unsigned long long)actual.gpr[k]);
+            text[n++]='\n';{ssize_t w_=write(2,text,(size_t)n);(void)w_;}
+        }
+        n=guest_cpu_describe_last_call(text,sizeof(text));
+        if(n>0 && (size_t)n<sizeof(text)){ssize_t w_=write(2,text,(size_t)n);(void)w_;}
+        for(int which=0;which<2;++which){
+            uintptr_t pc=which ? rip : (uintptr_t)actual.rip;
+            if(pc<16)continue;
+            unsigned char bytes[64];
+            struct iovec local={bytes,sizeof(bytes)},remote={(void *)(pc-16),sizeof(bytes)};
+            ssize_t got=process_vm_readv(getpid(),&local,1,&remote,1,0);
+            if(got<=0)continue;
+            n=snprintf(text,sizeof(text),"  %s code from %#llx (fault PC at +16):",which?"ARM JIT":"x86 guest",(unsigned long long)(pc-16));
+            for(ssize_t i=0;i<got;++i)n+=snprintf(text+n,sizeof(text)-(size_t)n," %02x",bytes[i]);
+            text[n++]='\n';{ssize_t w_=write(2,text,(size_t)n);(void)w_;}
+        }
+        /* Frame-pointer walk uses live RBP/RSP. Read faults terminate the walk. */
+        uint64_t bp=actual.gpr[GUEST_RBP],sp=actual.gpr[GUEST_RSP];
+        for(int i=0;i<8 && bp>=sp && bp-sp<1024*1024 && !(bp&7);++i){
+            uint64_t frame[2];
+            struct iovec local={frame,sizeof(frame)},remote={(void *)(uintptr_t)bp,sizeof(frame)};
+            if(process_vm_readv(getpid(),&local,1,&remote,1,0)!=(ssize_t)sizeof(frame))break;
+            n=snprintf(text,sizeof(text),"  live guest frame #%d bp=%#llx return=%#llx\n",i,(unsigned long long)bp,(unsigned long long)frame[1]);
+            {ssize_t w_=write(2,text,(size_t)n);(void)w_;}
+            if(frame[0]<=bp)break;
+            bp=frame[0];
+        }
+        char fiber[1536];
+        n=runtime_fiber_describe(fiber,sizeof(fiber),sp);
+        if(n>0 && (size_t)n<sizeof(fiber)){ssize_t w_=write(2,fiber,(size_t)n);(void)w_;}
+    }
+#endif
     /* g2-arm64: the guest state (FEX: the translated block's guest RIP) and the mappings around
      * the PC and the faulting address (JIT code has no module). */
     { char name[40]="  thread "; prctl(PR_GET_NAME,(unsigned long)(name+9),0,0,0); size_t l=strlen(name); name[l]=10;
