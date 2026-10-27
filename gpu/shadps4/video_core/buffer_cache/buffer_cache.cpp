@@ -166,7 +166,7 @@ BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& s
     write_scheduler = &scheduler;
     g_gpu_write_done_tick = [] { return write_scheduler->CurrentTick() + 1; };
     const char* side_env = std::getenv("BB_SIDE_DOWNLOAD");
-    if (!uma_read_back && instance.GetSideQueue() && !(side_env && side_env[0] == '0')) {
+    if (instance.GetSideQueue() && !(side_env && side_env[0] == '0')) {
         side_queue = std::make_unique<SideQueue>(instance, instance.GetSideQueue());
     }
     Vulkan::g_host_read_barrier=uma_read_back;
@@ -234,10 +234,13 @@ bool BufferCache::DownloadOnSideQueue(VAddr page, u64 length) {
             total += end - start;
         });
     }
-    if(!side_queue){
+    bool mapped_copy=uma_read_back;
+    if(mapped_copy){
         for(const auto& copy:copies)
-            if(!ReadMapped(arena->cpu_addr+copy.srcOffset,copy.size))return false;
-    }else{
+            if(!ReadMapped(arena->cpu_addr+copy.srcOffset,copy.size)){mapped_copy=false;break;}
+    }
+    if(!mapped_copy){
+    if(!side_queue)return false;
     auto& side = *side_queue;
     if (total > SideQueue::StagingSize) {
         return false;

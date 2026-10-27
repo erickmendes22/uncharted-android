@@ -17,6 +17,8 @@ buffer = (root / 'gpu/shadps4/video_core/buffer_cache/buffer_cache.cpp').read_te
 start = buffer.index('bool BufferCache::DownloadOnSideQueue(')
 end = buffer.index('BufferCache::~BufferCache()', start)
 assert 'scheduler.Wait(' not in buffer[start:end], 'UMA path must not add producer waits'
+assert "if (instance.GetSideQueue() && !(side_env && side_env[0] == '0'))" in buffer
+assert 'if(!side_queue)return false;' in buffer[start:end]
 patch = (root / 'android/scripts/port-arm64/patches/fex-0004-pause-hook-trap.patch').read_text()
 assert 'Literal == 0x82' in patch and 'SyscallOp(Op, false)' in patch
 assert '-  if (IsSyscallInst)' not in patch, 'Original SYSCALL semantics must be unchanged'
