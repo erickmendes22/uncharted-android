@@ -1,3 +1,4 @@
+#include "bbport_mesh_copy_policy.h"
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -243,6 +244,15 @@ static bool ExecuteCopyShaderHLE(const Shader::Info& info, const AmdGpu::Compute
 // i < count (user data SGPR6). Run on the GPU, the copy never reaches guest memory, and the SRT
 // walker reads those blocks there for the shaders that use them: zeros (blood drawn as solid
 // discs). While neither side holds GPU-written data the copy is done in guest memory instead.
+// Targeted U2 raycaster result fix from upstream: mode 2 updates CPU-owned records.
+static bool MeshCopyResultsEnabled(){
+    static const bool enabled=[] {
+        const char* value=std::getenv("BB_SCALAR_COPY64_SYNC");
+        return value && value[0]=='2';
+    }();
+    return enabled;
+}
+
 static constexpr u64 SCALAR_COPY_SHADER_HASH = 0x2d215c3b;    // one dword per workgroup
 static constexpr u64 SCALAR_COPY64_SHADER_HASH = 0x6a6422a9;  // 64 dwords per workgroup (U2)
 
@@ -321,11 +331,14 @@ static bool ExecuteScalarCopyHLE(const Shader::Info& info, const AmdGpu::Compute
             if (dst_gpu) {
                 buffer_cache.ReadMemory(dst.base_address, size, false, true);
             }
-        } else if (both && size < 1_MB) {
-            if (src_written && sync) {
+        } else if (size < 1_MB && (both || (group_size==64 && MeshCopyResultsEnabled()))) {
+            const bool mesh_copy=group_size==64 && MeshCopyResultsEnabled();
+            const bool copy_sync=sync || (mesh_copy && BbMeshCopy::NeedsGuestResult(
+                64,true,buffer_cache.IsRegionCpuModified(dst.base_address,size)));
+            if (src_written && copy_sync) {
                 buffer_cache.ReadMemory(src.base_address, size, false, true);
             }
-            if ((!src_written || sync) && memory->IsValidGpuMapping(src.base_address, size) &&
+            if ((!src_written || copy_sync) && memory->IsValidGpuMapping(src.base_address, size) &&
                 memory->IsValidGpuMapping(dst.base_address, size)) {
                 memory->TryWriteBacking(reinterpret_cast<void*>(dst.base_address),
                                         reinterpret_cast<const void*>(src.base_address), size);
@@ -394,6 +407,10 @@ bool PipelineGuestMemoryShaderHLE(const Shader::Info& info,
         return false;
     }
     const u64 group_size = info.pgm_hash == SCALAR_COPY64_SHADER_HASH ? 64 : 1;
+    // The CPU result must land before the command thread's next SRT walk.
+    // This path has no landing-gate/deferred-copy integration, so drain only
+    // these U2 copies rather than issuing a blocking read on the recorder.
+    if(group_size==64 && MeshCopyResultsEnabled())return false;
     const auto ud = info.UserData();
     if (ud.size() <= 6) {
         return false;

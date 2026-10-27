@@ -52,6 +52,14 @@ jobs:
         run: |
           cc -std=c11 -Wall -Wextra -Werror -Isrc tests/test_guest_fault_arm64.c -o "$RUNNER_TEMP/guest-fault-test"
           "$RUNNER_TEMP/guest-fault-test"
+      - name: Verify protected file reads and mesh results
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror -Isrc tests/test_file_protected_read.c -pthread -o "$RUNNER_TEMP/protected-read-test"
+          "$RUNNER_TEMP/protected-read-test"
+          cc -std=c11 -O2 -Isrc tests/test_file_mods.c -pthread -o "$RUNNER_TEMP/file-mods-test"
+          "$RUNNER_TEMP/file-mods-test"
+          g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_mesh_copy_policy.cpp -o "$RUNNER_TEMP/mesh-copy-test"
+          "$RUNNER_TEMP/mesh-copy-test"
       - name: Install native build tools and SDK
         shell: bash
         run: |
@@ -122,13 +130,13 @@ jobs:
           grep -q "versionName='0.2.5'" dist/package.txt
           grep -q "versionCode='100205'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.5-U2-CrashCapture.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.5-U2-LoadingFix.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.5-U2-CrashCapture
+          name: Uncharted-Daedalus-0.2.5-U2-LoadingFix
           path: dist/
           if-no-files-found: error
           retention-days: 30

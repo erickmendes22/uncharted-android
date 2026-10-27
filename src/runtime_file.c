@@ -301,6 +301,7 @@ static ssize_t host_write(int h,const void *buffer,uint64_t size) { return write
 /* Pages of the destination may be write-protected for GPU tracking: the kernel's copy then
  * fails with EFAULT instead of faulting to our handler. A user-mode write to each page first
  * goes through the handler, which unprotects it (and records the upcoming write). */
+#ifdef _WIN32
 static void touch_for_write(void *buffer,uint64_t size) {
     if (!size) return;
     uintptr_t p=(uintptr_t)buffer & ~(uintptr_t)4095, end=(uintptr_t)buffer+size;
@@ -309,11 +310,48 @@ static void touch_for_write(void *buffer,uint64_t size) {
         *b=*b;
     }
 }
+#endif
 /* The GPU side can write-protect a destination page again between touch_for_write and the read;
  * the host then stops short (Windows: no error, fewer bytes) and a short read the guest takes as
  * complete loses data (U2's script module: 16384 of 392775 bytes, issue #101; streamed level
  * data). Files are read until the request is done or the file ends, touching the rest again.
  * offset -1: at the file position. */
+#ifndef _WIN32
+/* Adapted from Supermedo/uncharted_pc c30d611: kernel reads into GPU-tracked
+ * pages can stop short without invoking our user-space page-fault handler.
+ * Bounce through host memory, then memcpy so protection faults are handled.
+ * Bound scratch memory to 256 KiB per reader and release it on thread exit. */
+#define FILE_BOUNCE_SIZE (256u << 10)
+static pthread_key_t read_bounce_key;
+static pthread_once_t read_bounce_once=PTHREAD_ONCE_INIT;
+static int read_bounce_error;
+static void init_read_bounce(void) { read_bounce_error=pthread_key_create(&read_bounce_key,free); }
+static ssize_t read_full(int h,void *buffer,uint64_t size,int64_t offset) {
+    if(!size)return 0;
+    if(size>(uint64_t)SSIZE_MAX){errno=EINVAL;return -1;}
+    pthread_once(&read_bounce_once,init_read_bounce);
+    if(read_bounce_error){errno=read_bounce_error;return -1;}
+    unsigned char *bounce=pthread_getspecific(read_bounce_key);
+    if(!bounce){
+        bounce=malloc(FILE_BOUNCE_SIZE);
+        if(!bounce){errno=ENOMEM;return -1;}
+        int error=pthread_setspecific(read_bounce_key,bounce);
+        if(error){free(bounce);errno=error;return -1;}
+    }
+    uint64_t done=0;
+    while(done<size){
+        size_t want=size-done>FILE_BOUNCE_SIZE ? FILE_BOUNCE_SIZE : (size_t)(size-done);
+        ssize_t n=offset<0 ? host_read(h,bounce,want) : pread(h,bounce,want,offset+(int64_t)done);
+        if(n<0 && errno==EINTR)continue;
+        if(n<0){if(done)break;return -1;}
+        if(!n)break;
+        memcpy((unsigned char *)buffer+done,bounce,(size_t)n);
+        done+=(uint64_t)n;
+        if(h<3)break;
+    }
+    return (ssize_t)done;
+}
+#else
 static ssize_t read_full(int h,void *buffer,uint64_t size,int64_t offset) {
     unsigned char *at=buffer;
     uint64_t done=0;
@@ -327,6 +365,7 @@ static ssize_t read_full(int h,void *buffer,uint64_t size,int64_t offset) {
     }
     return (ssize_t)done;
 }
+#endif
 static int64_t do_read(int fd,void *buffer,uint64_t size) {
     int h=host_fd(fd);
     if (h<0) return -EBADF;
