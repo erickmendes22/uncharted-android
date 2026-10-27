@@ -32,6 +32,7 @@
 
 typedef struct {
     int used, type, channels, is_float, frames, sample_bytes, std_layout;
+    int32_t handle;
     int fold_stereo; /* 8 channels folded to stereo here for a device with fewer channels */
     int32_t volume[8];
     SDL_AudioStream *stream;
@@ -50,6 +51,7 @@ _Static_assert(sizeof(PortState)==32,"AudioOut port state layout");
 
 static pthread_mutex_t table_lock=PTHREAD_MUTEX_INITIALIZER;
 static Port ports[PORTS];
+static uint8_t port_generations[PORTS];
 static atomic_int initialized;
 static int sdl_ready=-1;
 static atomic_size_t buffers_out, ports_opened;
@@ -101,7 +103,7 @@ static int port_range(int type, int *first, int *last) {
 static Port *port_of(int32_t handle, int32_t *error) {
     int id=handle & 0xff;
     if ((handle & 0x3f000000)!=0x20000000 || id>=PORTS) { *error=ERR_INVALID_PORT; return NULL; }
-    if (!ports[id].used) { *error=ERR_NOT_OPENED; return NULL; }
+    if (!ports[id].used || ports[id].handle!=handle) { *error=ERR_NOT_OPENED; return NULL; }
     return &ports[id];
 }
 
@@ -140,6 +142,10 @@ static ABI int32_t audio_open(int32_t user, int32_t type, int32_t index, uint32_
     Port *p=&ports[id];
     pthread_mutex_lock(&p->lock);
     memset(p,0,offsetof(Port,lock));
+    // Keep the type/index encoding; the previously unused byte rejects a caller
+    // still holding the old port when a 256-frame stream is reopened at 1024.
+    const int32_t handle=(type<<16) | id | 0x20000000 | ((uint32_t)port_generations[id]++<<8);
+    p->handle=handle;
     p->used=1; p->type=type; p->channels=channels[format]; p->is_float=format>=3 && format!=6;
     p->generation=atomic_load(&foreground_generation);
     p->sample_bytes=p->is_float ? 4 : 2; p->frames=(int)length; p->std_layout=format>=6;
@@ -170,7 +176,7 @@ static ABI int32_t audio_open(int32_t user, int32_t type, int32_t index, uint32_
            p->fold_stereo ? ", folded to stereo" : "");
     pthread_mutex_unlock(&p->lock);
     pthread_mutex_unlock(&table_lock);
-    return (type<<16) | id | 0x20000000;
+    return handle;
 }
 static ABI int32_t audio_close(int32_t handle) {
     pthread_mutex_lock(&table_lock);

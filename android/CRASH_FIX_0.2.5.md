@@ -14,6 +14,8 @@ The precise cause of the reported device crash remains unconfirmed.
   Closing or reopening a port can no longer invalidate a stream between lookup
   and acquisition of its mutex. State, volume and output-time queries use the
   same lifetime rule.
+- Tag reopened audio handles so late writes to a closed port cannot be accepted
+  by a replacement stream with a different buffer size.
 - Initialize port mutexes once for the process lifetime; reopening clears only
   the port payload, never a live mutex. Shared audio counters are atomic.
 - Validate font container/table bounds and stb compatibility before adding a
