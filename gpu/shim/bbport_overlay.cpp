@@ -475,7 +475,11 @@ void Init(const Vulkan::Instance& instance, vk::Format format, u32 image_count) 
 #ifdef __ANDROID__
     // One compatible CJK source is enough. Avoid loading several large overlapping
     // fonts or letting an unsupported system font corrupt the atlas.
-    for(const char* path:{"/system/fonts/NotoSansCJK-Regular.ttc","/system/fonts/NotoSansJP-Regular.otf","/system/fonts/NotoSansKR-Regular.otf","/system/fonts/NotoSansSC-Regular.otf"}) {
+    const char* language=std::getenv("BB_UI_LANGUAGE");
+    const char* regional=language && std::strncmp(language,"ko",2)==0 ? "/system/fonts/NotoSansKR-Regular.otf"
+        :language && std::strncmp(language,"zh",2)==0 ? "/system/fonts/NotoSansSC-Regular.otf"
+        :"/system/fonts/NotoSansJP-Regular.otf";
+    for(const char* path:{"/system/fonts/NotoSansCJK-Regular.ttc",regional}) {
         if(BbFontLoader::AddFile(*io.Fonts,path,18.0f,true))break;
     }
 #endif
