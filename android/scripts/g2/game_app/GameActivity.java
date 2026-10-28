@@ -167,11 +167,15 @@ public class GameActivity extends SDLActivity {
             // the started game's env-u1.txt, env-u2.txt or env-u3.txt (-KEY removes KEY).
             // Do not carry compatibility flags from the previous game/process.
             for(String key:ArmCompatibility.OWNED)Os.unsetenv(key);
+            for(String key:RendererOptions.KEYS)Os.unsetenv(key);
             for (String name : new String[] {"env.txt", "env-" + game + ".txt"}) {
                 java.util.List<String> configured=lines(new File(d,name),true);
                 // Discard stale flags written by the previous integration, including
                 // forced precise readback. Global manual overrides remain unchanged.
-                if(!name.equals("env.txt"))configured=ArmCompatibility.cleanPerGame(configured);
+                if(!name.equals("env.txt")){
+                    configured=ArmCompatibility.cleanPerGame(configured);
+                    configured=RendererOptions.cleanPerGame(configured);
+                }
                 for (String line : configured) {
                     int eq = line.indexOf('=');
                     if (line.startsWith("-")) Os.unsetenv(line.substring(1));
@@ -182,6 +186,18 @@ public class GameActivity extends SDLActivity {
             String compatibility=ArmCompatibility.environment(game,options.getBoolean("arm_uma_readback",false),
                 options.getBoolean("arm_flush_draws",false),options.getBoolean("arm_job_spin",false));
             for(String line:compatibility.split("\n")){
+                int eq=line.indexOf('=');
+                if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
+            }
+            String renderer=RendererOptions.environment(game,
+                options.getBoolean("renderer_driver_cache",true),
+                options.getBoolean("renderer_background_warmup",false),
+                options.getBoolean("renderer_worker_compile",false),
+                options.getBoolean("renderer_full_lights",true),
+                options.getBoolean("renderer_scalar_exec",true),
+                options.getBoolean("renderer_nan_clamp",true),
+                options.getBoolean("renderer_small_readbacks",false));
+            for(String line:renderer.split("\n")){
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
             }

@@ -49,6 +49,11 @@ public:
                     ComputePipelineKey compute_key, const Shader::Info& info,
                     vk::ShaderModule module, SerializationSupport& sdata, bool preloading);
     ~ComputePipeline();
+    /// bbport: points the stage at another Info describing the same program.
+    void RebindStage(const Shader::Info* info) {
+        stages[int(Shader::SwStage::Compute)] = info;
+    }
+
 
 private:
     ComputePipelineKey compute_key;

@@ -20,6 +20,7 @@ void bbgpu_register_kernel(void);
 void bbnet_configure(const char *app0, const char *serial, const char *title, const char *app_ver);
 /* Creates window, Vulkan device, presenter and GPU command processor. */
 int bbgpu_init(const BbGpuConfig *config);
+void bbgpu_flush_pipeline_cache(void);
 /* Function for an imported NID ("NID#lib#mod"), or 0 when the GPU library does not provide it. */
 uintptr_t bbgpu_resolve(const char *scoped_nid);
 /* Called first by the loader's SIGSEGV handler: 1 when a GPU page-tracking fault was handled. */

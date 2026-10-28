@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "bbport_renderer_options.h"
 #include <map>
 #include "core/libraries/videoout/driver.h"
 #include <xxhash.h>
@@ -285,6 +286,7 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_, Runtime
     camera_motion->SetObjectMotion(object_motion.get());
     upscaler = std::make_unique<TemporalUpscaler>(instance, scheduler, texture_cache, runtime,
                                                   *camera_motion, *scene_targets);
+    pipeline_cache.StartWarmUp();
     if (!EmulatorSettings.IsNullGPU()) {
         liverpool->BindRasterizer(this);
     }
@@ -2500,6 +2502,49 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     SyncCheckpoint(scheduler);
 }
 
+void Rasterizer::NoteSmallWrittenBuffers(const Shader::Info& stage) {
+    if (!BbRenderer::SmallReadbacks()) return;
+    for (const auto& desc : stage.buffers) {
+        if (desc.IsSpecial() || !desc.is_written) {
+            continue;
+        }
+        const auto sharp = desc.GetSharp(stage);
+        const u32 size = sharp.GetSize();
+        if (!sharp.base_address || size == 0 || size > 64) {
+            continue;
+        }
+        std::scoped_lock lk{small_written_mutex};
+        const std::pair<VAddr, u32> range{sharp.base_address, size};
+        if (small_written_buffers.size() < 16 &&
+            std::ranges::find(small_written_buffers, range) == small_written_buffers.end()) {
+            small_written_buffers.push_back(range);
+        }
+    }
+}
+
+void Rasterizer::ReadBackSmallWrittenBuffers() {
+    if (!BbRenderer::SmallReadbacks()) return;
+    std::vector<std::pair<VAddr, u32>> ranges;
+    {
+        std::scoped_lock lk{small_written_mutex};
+        ranges.swap(small_written_buffers);
+    }
+    bool captured = false;
+    for (const auto& [address, size] : ranges) {
+        if (!buffer_cache.IsRegionGpuModified(address, size)) continue;
+        // No synchronous fallback: retry at the next event if the bounded pool is busy.
+        // Existing U2 mesh copies retain their own synchronous fallback unchanged.
+        if (!buffer_cache.DeferSmallReadback(address, size)) {
+            std::scoped_lock lk{small_written_mutex};
+            if (small_written_buffers.size() < 16)
+                small_written_buffers.emplace_back(address, size);
+        } else {
+            captured = true;
+        }
+    }
+    if (captured) scheduler.Flush(); // one submission for this event, no GPU wait
+}
+
 void Rasterizer::DispatchDirect() {
     RENDERER_TRACE;
     BbStats::dispatches.fetch_add(1, std::memory_order_relaxed);
@@ -2598,6 +2643,7 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
     if (!skin_bound && !BindResources(pipeline)) {
         return;
     }
+    NoteSmallWrittenBuffers(cs);
     if (StaleCheckEnabled()) {
         VAddr slot = ~VAddr{0};
         u64 slot_size = 0;

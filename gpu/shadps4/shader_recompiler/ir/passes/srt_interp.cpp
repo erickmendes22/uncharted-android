@@ -531,6 +531,9 @@ bool RunSrtWalkerInterpreted(PFN_SrtWalker walker, const u32* user_data, u32* fl
         sigjmp_buf* const saved = runtime_fault_recover;
         if (sigsetjmp(recover, 0)) {
             runtime_fault_recover = saved;
+            // A speculative draw/compile may see a table before it is ready. Abort only
+            // that attempt, preserving the shared interpreter for the real GPU thread.
+            if (saved) siglongjmp(*saved, 1);
             Op& op = program->ops[current_op];
             if (op.kind == Kind::Copy && !op.zeroed.exchange(true)) {
                 continue; // its pairs run one by one from now on

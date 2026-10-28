@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "bbport_renderer_options.h"
 #include <chrono>
 #include <array>
 #include <map>
@@ -326,7 +327,16 @@ bool BufferCache::DeferGuestCopy(VAddr src, VAddr dst, u64 size) {
         const char* env = std::getenv("BB_SCALAR_COPY64_DEFER");
         return env && env[0] == '1'; // run.py: on for Uncharted 2
     }();
-    if (!enabled || land_stopping.load(std::memory_order_acquire) || size == 0 ||
+    return enabled && QueueGuestSnapshot(src, dst, size);
+}
+
+bool BufferCache::DeferSmallReadback(VAddr address, u64 size) {
+    return BbRenderer::SmallReadbacks() && size > 0 && size <= 64 &&
+           QueueGuestSnapshot(address, address, size, false);
+}
+
+bool BufferCache::QueueGuestSnapshot(VAddr src, VAddr dst, u64 size, bool submit_now) {
+    if (land_stopping.load(std::memory_order_acquire) || size == 0 ||
         size >= 1_MB || !memory->IsValidGpuMapping(src, size) ||
         !memory->IsValidGpuMapping(dst, size)) {
         return false;
@@ -381,9 +391,9 @@ bool BufferCache::DeferGuestCopy(VAddr src, VAddr dst, u64 size) {
         cmdbuf.pipelineBarrier2({.memoryBarrierCount = 1, .pMemoryBarriers = &to_host});
     });
     landing->tick = scheduler.CurrentTick();
-    scheduler.Flush(); // submit, never wait for GPU completion here
+    if (submit_now) scheduler.Flush(); // small U3 copies are submitted as a batch at EOP
     // The guest part of the copy now; the GPU-written bytes follow when they have landed.
-    memory->TryWriteBacking(reinterpret_cast<void*>(dst), reinterpret_cast<const void*>(src), size);
+    if (src != dst) memory->TryWriteBacking(reinterpret_cast<void*>(dst), reinterpret_cast<const void*>(src), size);
     {
         std::scoped_lock lk{landing_mutex};
         if (landing_stop) {

@@ -68,6 +68,7 @@ public:
                          TextureCache& texture_cache, PageManager& tracker);
     ~BufferCache();
     bool DeferGuestCopy(VAddr src, VAddr dst, u64 size);
+    bool DeferSmallReadback(VAddr address, u64 size);
     u64 PendingLanding() const;
     bool LandingGateActive() const;
     void WaitLanding(u64 seq);
@@ -225,6 +226,7 @@ private:
     bool DownloadOnSideQueue(VAddr page, u64 length);
     /// bbport: deferred raycaster copies (DeferGuestCopy).
     struct Landing;
+    bool QueueGuestSnapshot(VAddr src, VAddr dst, u64 size, bool submit_now = true);
     struct GatedLabel {
         u64 seq;
         std::function<void()> fn;

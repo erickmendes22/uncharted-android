@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "bbport_renderer_options.h"
 #include <limits>
 #include <optional>
 #include "shader_recompiler/info.h"
@@ -247,8 +248,8 @@ struct SharpTable {
     u32 stride_dw;
     u32 count;
 };
-/// image_infos and the bindings of a pipeline hold 64 images (Shader::NUM_IMAGES).
-constexpr u32 MaxSharpTable = 32;
+/// 128 cookie descriptors plus ordinary images fit NUM_IMAGE_DESCRIPTORS (192).
+u32 MaxSharpTable() { return BbRenderer::FullLights() ? 128 : 32; }
 
 /// The offset ((index * stride + base) >> 2) (+ 0), as the T#'s first dword computes it.
 static bool MatchTableOffset(IR::Value value, IR::Value& index, u32& stride_bytes,
@@ -335,7 +336,7 @@ static std::optional<SharpTable> FindSharpTable(const SharpReference& sharp, con
     if (base + 8 > copy) {
         return std::nullopt;
     }
-    const u32 count = std::min(MaxSharpTable, (copy - base - 8) / stride + 1);
+    const u32 count = std::min(MaxSharpTable(), (copy - base - 8) / stride + 1);
     if (count < 2) {
         return std::nullopt;
     }

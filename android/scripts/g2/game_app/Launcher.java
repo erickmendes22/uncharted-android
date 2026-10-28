@@ -672,6 +672,16 @@ public class Launcher extends Activity {
         compatibilitySwitch(root,"Send GPU work in small batches (U2/U3)","arm_flush_draws");
         compatibilitySwitch(root,"Let idle game threads sleep","arm_job_spin");
         note(root,"Changes apply on the next game start. Disable one option at a time to compare.");
+        root = card(config, "Renderer comparison");
+        compatibilitySwitch(root,"Save Vulkan driver cache","renderer_driver_cache",true);
+        compatibilitySwitch(root,"Load cached pipelines in background","renderer_background_warmup",false);
+        compatibilitySwitch(root,"Compile graphics and compute on workers","renderer_worker_compile",false);
+        compatibilitySwitch(root,"Complete light cookie table","renderer_full_lights",true);
+        compatibilitySwitch(root,"Correct scalar shader scopes","renderer_scalar_exec",true);
+        compatibilitySwitch(root,"Correct NaN material clamp","renderer_nan_clamp",true);
+        compatibilitySwitch(root,"Small compute readbacks (U3)","renderer_small_readbacks",false);
+        note(root,"Restart the game after changing these options. Worker compilation and U3 readbacks are off by default for comparison.");
+        note(root,"Graphics comparison modes use separate shader caches. The first run of each mode may stutter while shaders compile.");
         root = card(config, "ADVANCED");
         text(root, "Additional environment variables (optional):", 14, false);
         extraEnv = new EditText(this);
@@ -1050,10 +1060,13 @@ public class Launcher extends Activity {
     }
 
     private void compatibilitySwitch(LinearLayout parent,String title,String key) {
+        compatibilitySwitch(parent,title,key,false);
+    }
+    private void compatibilitySwitch(LinearLayout parent,String title,String key,boolean defaultValue) {
         android.widget.Switch control=new android.widget.Switch(this);
         control.setText(AppLanguage.text(title));control.setTextColor(0xffeee2cc);
         control.setPadding(dp(8),dp(12),dp(8),dp(12));
-        control.setChecked(prefs.getBoolean(key,false));
+        control.setChecked(prefs.getBoolean(key,defaultValue));
         control.setOnCheckedChangeListener((button,on)->prefs.edit().putBoolean(key,on).apply());
         parent.addView(control);
     }

@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <atomic>
+#include <mutex>
+#include "bbport_renderer_options.h"
+#include "bbport_toggles.h"
 #include <chrono>
 #include <cstdio>
 #include <map>
@@ -44,7 +48,7 @@ u32 ReadConstWindowSize(u64 pgm_hash) {
         // LDS). The default window held lights 0-3 whole; the others read its last dword. Its
         // lights' cookie T#s follow at dword 7220 + 8 * i: 7476 covers 32 of them (the T# table
         // the resource patching pass binds).
-        std::vector<std::pair<u64, u32>> list{{0x43b8ee5eull, 7476}};
+        std::vector<std::pair<u64, u32>> list{{0x43b8ee5eull, BbRenderer::FullLights() ? 8244u : 7476u}};
         const char* p = std::getenv("BB_RC_WINDOW");
         while (p && *p) {
             char* end = nullptr;
@@ -170,11 +174,13 @@ void NoteFlatBuf(u64 pgm_hash, const u32* flat, std::size_t dwords) {
 using namespace Xbyak::util;
 
 static Xbyak::CodeGenerator g_srt_codegen(32_MB);
+static std::mutex g_srt_mutex;
 static const u8* g_srt_codegen_start = nullptr;
 
 namespace Shader {
 
 PFN_SrtWalker RegisterWalkerCode(const u8* ptr, size_t size) {
+    std::scoped_lock lock{g_srt_mutex};
     const auto func_addr = (PFN_SrtWalker)g_srt_codegen.getCurr();
     g_srt_codegen.db(ptr, size);
     g_srt_codegen.ready();
@@ -219,6 +225,8 @@ static bool SrtWalkerSignalHandler(void* context, void* fault_address) {
         return false; // Not in SRT code range
     }
 
+    // Speculative worker faults must not permanently patch a live shader's walker.
+    if (runtime_fault_recover) return false;
     // Patch instruction to zero register
     ZydisDecodedInstruction instruction;
     ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
@@ -858,6 +866,7 @@ static void VisitPointer(const IR::Value& off_dw, IR::Inst* subtree, PassInfo& p
 
 static void GenerateSrtProgram(Info& info, PassInfo& pass_info) {
     Xbyak::CodeGenerator& c = g_srt_codegen;
+    std::scoped_lock srt_lock{g_srt_mutex};
 
     if (pass_info.srt_roots.empty()) {
         return;

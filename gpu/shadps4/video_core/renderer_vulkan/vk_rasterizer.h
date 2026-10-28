@@ -140,6 +140,8 @@ public:
     /// Stage A: guest memory the recording thread will write for work handed to it (storage
     /// buffers, DMA, WriteData, fences); constants overlapping it are bound there, not copied here.
     void NotePendingGpuWrite(VAddr address, u64 size);
+    void NoteSmallWrittenBuffers(const Shader::Info& stage);
+    void ReadBackSmallWrittenBuffers();
     /// Before a guest-visible write: fences deferred earlier are written first.
     void WaitDeferredSignals() {
         scheduler.WaitDeferredSignals();
@@ -370,6 +372,8 @@ private:
     VideoCore::PageManager page_manager;
     VideoCore::BufferCache buffer_cache;
     VideoCore::TextureCache texture_cache;
+    std::mutex small_written_mutex;
+    std::vector<std::pair<VAddr, u32>> small_written_buffers;
     AmdGpu::Liverpool* liverpool;
     Core::MemoryManager* memory;
     boost::icl::interval_set<VAddr> mapped_ranges;
@@ -392,9 +396,9 @@ private:
     using RenderTargetInfo = std::pair<VideoCore::ImageId, VideoCore::TextureCache::ImageDesc>;
     std::array<RenderTargetInfo, AmdGpu::NUM_COLOR_BUFFERS> cb_descs;
     std::pair<VideoCore::ImageId, VideoCore::TextureCache::ImageDesc> db_desc;
-    boost::container::static_vector<vk::DescriptorImageInfo, Shader::NUM_IMAGES> image_infos;
+    boost::container::static_vector<vk::DescriptorImageInfo, Shader::NUM_IMAGE_DESCRIPTORS> image_infos;
     boost::container::static_vector<vk::DescriptorBufferInfo, Shader::NUM_BUFFERS> buffer_infos;
-    boost::container::static_vector<VideoCore::ImageId, Shader::NUM_IMAGES> bound_images;
+    boost::container::static_vector<VideoCore::ImageId, Shader::NUM_IMAGE_DESCRIPTORS> bound_images;
     struct BoundBuffer {
         const VideoCore::Buffer* buffer;
         u64 offset;
@@ -430,8 +434,8 @@ private:
     std::array<ImageDescCacheEntry, 4096> image_desc_cache{};
     u64 desc_use_counter = 0;
     /// Entries replacing pinned cache slots during one BindTextures call.
-    boost::container::static_vector<ImageDescCacheEntry, Shader::NUM_IMAGES> image_desc_overflow;
-    boost::container::static_vector<VideoCore::TextureCache::ImageDesc, Shader::NUM_IMAGES * 2>
+    boost::container::static_vector<ImageDescCacheEntry, Shader::NUM_IMAGE_DESCRIPTORS> image_desc_overflow;
+    boost::container::static_vector<VideoCore::TextureCache::ImageDesc, Shader::NUM_IMAGE_DESCRIPTORS * 2>
         image_desc_storage;
     u64 bind_epoch = 0;
     // bbport: render/depth target lookups memoized by their raw register bytes while image
@@ -470,7 +474,7 @@ private:
                                                               const Shader::ImageResource& res) {
         return CachedImageDescEntry(sharp, res).desc;
     }
-    boost::container::static_vector<ImageBindingInfo, Shader::NUM_IMAGES> image_bindings;
+    boost::container::static_vector<ImageBindingInfo, Shader::NUM_IMAGE_DESCRIPTORS> image_bindings;
     struct VertexBinds {
         VertexInputs<vk::VertexInputAttributeDescription2EXT> attributes;
         VertexInputs<vk::VertexInputBindingDescription2EXT> bindings;
@@ -512,7 +516,7 @@ private:
     /// Draws whose textures the helper bound completely, partly or not at all (BB_FRAME_STATS).
     u64 helper_full = 0, helper_partial = 0, helper_serial = 0;
     /// The memoized cache entry of each image binding (FindImage memo taken), else null.
-    boost::container::static_vector<ImageDescCacheEntry*, Shader::NUM_IMAGES> image_binding_entries;
+    boost::container::static_vector<ImageDescCacheEntry*, Shader::NUM_IMAGE_DESCRIPTORS> image_binding_entries;
     bool fault_process_pending{};
     bool attachment_feedback_loop{};
     bool needs_barrier{};

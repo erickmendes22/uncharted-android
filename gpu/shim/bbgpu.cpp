@@ -214,6 +214,8 @@ static void StartProfileWriter() {
 }
 #endif
 
+extern "C" void bbgpu_flush_pipeline_cache(void) { Vulkan::FlushPipelineCacheForExit(); }
+
 extern "C" int bbgpu_init(const BbGpuConfig* config) {
     BbSettings::Load();
 #ifdef BB_PGO_GENERATE
@@ -250,6 +252,7 @@ extern "C" int bbgpu_init(const BbGpuConfig* config) {
             SDL_Delay(2);
         }
         std::printf("Window closed (close button, Alt+F4 or system quit request)\n");
+        Vulkan::FlushPipelineCacheForExit();
         std::fflush(stdout);
         std::_Exit(0);
     });
