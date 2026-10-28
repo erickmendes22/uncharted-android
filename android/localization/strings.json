@@ -4855,5 +4855,31 @@
     "zh": "更改在下次启动游戏时生效。每次关闭一个选项进行比较。",
     "tr": "Değişiklikler oyunun sonraki açılışında uygulanır. Karşılaştırmak için seçenekleri tek tek kapatın.",
     "pl": "Zmiany obowiązują od następnego uruchomienia gry. Porównuj, wyłączając jedną opcję naraz."
+  },
+  "Folder selection failed: ": {
+    "pt": "Falha ao selecionar pasta: ",
+    "es": "No se pudo seleccionar la carpeta: ",
+    "fr": "Échec de sélection du dossier : ",
+    "de": "Ordnerauswahl fehlgeschlagen: ",
+    "it": "Selezione cartella non riuscita: ",
+    "ru": "Не удалось выбрать папку: ",
+    "ja": "フォルダーを選択できません: ",
+    "ko": "폴더 선택 실패: ",
+    "zh": "文件夹选择失败：",
+    "tr": "Klasör seçilemedi: ",
+    "pl": "Nie udało się wybrać folderu: "
+  },
+  "PKG must support random access.": {
+    "pt": "O PKG deve permitir acesso direto às posições do arquivo.",
+    "es": "El PKG debe admitir acceso aleatorio.",
+    "fr": "Le PKG doit autoriser l’accès aléatoire.",
+    "de": "Die PKG-Datei muss wahlfreien Zugriff unterstützen.",
+    "it": "Il PKG deve supportare l’accesso casuale.",
+    "ru": "Файл PKG должен поддерживать произвольный доступ.",
+    "ja": "PKG はランダムアクセスに対応している必要があります。",
+    "ko": "PKG는 임의 접근을 지원해야 합니다.",
+    "zh": "PKG 必须支持随机访问。",
+    "tr": "PKG rastgele erişimi desteklemelidir.",
+    "pl": "Plik PKG musi obsługiwać dostęp swobodny."
   }
 }

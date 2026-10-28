@@ -4,6 +4,7 @@
 #pragma once
 
 #include "bbport_copy.h"
+#include "bbport_staging_reuse.h"
 
 #include <atomic>
 #include <deque>
@@ -236,6 +237,7 @@ private:
     std::atomic<u64> landing_registered{0}, landing_done{0};
     bool landing_stop{false}, gate_running{false};
     std::atomic<u32> gate_outstanding{0}; ///< labels queued or running on the landing thread
+    BbStaging::Reuse<Buffer> landing_free_snapshots; // guarded by landing_mutex
     std::thread landing_thread;
     void LandingWorker();
     bool ExecuteLanding(Landing& landing);

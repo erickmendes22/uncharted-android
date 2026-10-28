@@ -47,9 +47,8 @@ final class PkgInstaller {
  private void install(Uri destination){
   if(running||selected==null)return;final Uri source=selected;selected=null;running=true;state.set(true,text("Preparing PKG installation…", "Preparando instalação PKG…"));
   new Thread(()->{String message;
-   try{
-
-    File pkg=local(source,false),dest=local(destination,true);
+   try(LocalStorage.PkgSource input=LocalStorage.PkgSource.open(activity,source)){
+    File pkg=input.file,dest=local(destination,true);
     if(!update){
      File parent=dest;
      if(!parent.isDirectory())throw new IOException(text("The selected destination is not a folder.", "O destino selecionado não é uma pasta."));
@@ -86,14 +85,14 @@ final class PkgInstaller {
     if(!update&&pkg.toPath().startsWith(dest.toPath()))throw new IOException(text("The PKG must be outside the destination folder.", "O PKG deve ficar fora da pasta de destino."));
     try(DataInputStream in=new DataInputStream(new FileInputStream(pkg))){if(in.readInt()!=0x7f434e54)throw new IOException(text("File is not a PS4 PKG.", "Arquivo não é um PKG de PS4."));}
     File helper=new File(activity.getApplicationInfo().nativeLibraryDir,"liborbis_pkg.so");
-    String info=execute(helper,dest,"info",pkg.getPath());
+    String info=execute(helper,dest,input,"info",input.argumentPath());
     Matcher title=Pattern.compile("(?im)^\\s*Title ID:\\s*(CUSA[0-9]{5})\\s*$").matcher(info);
     if(!title.find())throw new IOException(text("TITLE_ID missing from PKG header.", "TITLE_ID ausente no cabeçalho PKG."));String id=title.group(1).toUpperCase(java.util.Locale.US);
     if(!java.util.Arrays.asList("CUSA02320","CUSA02343","CUSA02344","CUSA01399","CUSA02826").contains(id))throw new IOException("The PKG is not a supported Nathan Drake Collection title.");
     if(update&&(!dest.equals(game().getCanonicalFile())||!id.equals(Launcher.sfoValue(dest.getPath(),"TITLE_ID"))))throw new IOException(text("The update does not match the selected game.", "A atualização não corresponde ao jogo selecionado."));
     stateOnUi(true,text("Extracting PKG directly into the selected folder…", "Extraindo PKG diretamente na pasta escolhida…"));
-    if(update)execute(helper,dest,"extract",pkg.getPath(),"--output",dest.getPath(),"--force");
-    else execute(helper,dest,"extract",pkg.getPath(),"--output",dest.getPath());
+    if(update)execute(helper,dest,input,"extract",input.argumentPath(),"--output",dest.getPath(),"--force");
+    else execute(helper,dest,input,"extract",input.argumentPath(),"--output",dest.getPath());
     if(!new File(dest,"eboot.bin").isFile()||!new File(dest,"u1data").isDirectory()||!id.equals(Launcher.sfoValue(dest.getPath(),"TITLE_ID")))throw new IOException(text("Extraction does not contain a complete Uncharted Collection dump. Check eboot.bin, u1data/ and sce_sys/param.sfo.", "Extração não contém um dump completo de Uncharted Collection. Confira eboot.bin, u1data/ e sce_sys/param.sfo."));
     if(!activity.getSharedPreferences("launcher",0).edit().putString("game_dir",dest.getPath()).commit())throw new IOException(text("Content extracted, but the folder could not be selected.", "Conteúdo extraído, mas não foi possível selecionar a pasta."));
     message=(update?text("Update", "Atualização"):text("Game", "Jogo"))+" "+id+text(" installed at ", " instalado em ")+dest.getPath();
@@ -102,9 +101,10 @@ final class PkgInstaller {
   },"uncharted-pkg-install").start();
  }
  private void stateOnUi(boolean busy,String message){activity.runOnUiThread(()->{if(!activity.isFinishing()&&!activity.isDestroyed())state.set(busy,message);});}
- private String execute(File helper,File dest,String... args)throws Exception{
+ private String execute(File helper,File dest,LocalStorage.PkgSource input,String... args)throws Exception{
   java.util.ArrayList<String> command=new java.util.ArrayList<>();command.add("/system/bin/linker64");command.add(helper.getPath());java.util.Collections.addAll(command,args);
   ProcessBuilder builder=new ProcessBuilder(command).directory(dest).redirectErrorStream(true);
+  if(input.descriptorBacked())builder.redirectInput(input.file);
   builder.environment().put("LD_LIBRARY_PATH",activity.getApplicationInfo().nativeLibraryDir);
   Process process=builder.start();
   final StringBuilder log=new StringBuilder();
@@ -151,25 +151,6 @@ final class PkgInstaller {
  }
  private File local(Uri uri,boolean directory)throws Exception{
   if(directory&&"file".equals(uri.getScheme())){File file=new File(uri.getPath()).getCanonicalFile();if(file.equals(game().getCanonicalFile()))return file;throw new IOException(text("Invalid destination.", "Destino inválido."));}
-  String path=null;
-  if("com.android.externalstorage.documents".equals(uri.getAuthority())){
-   String id=directory?DocumentsContract.getTreeDocumentId(uri):DocumentsContract.getDocumentId(uri);int at=id.indexOf(':');if(at<1)throw new IOException(text("Select local storage.", "Selecione armazenamento local."));
-   String volume=id.substring(0,at);if(!volume.matches("[A-Za-z0-9_-]+"))throw new IOException(text("Invalid volume.", "Volume inválido."));
-   File root="primary".equalsIgnoreCase(volume)?Environment.getExternalStorageDirectory():new File("/storage",volume);
-   File file=new File(root,id.substring(at+1)).getCanonicalFile();if(!file.toPath().startsWith(root.getCanonicalFile().toPath()))throw new IOException(text("Invalid path.", "Caminho inválido."));return file;
-  }
-  if(!directory){try(android.database.Cursor c=activity.getContentResolver().query(uri,new String[]{"_data"},null,null,null)){if(c!=null&&c.moveToFirst())path=c.getString(0);}catch(Exception ignored){}
-   if(path==null)try{String id=DocumentsContract.getDocumentId(uri);if(id.startsWith("raw:"))path=id.substring(4);}catch(Exception ignored){}
-  }
-  // Android Downloads/media providers may omit _data even for a local file.
-  // Resolve the user's opened descriptor without copying a multi-GB PKG into app storage.
-  if(path==null&&!directory){
-   try(android.os.ParcelFileDescriptor fd=activity.getContentResolver().openFileDescriptor(uri,"r")){
-    if(fd!=null){String resolved=android.system.Os.readlink("/proc/self/fd/"+fd.getFd());
-     File local=new File(resolved);if(local.isFile()&&local.canRead())return local.getCanonicalFile();}
-   }catch(Exception ignored){}
-  }
-  if(path!=null){File file=new File(path).getCanonicalFile();if(file.toPath().startsWith(new File("/storage").getCanonicalFile().toPath()))return file;}
-  throw new IOException(text("Select a local folder or PKG. Cloud files do not support direct installation.", "Selecione uma pasta ou PKG local. Arquivos em nuvem não permitem instalação direta."));
+  return LocalStorage.resolve(activity,uri,directory);
  }
 }

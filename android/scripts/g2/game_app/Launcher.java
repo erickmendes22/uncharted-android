@@ -88,6 +88,7 @@ public class Launcher extends Activity {
     };
     private static final String[] MODULES = {"sce_module/libc.prx", "sce_module/libSceFios2.prx", "sce_sys/param.sfo"};
     private static final int PICK_FOLDER = 1, PICK_DRIVER = 2, PICK_LOSSLESS = 3;
+    private boolean pendingFolder;
     /** Where driver packages are downloaded from: the GitHub releases of the community Turnip
      *  builds (the zips the Android emulators share: meta.json and the driver library). */
     private static final String[] DRIVER_SOURCES = {
@@ -158,6 +159,7 @@ public class Launcher extends Activity {
         if(prefs.getInt("mobile_upscale",0)==5)prefs.edit().putInt("mobile_upscale",4).apply();
         if("fsr3".equals(iniGet("frame_gen")) || "dlss".equals(iniGet("frame_gen")))iniPut("frame_gen","off");
         if(savedInstanceState!=null)selectedPage=savedInstanceState.getInt("selected_page",0);
+        if(savedInstanceState!=null){pendingFolder=savedInstanceState.getBoolean("pending_folder",false);pendingPkg=savedInstanceState.getInt("pending_pkg",-1);}
         // Request before any game/storage action, once. A refusal keeps a manual retry button.
         if(!Environment.isExternalStorageManager() && !prefs.getBoolean("storage_requested",false)) {
             requestStorageAccess();
@@ -187,6 +189,7 @@ public class Launcher extends Activity {
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
+        state.putBoolean("pending_folder",pendingFolder);state.putInt("pending_pkg",pendingPkg);
         state.putInt("selected_page",selectedPage);
         if(pageScroll!=null)state.putInt("page_scroll",pageScroll.getScrollY());
         if(extraEnv!=null)prefs.edit().putString("extra_env",extraEnv.getText().toString()).apply();
@@ -242,7 +245,8 @@ public class Launcher extends Activity {
     protected void onResume() {
         super.onResume();
         refresh(); // back from permissions
-        if(pendingPkg>=0 && Environment.isExternalStorageManager()){boolean update=pendingPkg==1;pendingPkg=-1;pkgInstaller.pick(update);}
+        if(pendingFolder){pendingFolder=false;if(Environment.isExternalStorageManager())openFolderPicker();}
+        if(pendingPkg>=0){int pending=pendingPkg;pendingPkg=-1;if(Environment.isExternalStorageManager())pkgInstaller.pick(pending==1);}
     }
 
     // ---- views ----
@@ -430,7 +434,7 @@ public class Launcher extends Activity {
         });
         games.addView(gameSelect);
         playButton = primaryButton(games, "CONTINUE ADVENTURE", v -> play());
-        button(games,"Choose game folder",v->{startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),PICK_FOLDER);});
+        button(games,"Choose game folder",v->chooseGameFolder());
         button(games,"Install game PKG",v->installPkg(false));
         button(games,"Install update PKG",v->installPkg(true));
         statusText = note(shell, "");
@@ -440,10 +444,7 @@ public class Launcher extends Activity {
         folderText = text(folder, "", 15, false);
         folderInfo = note(folder, "");
         LinearLayout row = row(folder);
-        button(row, "Choose folder", v -> {
-            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-            startActivityForResult(i, PICK_FOLDER);
-        });
+        button(row, "Choose folder", v -> chooseGameFolder());
         accessButton = button(row, "Allow access to all files", v -> requestStorageAccess());
         pathEdit = new EditText(this);
         pathEdit.setHint(AppLanguage.text("Game folder path"));
@@ -727,11 +728,22 @@ public class Launcher extends Activity {
         }
     }
 
+    private void chooseGameFolder() {
+        if(busy||pkgInstaller.busy())return;
+        if(!Environment.isExternalStorageManager()){pendingFolder=true;requestStorageAccess();return;}
+        openFolderPicker();
+    }
+    private void openFolderPicker() {
+        try {startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION),PICK_FOLDER);}
+        catch(Exception e){status(AppLanguage.text("Folder selection failed: ")+e.getMessage());}
+    }
+
     private void installPkg(boolean update) {
         if(busy||pkgInstaller.busy())return;
         if(!Environment.isExternalStorageManager()){
             pendingPkg=update?1:0;
-            startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,Uri.parse("package:"+getPackageName())));
+            requestStorageAccess();
             return;
         }
         pkgInstaller.pick(update);
@@ -797,23 +809,14 @@ public class Launcher extends Activity {
             return;
         }
         if (request != PICK_FOLDER) return;
-        String path = treeToPath(data.getData());
-        if (path == null) status("That folder is not on the device's own storage or SD card: type its path instead.");
-        else setFolder(path);
+        try {
+            Uri uri=data.getData();
+            try{getContentResolver().takePersistableUriPermission(uri,data.getFlags() &
+                (Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION));}catch(SecurityException ignored){}
+            File chosen=StoragePaths.gameFolder(LocalStorage.resolve(this,uri,true));
+            setFolder(chosen.getPath());
+        }catch(Exception e){status(AppLanguage.text("Folder selection failed: ")+e.getMessage());}
         refresh();
-    }
-
-    /** A folder picked with ACTION_OPEN_DOCUMENT_TREE as a file path (the native loader opens
-     *  files by path): "primary:x" is internal storage, "XXXX-XXXX:x" a volume under /storage. */
-    private static String treeToPath(Uri tree) {
-        if (!"com.android.externalstorage.documents".equals(tree.getAuthority())) return null;
-        String id = DocumentsContract.getTreeDocumentId(tree);
-        int colon = id.indexOf(':');
-        if (colon < 0) return null;
-        String volume = id.substring(0, colon), rest = id.substring(colon + 1);
-        String base = volume.equals("primary") ? Environment.getExternalStorageDirectory().getAbsolutePath()
-                                               : "/storage/" + volume;
-        return rest.isEmpty() ? base : base + "/" + rest;
     }
 
     /** What is missing in the folder, or null when it has the three games and their modules. */

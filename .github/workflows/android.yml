@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash]
+    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
@@ -55,6 +55,11 @@ jobs:
       - name: Verify protected file reads and mesh results
         run: |
           python3 tests/test_landing_order.py
+          python3 tests/test_pkg_descriptor.py
+          javac -d "$RUNNER_TEMP/storage-test" android/scripts/g2/game_app/StoragePaths.java tests/TestStoragePaths.java
+          java -cp "$RUNNER_TEMP/storage-test" dev.unchartedg2.game.TestStoragePaths
+          g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_staging_reuse.cpp -o "$RUNNER_TEMP/staging-test"
+          "$RUNNER_TEMP/staging-test"
           cc -std=c11 -O2 -Wall -Wextra -Werror -Isrc tests/test_file_protected_read.c -pthread -o "$RUNNER_TEMP/protected-read-test"
           "$RUNNER_TEMP/protected-read-test"
           cc -std=c11 -O2 -Isrc tests/test_file_mods.c -pthread -o "$RUNNER_TEMP/file-mods-test"
@@ -131,13 +136,13 @@ jobs:
           grep -q "versionName='0.2.5'" dist/package.txt
           grep -q "versionCode='100205'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.5-U2-AsyncResults.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.5-Perf-Storage.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.5-U2-AsyncResults
+          name: Uncharted-Daedalus-0.2.5-Perf-Storage
           path: dist/
           if-no-files-found: error
           retention-days: 30

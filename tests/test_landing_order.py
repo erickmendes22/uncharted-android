@@ -28,11 +28,13 @@ code=r'''
 #include <mutex>
 #include <thread>
 #include <vector>
+#include "bbport_staging_reuse.h"
+struct Buffer { std::size_t size_bytes=4096; };
 using u64=unsigned long long; using u32=unsigned;
 namespace Common { void SetCurrentThreadName(const char*) {} }
 class BufferCache {
 public:
- struct Landing { u64 seq; };
+ struct Landing { u64 seq; std::unique_ptr<Buffer> snapshot; };
  FIELDS
  std::mutex gpu_mutex;
  std::condition_variable gpu_cv;
@@ -95,5 +97,5 @@ int main(){
 '''.replace('FIELDS',fields).replace('FUNCTIONS','\n'.join(function(n) for n in ['LandingWorker','PendingLanding','LandingGateActive','WaitLanding','RunAfterLanding']))
 with tempfile.TemporaryDirectory() as td:
  p=pathlib.Path(td);(p/'test.cpp').write_text(code)
- subprocess.run(['g++','-std=c++20','-O2','-Wall','-Wextra','-Werror','-pthread',str(p/'test.cpp'),'-o',str(p/'test')],check=True)
+ subprocess.run(['g++','-std=c++20','-O2','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'gpu/shim'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
  subprocess.run([str(p/'test')],check=True,timeout=10)

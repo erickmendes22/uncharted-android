@@ -316,6 +316,7 @@ struct BufferCache::Landing {
     u64 seq{};
     u64 tick{};
     std::unique_ptr<Buffer> snapshot;
+    u64 snapshot_bytes{};
     boost::container::small_vector<vk::BufferCopy, 4> copies; ///< dstOffset: in the owned snapshot
     boost::container::small_vector<VAddr, 4> targets;         ///< guest address of each copy
 };
@@ -359,8 +360,16 @@ bool BufferCache::DeferGuestCopy(VAddr src, VAddr dst, u64 size) {
     // Capture the source on the graphics queue in command order. The worker
     // owns this staging buffer until the CPU copy lands: later GPU writes,
     // arena migration and staging-pool reuse cannot change its bytes.
-    landing->snapshot = std::make_unique<Buffer>(instance, 0, total, MemoryType::HostCached,
-                                               "U2 mesh result snapshot");
+    {
+        std::scoped_lock lk{landing_mutex};
+        landing->snapshot = landing_free_snapshots.Take(total);
+    }
+    if (!landing->snapshot) {
+        const u64 capacity = std::bit_ceil(std::max<u64>(4096, total));
+        landing->snapshot = std::make_unique<Buffer>(instance, 0, capacity, MemoryType::HostCached,
+                                                   "U2 mesh result snapshot");
+    }
+    landing->snapshot_bytes = total;
     runtime.CopyBuffer(arena, landing->snapshot.get(), landing->copies);
     scheduler.Record([](vk::CommandBuffer cmdbuf) {
         const vk::MemoryBarrier2 to_host = {
@@ -436,7 +445,7 @@ bool BufferCache::WaitLandingTick(u64 tick) {
 
 bool BufferCache::ExecuteLanding(Landing& landing) {
     if (!WaitLandingTick(landing.tick)) return false;
-    landing.snapshot->Invalidate(0, landing.snapshot->size_bytes);
+    landing.snapshot->Invalidate(0, landing.snapshot_bytes);
     for (size_t i = 0; i < landing.copies.size(); ++i) {
         memory->TryWriteBacking(reinterpret_cast<void*>(landing.targets[i]),
                                 landing.snapshot->mapped_data.data() + landing.copies[i].dstOffset,
@@ -472,8 +481,9 @@ void BufferCache::LandingWorker() {
         lk.unlock();
         // Lands without data when cancelled at shutdown or when the wait for the GPU failed:
         // the labels behind it go on either way.
-        ExecuteLanding(*landing);
+        const bool landed = ExecuteLanding(*landing);
         lk.lock();
+        if (landed) landing_free_snapshots.Put(std::move(landing->snapshot));
         landing_done_seq = landing->seq;
         landing_done.store(landing->seq, std::memory_order_release);
         landing_done_cv.notify_all();
