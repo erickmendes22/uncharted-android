@@ -88,7 +88,9 @@ public class Launcher extends Activity {
     };
     private static final String[] MODULES = {"sce_module/libc.prx", "sce_module/libSceFios2.prx", "sce_sys/param.sfo"};
     private static final int PICK_FOLDER = 1, PICK_DRIVER = 2, PICK_LOSSLESS = 3;
-    private boolean pendingFolder;
+    private final SetupFlow setupFlow=new SetupFlow();
+    private android.app.AlertDialog setupDialog,storageDialog;
+    private static final int STORAGE_PERMISSION=40;
     /** Where driver packages are downloaded from: the GitHub releases of the community Turnip
      *  builds (the zips the Android emulators share: meta.json and the driver library). */
     private static final String[] DRIVER_SOURCES = {
@@ -109,7 +111,7 @@ public class Launcher extends Activity {
     private volatile boolean busy;
     private long gpuChip;
     private PkgInstaller pkgInstaller;
-    private int pendingPkg=-1;
+
     private int selectedPage;
     private ScrollView pageScroll;
     private android.app.AlertDialog activeDialog;
@@ -159,13 +161,20 @@ public class Launcher extends Activity {
         if(prefs.getInt("mobile_upscale",0)==5)prefs.edit().putInt("mobile_upscale",4).apply();
         if("fsr3".equals(iniGet("frame_gen")) || "dlss".equals(iniGet("frame_gen")))iniPut("frame_gen","off");
         if(savedInstanceState!=null)selectedPage=savedInstanceState.getInt("selected_page",0);
-        if(savedInstanceState!=null){pendingFolder=savedInstanceState.getBoolean("pending_folder",false);pendingPkg=savedInstanceState.getInt("pending_pkg",-1);}
-        // Request before any game/storage action, once. A refusal keeps a manual retry button.
-        if(!Environment.isExternalStorageManager() && !prefs.getBoolean("storage_requested",false)) {
-            requestStorageAccess();
+        if(savedInstanceState!=null){
+            setupFlow.pending=savedInstanceState.getInt("setup_pending",SetupFlow.NONE);
+            setupFlow.requesting=savedInstanceState.getBoolean("setup_requesting",false);
+            setupFlow.waitingSettings=savedInstanceState.getBoolean("setup_settings",false);
+            setupFlow.offeringSettings=savedInstanceState.getBoolean("setup_offer",false);
         }
         buildViews();
-        if(Environment.isExternalStorageManager())handle(getIntent());else refresh();
+        if(storageAccess())handle(getIntent());else refresh();
+        final boolean continuing=setupFlow.busy();
+        pageScroll.post(()->{
+            if(isFinishing()||isDestroyed())return;
+            if(setupFlow.offeringSettings)showStorageSettingsOffer();
+            else if(!continuing)beginInitialSetup();
+        });
         if(savedInstanceState!=null){final int y=savedInstanceState.getInt("page_scroll",0);pageScroll.post(()->pageScroll.scrollTo(0,y));}
     }
 
@@ -173,23 +182,78 @@ public class Launcher extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        if(Environment.isExternalStorageManager())handle(intent);
+        if(storageAccess())handle(intent);
     }
 
-    private void requestStorageAccess() {
-        try {
-            startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:"+getPackageName())));
-            prefs.edit().putBoolean("storage_requested",true).apply();
-        } catch(android.content.ActivityNotFoundException noAppPage) {
-            try {startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
-                prefs.edit().putBoolean("storage_requested",true).apply();
-            }catch(android.content.ActivityNotFoundException unavailable){android.util.Log.w("Launcher","Storage permission settings unavailable");}
+    private boolean storageAccess() {
+        return SetupFlow.access(getApplicationInfo().targetSdkVersion,
+            Environment.isExternalStorageManager(),
+            checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)==android.content.pm.PackageManager.PERMISSION_GRANTED,
+            checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)==android.content.pm.PackageManager.PERMISSION_GRANTED);
+    }
+    private void requestStorageAccess() {runSetupAction(setupFlow.begin(SetupFlow.SETUP,storageAccess()));}
+    private void beginInitialSetup() {
+        if(isFinishing()||isDestroyed()||busy||pkgInstaller.busy()||setupFlow.busy())return;
+        if(storageAccess()&&gameFolderReady())return;
+        requestStorageAccess();
+    }
+    private boolean gameFolderReady() {
+        File dir=new File(folder());
+        return !folder().isEmpty()&&new File(dir,"eboot.bin").canRead()&&new File(dir,"u1data").isDirectory();
+    }
+    private void runSetupAction(int action) {
+        switch(action){
+            case SetupFlow.REQUEST:
+                try{requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE},STORAGE_PERMISSION);}
+                catch(Exception e){setupFlow.requesting=false;setupFlow.offeringSettings=true;showStorageSettingsOffer();}
+                break;
+            case SetupFlow.OFFER_SETTINGS:showStorageSettingsOffer();break;
+            case SetupFlow.SETUP:if(!gameFolderReady())showInitialSetup();break;
+            case SetupFlow.FOLDER:openFolderPicker();break;
+            case SetupFlow.PKG:pkgInstaller.pick(false);break;
+            case SetupFlow.UPDATE:pkgInstaller.pick(true);break;
+            case SetupFlow.PLAY:play();break;
         }
+    }
+    private void showInitialSetup() {
+        if(setupDialog!=null&&setupDialog.isShowing()||busy||pkgInstaller.busy())return;
+        setupDialog=new ExpeditionDialog(this)
+            .setTitle(AppLanguage.text("Set up Uncharted"))
+            .setMessage(AppLanguage.text("How would you like to add the game? Install a PKG directly into a chosen folder or select an already extracted game folder."))
+            .setPositiveButton(AppLanguage.text("Install PKG"),(d,w)->installPkg(false))
+            .setNegativeButton(AppLanguage.text("Select folder"),(d,w)->chooseGameFolder())
+            .setNeutralButton(AppLanguage.text("Not now"),(d,w)->{})
+            .show();
+        setupDialog.setOnDismissListener(d->setupDialog=null);
+    }
+    private void showStorageSettingsOffer() {
+        if(isFinishing()||isDestroyed()||storageDialog!=null&&storageDialog.isShowing())return;
+        storageDialog=new ExpeditionDialog(this).setTitle(AppLanguage.text("File access"))
+            .setMessage(AppLanguage.text("Allow file access to select the game folder or install a PKG. You can retry in Android settings."))
+            .setPositiveButton(AppLanguage.text("Open settings"),(d,w)->{
+                if(setupFlow.openSettings()!=SetupFlow.OPEN_SETTINGS)return;
+                try{startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,Uri.parse("package:"+getPackageName())));}
+                catch(Exception first){
+                    try{startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));}
+                    catch(Exception second){setupFlow.cancel();status(AppLanguage.text("Open this app's permissions in Android settings."));}
+                }
+            })
+            .setNegativeButton(AppLanguage.text("Not now"),(d,w)->setupFlow.cancel())
+            .setOnCancelListener(d->setupFlow.cancel()).show();
+        storageDialog.setOnDismissListener(d->storageDialog=null);
+    }
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants) {
+        super.onRequestPermissionsResult(request,permissions,grants);
+        if(request!=STORAGE_PERMISSION)return;
+        refresh();runSetupAction(setupFlow.permission(storageAccess()));
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
-        state.putBoolean("pending_folder",pendingFolder);state.putInt("pending_pkg",pendingPkg);
+        state.putInt("setup_pending",setupFlow.pending);
+        state.putBoolean("setup_requesting",setupFlow.requesting);
+        state.putBoolean("setup_settings",setupFlow.waitingSettings);
+        state.putBoolean("setup_offer",setupFlow.offeringSettings);
         state.putInt("selected_page",selectedPage);
         if(pageScroll!=null)state.putInt("page_scroll",pageScroll.getScrollY());
         if(extraEnv!=null)prefs.edit().putString("extra_env",extraEnv.getText().toString()).apply();
@@ -200,12 +264,17 @@ public class Launcher extends Activity {
         super.onConfigurationChanged(config);
         // Rebuild responsive rows from current bounds, keeping the same activity and its
         // installer/preparation workers alive. Old dialogs retain the previous orientation.
+        final boolean setupVisible=setupDialog!=null&&setupDialog.isShowing();
+        final boolean offerVisible=setupFlow.offeringSettings;
         if(activeDialog!=null){activeDialog.dismiss();activeDialog=null;}
         final int y=pageScroll!=null?pageScroll.getScrollY():0;
         final String path=pathEdit!=null?pathEdit.getText().toString():"";
         if(extraEnv!=null)prefs.edit().putString("extra_env",extraEnv.getText().toString()).apply();
         buildViews();refresh();pathEdit.setText(path);
-        pageScroll.post(()->{pageScroll.scrollTo(0,y);pageScroll.requestApplyInsets();});
+        pageScroll.post(()->{
+            pageScroll.scrollTo(0,y);pageScroll.requestApplyInsets();
+            if(offerVisible)showStorageSettingsOffer();else if(setupVisible)showInitialSetup();
+        });
     }
 
     /** Brings the running game's task to the front; false when no game runs. */
@@ -245,8 +314,7 @@ public class Launcher extends Activity {
     protected void onResume() {
         super.onResume();
         refresh(); // back from permissions
-        if(pendingFolder){pendingFolder=false;if(Environment.isExternalStorageManager())openFolderPicker();}
-        if(pendingPkg>=0){int pending=pendingPkg;pendingPkg=-1;if(Environment.isExternalStorageManager())pkgInstaller.pick(pending==1);}
+        runSetupAction(setupFlow.resumed(storageAccess()));
     }
 
     // ---- views ----
@@ -445,7 +513,7 @@ public class Launcher extends Activity {
         folderInfo = note(folder, "");
         LinearLayout row = row(folder);
         button(row, "Choose folder", v -> chooseGameFolder());
-        accessButton = button(row, "Allow access to all files", v -> requestStorageAccess());
+        accessButton = button(row, "Allow file access", v -> requestStorageAccess());
         pathEdit = new EditText(this);
         pathEdit.setHint(AppLanguage.text("Game folder path"));
         pathEdit.setSingleLine(true);
@@ -730,8 +798,7 @@ public class Launcher extends Activity {
 
     private void chooseGameFolder() {
         if(busy||pkgInstaller.busy())return;
-        if(!Environment.isExternalStorageManager()){pendingFolder=true;requestStorageAccess();return;}
-        openFolderPicker();
+        runSetupAction(setupFlow.begin(SetupFlow.FOLDER,storageAccess()));
     }
     private void openFolderPicker() {
         try {startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
@@ -741,12 +808,7 @@ public class Launcher extends Activity {
 
     private void installPkg(boolean update) {
         if(busy||pkgInstaller.busy())return;
-        if(!Environment.isExternalStorageManager()){
-            pendingPkg=update?1:0;
-            requestStorageAccess();
-            return;
-        }
-        pkgInstaller.pick(update);
+        runSetupAction(setupFlow.begin(update?SetupFlow.UPDATE:SetupFlow.PKG,storageAccess()));
     }
 
     // ---- the game folder ----
@@ -858,10 +920,10 @@ public class Launcher extends Activity {
 
     private void refresh() {
         String dir = folder();
-        boolean access = Environment.isExternalStorageManager();
+        boolean access = storageAccess();
         accessButton.setVisibility(access ? View.GONE : View.VISIBLE);
         folderText.setText(AppLanguage.text(dir.isEmpty() ? "(none)" : dir));
-        String problem = access ? problems(dir) : "Allow the app to read all files first (the game's folder is opened by path).";
+        String problem = access ? problems(dir) : "Allow file access to select the game folder or install a PKG.";
         if (problem == null) {
             // (APP_VER is the base game's even when the folder has the patched executables.)
             String title = sfoValue(dir, "TITLE"), id = sfoValue(dir, "TITLE_ID");
@@ -1224,7 +1286,7 @@ public class Launcher extends Activity {
     }
 
     private void play() {
-        if(!Environment.isExternalStorageManager()){requestStorageAccess();return;}
+        if(!storageAccess()){runSetupAction(setupFlow.begin(SetupFlow.PLAY,false));return;}
         if (!prepared()) {
             prepare(true);
             return;

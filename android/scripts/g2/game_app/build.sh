@@ -49,8 +49,10 @@ cd "$W"
 javac -nowarn -source 11 -target 11 -classpath "$JAR" -d classes \
     $(find "$SDLJAVA" -name '*.java') "$HERE"/*.java
 "$BT/d8" --release --min-api 33 --lib "$JAR" --output . $(find classes -name '*.class')
+# Match inFAMOUS/GoW3's legacy file-permission dialog and direct storage I/O.
+# Native libraries still require API 33; this changes compatibility behavior only.
 "$BT/aapt2" link -o base.apk -I "$JAR" --manifest "$MANIFEST" \
-    --min-sdk-version 33 --target-sdk-version 35 "${LINK_EXTRA[@]}" "$W/resources.zip"
+    --min-sdk-version 33 --target-sdk-version 28 "${LINK_EXTRA[@]}" "$W/resources.zip"
 STRIP=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip
 for lib in "$BUILD/libmain.so" "$BUILD/libbbgpu.so" "$BUILD/libbbprepare.so" "$DEPS"/lib/{libSDL3,libavutil,libswresample,libswscale,libavcodec,libavformat}.so \
            "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so"; do

@@ -1102,17 +1102,17 @@
     "pt": "Selecionar pasta do jogo"
   },
   "Select folder": {
+    "pt": "Selecionar pasta",
     "es": "Seleccionar carpeta",
-    "fr": "Choisir un dossier",
-    "de": "Ordner wählen",
+    "fr": "Sélectionner un dossier",
+    "de": "Ordner auswählen",
     "it": "Seleziona cartella",
     "ru": "Выбрать папку",
     "ja": "フォルダーを選択",
     "ko": "폴더 선택",
     "zh": "选择文件夹",
     "tr": "Klasör seç",
-    "pl": "Wybierz folder",
-    "pt": "Selecionar pasta"
+    "pl": "Wybierz folder"
   },
   "Choose the game folder": {
     "es": "Elige la carpeta del juego",
@@ -1167,17 +1167,17 @@
     "pt": "Instalar atualização por PKG"
   },
   "Install PKG": {
+    "pt": "Instalar PKG",
     "es": "Instalar PKG",
     "fr": "Installer un PKG",
     "de": "PKG installieren",
     "it": "Installa PKG",
     "ru": "Установить PKG",
-    "ja": "PKGインストール",
+    "ja": "PKG をインストール",
     "ko": "PKG 설치",
-    "zh": "安装PKG",
+    "zh": "安装 PKG",
     "tr": "PKG yükle",
-    "pl": "Zainstaluj PKG",
-    "pt": "Instalar PKG"
+    "pl": "Zainstaluj PKG"
   },
   "Install": {
     "es": "Instalar",
@@ -1388,19 +1388,20 @@
     "pt": "Preparando runtime…"
   },
   "Not now": {
+    "pt": "Agora não",
     "es": "Ahora no",
     "fr": "Pas maintenant",
-    "de": "Später",
+    "de": "Nicht jetzt",
     "it": "Non ora",
     "ru": "Не сейчас",
     "ja": "後で",
     "ko": "나중에",
     "zh": "暂不",
     "tr": "Şimdi değil",
-    "pl": "Nie teraz",
-    "pt": "Agora não"
+    "pl": "Nie teraz"
   },
   "Open settings": {
+    "pt": "Abrir configurações",
     "es": "Abrir ajustes",
     "fr": "Ouvrir les paramètres",
     "de": "Einstellungen öffnen",
@@ -1410,8 +1411,7 @@
     "ko": "설정 열기",
     "zh": "打开设置",
     "tr": "Ayarları aç",
-    "pl": "Otwórz ustawienia",
-    "pt": "Abrir configurações"
+    "pl": "Otwórz ustawienia"
   },
   "Open game menu": {
     "es": "Abrir menú del juego",
@@ -1427,17 +1427,17 @@
     "pt": "Abrir menu do jogo"
   },
   "File access": {
+    "pt": "Acesso aos arquivos",
     "es": "Acceso a archivos",
     "fr": "Accès aux fichiers",
     "de": "Dateizugriff",
     "it": "Accesso ai file",
     "ru": "Доступ к файлам",
-    "ja": "ファイルアクセス",
+    "ja": "ファイルへのアクセス",
     "ko": "파일 접근",
     "zh": "文件访问",
     "tr": "Dosya erişimi",
-    "pl": "Dostęp do plików",
-    "pt": "Acesso aos arquivos"
+    "pl": "Dostęp do plików"
   },
   "Import failed": {
     "es": "Error de importación",
@@ -1608,17 +1608,17 @@
     "pl": "Mobilnie: przeciągnij po prawej, aby się rozglądać. Przyciski akcji zachowują oryginalne funkcje. Klasyczny układ i panel dotykowy są opcjonalne."
   },
   "How would you like to add the game? Install a PKG directly into a chosen folder or select an already extracted game folder.": {
-    "es": "¿Cómo quieres añadir el juego? Instala un PKG en una carpeta o selecciona una carpeta ya extraída.",
-    "fr": "Comment ajouter le jeu ? Installez un PKG dans un dossier ou choisissez un dossier de jeu déjà extrait.",
-    "de": "Wie möchtest du das Spiel hinzufügen? Ein PKG in einen Ordner installieren oder einen bereits entpackten Spielordner wählen.",
-    "it": "Come vuoi aggiungere il gioco? Installa un PKG in una cartella oppure scegli una cartella già estratta.",
-    "ru": "Как добавить игру? Установите PKG в выбранную папку или выберите уже распакованную игру.",
-    "ja": "ゲームの追加方法を選択してください。PKGをフォルダーにインストールするか、展開済みフォルダーを選択します。",
-    "ko": "게임 추가 방법을 선택하세요. PKG를 폴더에 설치하거나 이미 압축을 푼 게임 폴더를 선택할 수 있습니다.",
-    "zh": "请选择游戏添加方式：将PKG安装到指定文件夹，或选择已解压的游戏文件夹。",
-    "tr": "Oyunu nasıl eklemek istersiniz? Bir PKG'yi seçilen klasöre yükleyin veya çıkarılmış oyun klasörünü seçin.",
-    "pl": "Jak dodać grę? Zainstaluj PKG w wybranym folderze albo wybierz rozpakowany folder gry.",
-    "pt": "Como você quer adicionar o jogo? Instale um PKG diretamente na pasta escolhida ou selecione uma pasta de jogo já extraída."
+    "pt": "Como você quer adicionar o jogo? Instale um PKG diretamente na pasta escolhida ou selecione uma pasta de jogo já extraída.",
+    "es": "¿Cómo quieres añadir el juego? Instala un PKG directamente en una carpeta o selecciona un juego ya extraído.",
+    "fr": "Comment ajouter le jeu ? Installez un PKG directement dans un dossier choisi ou sélectionnez un jeu déjà extrait.",
+    "de": "Wie möchtest du das Spiel hinzufügen? Installiere eine PKG direkt in einen gewählten Ordner oder wähle einen bereits entpackten Spielordner.",
+    "it": "Come vuoi aggiungere il gioco? Installa un PKG nella cartella scelta o seleziona un gioco già estratto.",
+    "ru": "Как добавить игру? Установите PKG прямо в выбранную папку или выберите папку уже распакованной игры.",
+    "ja": "ゲームの追加方法を選んでください。指定フォルダーに PKG を直接インストールするか、展開済みのゲームフォルダーを選択できます。",
+    "ko": "게임을 어떻게 추가할까요? 선택한 폴더에 PKG를 직접 설치하거나 압축 해제된 게임 폴더를 선택하세요.",
+    "zh": "如何添加游戏？将 PKG 直接安装到所选文件夹，或选择已解压的游戏文件夹。",
+    "tr": "Oyunu nasıl eklemek istersiniz? PKG dosyasını seçilen klasöre doğrudan yükleyin veya çıkarılmış oyun klasörünü seçin.",
+    "pl": "Jak dodać grę? Zainstaluj PKG bezpośrednio w wybranym folderze lub wybierz już rozpakowaną grę."
   },
   "Saves": {
     "es": "Partidas",
@@ -2202,17 +2202,17 @@
     "pt": "eboot.bin inacessível. Verifique a permissão e a pasta escolhida."
   },
   "Open this app's permissions in Android settings.": {
-    "es": "Abre los permisos de la app en los ajustes de Android.",
-    "fr": "Ouvrez les autorisations de l'application dans Android.",
+    "pt": "Abra as permissões do aplicativo nas configurações do Android.",
+    "es": "Abre los permisos de la aplicación en los ajustes de Android.",
+    "fr": "Ouvrez les autorisations de cette application dans les paramètres Android.",
     "de": "Öffne die App-Berechtigungen in den Android-Einstellungen.",
-    "it": "Apri i permessi dell'app nelle impostazioni Android.",
+    "it": "Apri le autorizzazioni dell’app nelle impostazioni Android.",
     "ru": "Откройте разрешения приложения в настройках Android.",
-    "ja": "Android設定でアプリの権限を開いてください。",
+    "ja": "Android の設定からこのアプリの権限を開いてください。",
     "ko": "Android 설정에서 앱 권한을 여세요.",
-    "zh": "在Android设置中打开此应用的权限。",
-    "tr": "Android ayarlarında bu uygulamanın izinlerini açın.",
-    "pl": "Otwórz uprawnienia tej aplikacji w ustawieniach Androida.",
-    "pt": "Abra as permissões do aplicativo nas configurações do Android."
+    "zh": "请在 Android 设置中打开此应用的权限。",
+    "tr": "Android ayarlarında uygulama izinlerini açın.",
+    "pl": "Otwórz uprawnienia aplikacji w ustawieniach Androida."
   },
   "Permission was not granted. Select the game to try again.": {
     "es": "Permiso denegado. Selecciona el juego e inténtalo de nuevo.",
@@ -4881,5 +4881,57 @@
     "zh": "PKG 必须支持随机访问。",
     "tr": "PKG rastgele erişimi desteklemelidir.",
     "pl": "Plik PKG musi obsługiwać dostęp swobodny."
+  },
+  "Set up Uncharted": {
+    "pt": "Configurar Uncharted",
+    "es": "Configurar Uncharted",
+    "fr": "Configurer Uncharted",
+    "de": "Uncharted einrichten",
+    "it": "Configura Uncharted",
+    "ru": "Настройка Uncharted",
+    "ja": "Uncharted の設定",
+    "ko": "Uncharted 설정",
+    "zh": "设置 Uncharted",
+    "tr": "Uncharted kurulumu",
+    "pl": "Konfiguracja Uncharted"
+  },
+  "Allow file access": {
+    "pt": "Permitir acesso aos arquivos",
+    "es": "Permitir acceso a archivos",
+    "fr": "Autoriser l’accès aux fichiers",
+    "de": "Dateizugriff erlauben",
+    "it": "Consenti accesso ai file",
+    "ru": "Разрешить доступ к файлам",
+    "ja": "ファイルへのアクセスを許可",
+    "ko": "파일 접근 허용",
+    "zh": "允许访问文件",
+    "tr": "Dosya erişimine izin ver",
+    "pl": "Zezwól na dostęp do plików"
+  },
+  "Allow file access to select the game folder or install a PKG.": {
+    "pt": "Permita o acesso aos arquivos para selecionar a pasta do jogo ou instalar um PKG.",
+    "es": "Permite el acceso a archivos para seleccionar el juego o instalar un PKG.",
+    "fr": "Autorisez l’accès aux fichiers pour sélectionner le jeu ou installer un PKG.",
+    "de": "Erlaube den Dateizugriff, um den Spielordner auszuwählen oder eine PKG zu installieren.",
+    "it": "Consenti l’accesso ai file per selezionare il gioco o installare un PKG.",
+    "ru": "Разрешите доступ к файлам для выбора папки игры или установки PKG.",
+    "ja": "ゲームフォルダーの選択や PKG のインストールにはファイルへのアクセスを許可してください。",
+    "ko": "게임 폴더 선택 또는 PKG 설치를 위해 파일 접근을 허용하세요.",
+    "zh": "请允许访问文件以选择游戏文件夹或安装 PKG。",
+    "tr": "Oyun klasörünü seçmek veya PKG yüklemek için dosya erişimine izin verin.",
+    "pl": "Zezwól na dostęp do plików, aby wybrać grę lub zainstalować PKG."
+  },
+  "Allow file access to select the game folder or install a PKG. You can retry in Android settings.": {
+    "pt": "Permita o acesso aos arquivos para selecionar a pasta do jogo ou instalar um PKG. Você pode tentar novamente nas configurações do Android.",
+    "es": "Permite el acceso a archivos para seleccionar el juego o instalar un PKG. Puedes volver a intentarlo en los ajustes de Android.",
+    "fr": "Autorisez l’accès aux fichiers pour sélectionner le jeu ou installer un PKG. Vous pouvez réessayer dans les paramètres Android.",
+    "de": "Erlaube Dateizugriff für den Spielordner oder die PKG-Installation. Du kannst es in den Android-Einstellungen erneut versuchen.",
+    "it": "Consenti l’accesso ai file per selezionare il gioco o installare un PKG. Puoi riprovare nelle impostazioni Android.",
+    "ru": "Разрешите доступ к файлам для выбора игры или установки PKG. Повторить можно в настройках Android.",
+    "ja": "ゲームの選択や PKG のインストールにはファイルへのアクセスが必要です。Android の設定で再試行できます。",
+    "ko": "게임 선택 또는 PKG 설치를 위해 파일 접근을 허용하세요. Android 설정에서 다시 시도할 수 있습니다.",
+    "zh": "请允许访问文件以选择游戏或安装 PKG。可在 Android 设置中重试。",
+    "tr": "Oyun seçmek veya PKG yüklemek için dosya erişimine izin verin. Android ayarlarında yeniden deneyebilirsiniz.",
+    "pl": "Zezwól na dostęp do plików, aby wybrać grę lub zainstalować PKG. Możesz spróbować ponownie w ustawieniach Androida."
   }
 }
