@@ -367,9 +367,7 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
     // bbport: the driver's own pipeline cache lives on disk beside the shader blobs, so a second
     // run does not have the driver compile the same pipelines again. The stored pipelines are
     // preloaded by StartWarmUp once the rasterizer is ready.
-    if (const char* env = std::getenv("BB_PREP_COMPILE")) {
-        worker_compile = env[0] != '0';
-    }
+    worker_compile = BbRenderer::WorkerCompile();
     std::vector<char> initial_data;
     if (EmulatorSettings.IsPipelineCacheEnabled()) {
         auto& db = Storage::DataBase::Instance();

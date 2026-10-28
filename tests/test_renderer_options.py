@@ -41,3 +41,18 @@ with tempfile.TemporaryDirectory() as td:
   seen.add(key)
  assert len(seen)==24
 print('PASS: invalid driver blobs rejected before Vulkan; all 24 graphics modes have distinct cache keys')
+
+# The screen and boot must agree, including direct entry/loadexec and old saved prefs.
+launcher=(root/'android/scripts/g2/game_app/Launcher.java').read_text()
+activity=(root/'android/scripts/g2/game_app/GameActivity.java').read_text()
+assert 'card(config, "Performance")' in launcher
+assert 'card(config, "Compatibility")' not in launcher
+assert 'card(config, "Renderer comparison")' not in launcher
+assert 'Changes apply on the next game start. Disable one option at a time to compare.' not in launcher
+for key in ['arm_uma_readback','arm_flush_draws','arm_job_spin']:
+ assert '\"'+key+'\",true)' in launcher,key
+ assert 'options.getBoolean(\"'+key+'\",true)' in activity,key
+assert 'RendererOptions.environment(game)' in activity
+assert 'options.getBoolean(\"renderer_' not in activity
+assert 'compatibilitySwitch(root,\"Save Vulkan driver cache\"' not in launcher
+print('PASS: only three Performance switches remain, default on in UI and boot; obsolete renderer preferences cannot change the fixed policy')

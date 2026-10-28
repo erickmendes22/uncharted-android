@@ -11,14 +11,12 @@ final class RendererOptions {
         for(String line:lines)if(!owned(ArmCompatibility.key(line)))out.add(line);
         return out;
     }
-    static String environment(String game, boolean cache, boolean warmup, boolean compile,
-                              boolean lights, boolean scalar, boolean nan, boolean readbacks) {
-        return "BB_DRIVER_CACHE="+(cache?1:0)+"\n"
-            +"BB_BACKGROUND_WARMUP="+(warmup?1:0)+"\n"
-            +"BB_PREP_COMPILE="+(compile?1:0)+"\nBB_PREP_COMPUTE="+(compile?1:0)+"\n"
-            +"BB_FULL_LIGHT_TABLE="+(lights?1:0)+"\n"
-            +"BB_SCALAR_EXEC_FIX="+(scalar?1:0)+"\n"
-            +"BB_SATURATE_NAN_FS="+(nan?1:0)+"\n"
-            +"BB_READBACK_SMALL_BUFFERS="+(readbacks&&"u3".equals(game)?1:0)+"\n";
+    // Fixed release policy matching the user's tested configuration. Reapplied after old
+    // preferences and environment files on every launch, including collection loadexec.
+    static String environment(String game) {
+        return "BB_DRIVER_CACHE=1\nBB_BACKGROUND_WARMUP=1\n"
+            +"BB_PREP_COMPILE=1\nBB_PREP_COMPUTE=1\n"
+            +"BB_FULL_LIGHT_TABLE=1\nBB_SCALAR_EXEC_FIX=0\n"
+            +"BB_SATURATE_NAN_FS=1\nBB_READBACK_SMALL_BUFFERS=0\n";
     }
 }

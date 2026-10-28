@@ -13,16 +13,16 @@ inline bool DriverCache() {
     static const bool v = Flag("BB_DRIVER_CACHE", true); return v;
 }
 inline bool WorkerCompile() {
-    static const bool v = Flag("BB_PREP_COMPILE", false); return v;
+    static const bool v = Flag("BB_PREP_COMPILE", true); return v;
 }
 inline bool BackgroundWarmup() {
-    static const bool v = Flag("BB_BACKGROUND_WARMUP", false); return v;
+    static const bool v = Flag("BB_BACKGROUND_WARMUP", true); return v;
 }
 inline bool FullLights() {
     static const bool v = Flag("BB_FULL_LIGHT_TABLE", true); return v;
 }
 inline bool ScalarExec() {
-    static const bool v = Flag("BB_SCALAR_EXEC_FIX", true); return v;
+    static const bool v = Flag("BB_SCALAR_EXEC_FIX", false); return v;
 }
 inline bool SmallReadbacks() {
     static const bool v = Flag("BB_READBACK_SMALL_BUFFERS", false); return v;

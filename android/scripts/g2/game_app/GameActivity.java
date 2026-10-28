@@ -183,20 +183,13 @@ public class GameActivity extends SDLActivity {
                 }
             }
             android.content.SharedPreferences options=getSharedPreferences("launcher",MODE_PRIVATE);
-            String compatibility=ArmCompatibility.environment(game,options.getBoolean("arm_uma_readback",false),
-                options.getBoolean("arm_flush_draws",false),options.getBoolean("arm_job_spin",false));
+            String compatibility=ArmCompatibility.environment(game,options.getBoolean("arm_uma_readback",true),
+                options.getBoolean("arm_flush_draws",true),options.getBoolean("arm_job_spin",true));
             for(String line:compatibility.split("\n")){
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
             }
-            String renderer=RendererOptions.environment(game,
-                options.getBoolean("renderer_driver_cache",true),
-                options.getBoolean("renderer_background_warmup",false),
-                options.getBoolean("renderer_worker_compile",false),
-                options.getBoolean("renderer_full_lights",true),
-                options.getBoolean("renderer_scalar_exec",true),
-                options.getBoolean("renderer_nan_clamp",true),
-                options.getBoolean("renderer_small_readbacks",false));
+            String renderer=RendererOptions.environment(game);
             for(String line:renderer.split("\n")){
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);

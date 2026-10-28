@@ -96,3 +96,18 @@ Android compilation/packaging and on-device graphics/performance are separate
 checks. Do not describe device performance or visual correctness as measured
 until the user tests the APK. Each graphics mode's first run rebuilds shaders;
 compare warmed runs in the same scene, with the same resolution/FSR/driver.
+
+## Current release UI policy (supersedes comparison defaults above)
+
+Following the user's on-device screenshots: driver cache, background preload,
+worker compilation, full light table and fragment material clamp are always
+applied by the Android startup policy. The comparison card and all seven of
+its switches/help paragraphs are removed. Scalar EXEC correction and small
+compute readbacks are fixed off, including U3. Old renderer preferences and
+generated environment files cannot override this policy on direct boot/loadexec.
+
+The former Compatibility card is now Performance. Its existing three switches
+(fast GPU memory reads U2/U3, small submission batches U2/U3 and idle game-thread
+sleep) default on in both the launcher and actual boot. Explicit user choices
+remain persisted so each can still be disabled. The comparison footer is gone.
+Version/package/signature and U2 crash protections remain unchanged.
