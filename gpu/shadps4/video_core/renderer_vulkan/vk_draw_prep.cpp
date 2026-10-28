@@ -138,6 +138,16 @@ void PrepareVertexInputs(const Shader::Info& vs, const Shader::Gcn::FetchShaderD
     ranges.clear();
     merged.clear();
     range_index.clear();
+    // Vertex descriptors may live outside the flattened tables. A stale lookahead
+    // pointer leaves vertex binding to the GPU thread, never to GPU fault handling.
+    sigjmp_buf recover;
+    auto* const previous_recovery = runtime_fault_recover;
+    if (sigsetjmp(recover, 0)) {
+        runtime_fault_recover = previous_recovery;
+        out.valid = false;
+        return;
+    }
+    runtime_fault_recover = &recover;
     for (const auto& attrib : fetch.attributes) {
         const auto step_rate = attrib.GetStepRate();
         const auto buffer = attrib.GetSharp(vs);
@@ -148,6 +158,7 @@ void PrepareVertexInputs(const Shader::Info& vs, const Shader::Gcn::FetchShaderD
             LiverpoolToVK::TrySurfaceFormat(buffer.GetDataFmt(), buffer.GetNumberFmt());
         if (format == vk::Format::eUndefined &&
             buffer.GetDataFmt() != AmdGpu::DataFormat::FormatInvalid) {
+            runtime_fault_recover = previous_recovery;
             out.valid = false;
             return;
         }
@@ -197,6 +208,7 @@ void PrepareVertexInputs(const Shader::Info& vs, const Shader::Gcn::FetchShaderD
     out.num_ranges = static_cast<u32>(merged.size());
     out.buffers_hash =
         buffers.empty() ? 0 : XXH3_64bits(buffers.data(), buffers.size() * sizeof(AmdGpu::Buffer));
+    runtime_fault_recover = previous_recovery;
     out.valid = true;
 }
 

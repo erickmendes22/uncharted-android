@@ -559,9 +559,19 @@ bool PipelineCache::PrepareGraphicsPipeline(PipelineSelection& worker_sel) {
     }
     auto& worker = *worker_sel.worker;
     worker.compile = worker_compile;
-    if (!RefreshGraphicsKey(worker_sel) || worker.failed) {
+    // GetParams/fetch parsing can read guest memory before GetProgram installs
+    // its inner recovery point. Keep a recovery point around all of selection.
+    sigjmp_buf recover;
+    auto* const previous_recovery = runtime_fault_recover;
+    if (sigsetjmp(recover, 0)) {
+        runtime_fault_recover = previous_recovery;
+        worker.failed = true;
         return false;
     }
+    runtime_fault_recover = &recover;
+    const bool prepared = RefreshGraphicsKey(worker_sel) && !worker.failed;
+    runtime_fault_recover = previous_recovery;
+    if (!prepared) return false;
     if (worker.compile) {
         EnsureWorkerPipeline(worker_sel);
     }
@@ -1360,15 +1370,16 @@ PipelineCache::Result PipelineCache::GetProgram(PipelineSelection& sel, HwStage 
             // reused. A fault returns here (runtime_fault_recover) and the draw is left to the
             // GPU thread. A jump out of the specialization leaks its partial allocations (rare).
             sigjmp_buf recover;
+            auto* const previous_recovery = runtime_fault_recover;
             if (sigsetjmp(recover, 0)) {
-                runtime_fault_recover = nullptr;
+                runtime_fault_recover = previous_recovery;
                 worker.failed = true;
                 return {};
             }
             runtime_fault_recover = &recover;
             info.RefreshFlatBuf();
             auto spec = Shader::StageSpecialization(info, runtime_info, profile, binding);
-            runtime_fault_recover = nullptr;
+            runtime_fault_recover = previous_recovery;
             size_t perm_idx = 0;
             vk::ShaderModule module{};
             std::optional<Shader::Gcn::FetchShaderData> fetch_shader;
@@ -1489,9 +1500,10 @@ bool PipelineCache::WorkerTranslate(PrepWorker& worker, HwStage hw_stage, SwStag
     }
     BbThreads::ScopedNormalPriority boost; // the GPU thread may wait for this claim
     sigjmp_buf recover;
+    auto* const previous_recovery = runtime_fault_recover;
     AcquireClaim(params.hash);
     if (sigsetjmp(recover, 0)) {
-        runtime_fault_recover = nullptr;
+        runtime_fault_recover = previous_recovery;
         ReleaseClaim(params.hash);
         return false;
     }
@@ -1521,7 +1533,7 @@ bool PipelineCache::WorkerTranslate(PrepWorker& worker, HwStage hw_stage, SwStag
             program->AddPermut(module, std::move(stored));
         }
     }
-    runtime_fault_recover = nullptr;
+    runtime_fault_recover = previous_recovery;
     ReleaseClaim(params.hash);
     return true;
 }

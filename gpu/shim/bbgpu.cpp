@@ -7,6 +7,7 @@
 #include <sys/resource.h>
 #endif
 #include "bbport_toggles.h"
+#include "bbport_threads.h"
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -291,6 +292,12 @@ extern "C" uintptr_t bbgpu_resolve(const char* scoped_nid) {
 }
 
 extern "C" int bbgpu_handle_fault(void* ucontext, void* address) {
+    // Speculative shader workers must recover locally. The normal GPU page-fault
+    // handler can queue ReadMemory/InvalidateMemory and wait for the command owner;
+    // that owner may already be waiting for the worker's shader/pipeline claim.
+    // Return to the loader's existing siglongjmp recovery before entering GPU work.
+    if (runtime_fault_recover && BbThreads::IsBackground()) return 0;
+
     // bbport diagnosis: BB_FAULT_TIMES=1 — how long handled faults stop the faulting thread,
     // as a histogram every 5 s.
     static const bool fault_times = [] {
