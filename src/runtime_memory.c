@@ -771,7 +771,6 @@ void runtime_memory_set_gpu_hooks(GpuRange map, GpuRange unmap, GpuRange invalid
     write_unlock();
     flush_hooks();
 }
-extern void runtime_u1_note_backing(uintptr_t,const void *,uint64_t) __attribute__((weak));
 /* Writes through the backing view; 0 when part of the range has no backing. */
 int runtime_memory_write_backing(uintptr_t address, const void *data, uint64_t size) {
     read_lock();
@@ -781,7 +780,6 @@ int runtime_memory_write_backing(uintptr_t address, const void *data, uint64_t s
         if (i==vma_count || vmas[i].start>at || vmas[i].kind==KIND_RESERVED) { ok=0; break; }
         uint64_t n=(vmas[i].end<end ? vmas[i].end : end)-at;
         memcpy(backing_base+vmas[i].phys+(at-vmas[i].start),(const unsigned char *)data+(at-address),n);
-        if(runtime_u1_note_backing)runtime_u1_note_backing(at,(const unsigned char *)data+(at-address),n);
         at+=n;
     }
     read_unlock();

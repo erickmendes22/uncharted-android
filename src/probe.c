@@ -49,7 +49,6 @@
 #define UC_FP(uc) ((uintptr_t)(uc)->uc_mcontext.gregs[REG_RBP])
 #define UC_ARG0(uc) ((uint64_t)(uc)->uc_mcontext.gregs[REG_RDI])
 #endif
-#include "u1_lightprobe_diag.h"
 typedef struct { uint64_t address, size, flags; } Segment;
 typedef struct { uint64_t target, kind, value, addend; } Reloc;
 static char (*names)[128];
@@ -420,7 +419,6 @@ static void fault(int sig, siginfo_t *info, void *context) {
     GuestContext actual;
     if(guest_cpu_fault_context(rip,(const uint64_t *)uc->uc_mcontext.regs,&actual)) {
         char text[512];
-        u1_probe_fault(actual.rip,actual.gpr[GUEST_RBX]);
         int n=snprintf(text,sizeof(text),"  translated guest PC at fault=%#llx; live FEX SRA registers:\n",
                        (unsigned long long)actual.rip);
         { ssize_t w_=write(2,text,(size_t)n);(void)w_; }
@@ -1006,7 +1004,7 @@ static void install_game_callbacks(Segment *segments, uint64_t ns, uint64_t imag
         printf("Callbacks: %s at %#" PRIx64 "\n",c->name,c->offset);
     }
 }
-static unsigned char *mobile_callback_thunk_args(unsigned char *f,size_t moved,const void *fn,int original_rdx) {
+static unsigned char *mobile_callback_thunk(unsigned char *f,size_t moved,const void *fn) {
     unsigned char *t=near_image_memory(4096); if (!t) return NULL; size_t k=0;
         /* pushfq; push rax rcx rdx r8-r11 rbx; mov rbx, rsp; and rsp, -16; sub rsp, 0xa0 (works at
          * a function's start and inside it) */
@@ -1019,10 +1017,9 @@ static unsigned char *mobile_callback_thunk_args(unsigned char *f,size_t moved,c
             memcpy(t+k,&disp,4); k+=4;
         }
         t[k++]=0x48; t[k++]=0x89; t[k++]=0xf9;                      /* mov rcx, rdi */
-        if(original_rdx){t[k++]=0x49;t[k++]=0x89;t[k++]=0xd0;} /* mov r8, original rdx */
         t[k++]=0x48; t[k++]=0x89; t[k++]=0xf2;                      /* mov rdx, rsi */
         const uintptr_t base=(uintptr_t)image, host=guest_host_function((const void *)fn,"NDGI tracking",GUEST_ABI_MS);
-        if(!original_rdx){t[k++]=0x49; t[k++]=0xb8; memcpy(t+k,&base,8); k+=8;}        /* movabs r8, image */
+        t[k++]=0x49; t[k++]=0xb8; memcpy(t+k,&base,8); k+=8;        /* movabs r8, image */
         t[k++]=0x4d; t[k++]=0x89; t[k++]=0xf1;                      /* mov r9, r14 */
         t[k++]=0x48; t[k++]=0xb8; memcpy(t+k,&host,8); k+=8;        /* movabs rax, callback */
         t[k++]=0xff; t[k++]=0xd0;                                   /* call rax */
@@ -1042,31 +1039,10 @@ static unsigned char *mobile_callback_thunk_args(unsigned char *f,size_t moved,c
         f[0]=0xe9; memcpy(f+1,&to,4); memset(f+5,0x90,moved-5);
     return t;
 }
-static unsigned char *mobile_callback_thunk(unsigned char *f,size_t moved,const void *fn) {
-    return mobile_callback_thunk_args(f,moved,fn,0);
-}
 static int64_t find_unique_pattern(uint64_t image_size,const char *pattern) {
     size_t found=0,length=0;
     size_t count=runtime_find_guest_fix(image,(size_t)image_size,pattern,&found,&length);
     return count==1 ? (int64_t)found : count>1 ? -2 : -1;
-}
-/* Exact U1 1.00 executable signatures; U2/U3 and unmatched builds stay untouched.
- * Both thunks replay only complete position-independent prologue instructions. */
-static void install_u1_probe_diagnostics(uint64_t image_size) {
-#if defined(__linux__) && defined(__aarch64__)
-    const int64_t ctor=find_unique_pattern(image_size,"554889e5 488937 48895708 813e10ba1006 7433");
-    const int64_t body=find_unique_pattern(image_size,"554889e5 4157 4156 4155 4154 53 4883ec48 4889fb 48895da8 488b05e18f4900 488b00 488945d0 488b4310 f3480fb808");
-    const int64_t entry=find_unique_pattern(image_size,"554889e5 4157 4156 4155 4154 53 4883ec18 4989fc 488b05358a4900 488b00 488945d0 c745c836000000");
-    if(ctor<0 || body<0 || entry<0)return;
-    u1_probe_fault_pc=(uint64_t)(uintptr_t)(image+body+42);
-    if(!mobile_callback_thunk_args(image+ctor,7,(const void *)u1_probe_construct,1) ||
-       !mobile_callback_thunk(image+entry,6,(const void *)u1_probe_enter))return;
-    u1_probe_memfd=open("/proc/self/mem",O_RDONLY|O_CLOEXEC);
-    atomic_store_explicit(&u1_diag_enabled,1,memory_order_release);
-    printf("U1 light probes: constructor/input provenance active; bounded backing history; no game policy changes\n");
-#else
-    (void)image_size;
-#endif
 }
 extern _Thread_local int runtime_ndgi_open; /* runtime_fiber.c */
 static void __attribute__((ms_abi)) ndgi_end(uint64_t rdi, uint64_t rsi, uint64_t base, uint64_t r14) {
@@ -1657,7 +1633,6 @@ int main(int argc, char **argv) {
         uint64_t image_end=0;
         for (uint64_t s=0;s<ns;++s) if (segments[s].address+segments[s].size>image_end) image_end=segments[s].address+segments[s].size;
         install_signature_fixes(segments, ns);
-        install_u1_probe_diagnostics(image_end);
         install_game_callbacks(segments, ns, image_end);
         install_ndgi_hooks(image_end);
         patch_job_lock_wait(image_end);

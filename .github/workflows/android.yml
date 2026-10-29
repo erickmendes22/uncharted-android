@@ -54,7 +54,6 @@ jobs:
           python3 tests/test_srt_speculative.py
           python3 tests/test_speculative_fault_dispatch.py
           python3 tests/test_shader_selection_recovery.py
-          python3 tests/test_u1_lightprobe_diag.py
           javac -d "$RUNNER_TEMP/renderer-test" android/scripts/g2/game_app/ArmCompatibility.java android/scripts/g2/game_app/RendererOptions.java tests/TestRendererOptions.java
           java -cp "$RUNNER_TEMP/renderer-test" dev.unchartedg2.game.TestRendererOptions
       - name: Verify live crash register capture
@@ -149,13 +148,13 @@ jobs:
           grep -q "targetSdkVersion:'28'" dist/package.txt
           grep -q "uses-permission: name='android.permission.WRITE_EXTERNAL_STORAGE'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.5-U1-Diagnostic.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.5-GameplayFix.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.5-U1-Diagnostic
+          name: Uncharted-Daedalus-0.2.5-GameplayFix
           path: dist/
           if-no-files-found: error
           retention-days: 30
