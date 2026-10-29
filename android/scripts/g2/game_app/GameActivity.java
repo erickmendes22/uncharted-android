@@ -194,6 +194,7 @@ public class GameActivity extends SDLActivity {
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
             }
+            Os.setenv("BB_U3_SKIP_LOGOS","u3".equals(game) && options.getBoolean("patch_Skip startup logos",false)?"1":"0",true);
             // U2 mesh raycasters consume GPU results on the CPU after checkpoints.
             // Only this specific copy shader is synchronized; readback mode is unchanged.
             Os.setenv("BB_SCALAR_COPY64_SYNC","u2".equals(game)?"2":"0",true);

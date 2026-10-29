@@ -1,3 +1,4 @@
+#include "bbport_readback_merge.h"
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -1014,10 +1015,9 @@ void BufferCache::DownloadMemory(const Buffer* arena, VAddr device_addr, u64 siz
         const char* env = std::getenv("BB_DOWNLOAD_CHECK");
         return env && env[0] == '1';
     }();
-    // Shadowed pages (ShadowGpuData) in the range: the blocks the guest changed since stay
-    // (ForEachShadowRun), and the pages need no shadow afterwards (their GPU data is in guest
-    // memory).
-    std::vector<std::pair<VAddr, std::vector<u8>>> guest_bytes;
+    // Shadowed pages: keep CPU-owned blocks in place. A save/write/restore sequence
+    // loses CPU writes between the save and restore (including reused job headers).
+    std::vector<BbReadbackMerge::Range> cpu_owned;
     if (shadow_pages.load(std::memory_order_relaxed)) {
         std::scoped_lock lk{shadow_mutex};
         for (VAddr page = Common::AlignDown(device_addr, TRACKER_BYTES_PER_PAGE);
@@ -1027,11 +1027,9 @@ void BufferCache::DownloadMemory(const Buffer* arena, VAddr device_addr, u64 siz
                 continue;
             }
             for (const auto& shadow : it->second) {
-                const auto* guest = reinterpret_cast<const u8*>(shadow.start);
                 ForEachShadowRun(shadow, [&](size_t begin, size_t end, bool guest_owned) {
                     if (guest_owned) {
-                        guest_bytes.emplace_back(shadow.start + begin,
-                                                 std::vector<u8>(guest + begin, guest + end));
+                        cpu_owned.emplace_back(shadow.start + begin,shadow.start + end);
                     }
                 });
             }
@@ -1039,6 +1037,7 @@ void BufferCache::DownloadMemory(const Buffer* arena, VAddr device_addr, u64 siz
             shadow_pages.fetch_sub(1, std::memory_order_relaxed);
         }
     }
+    BbReadbackMerge::Normalize(cpu_owned);
     for (const auto& copy : copies) {
         auto* dst_addr = std::bit_cast<u8*>(arena_base + copy.srcOffset);
         const u8* data = download.mapped + (copy.dstOffset - download.offset);
@@ -1056,10 +1055,10 @@ void BufferCache::DownloadMemory(const Buffer* arena, VAddr device_addr, u64 siz
                             static_cast<unsigned long long>(size));
             }
         }
-        memory->TryWriteBacking(dst_addr, data, copy.size);
-    }
-    for (const auto& [address, bytes] : guest_bytes) {
-        memory->TryWriteBacking(reinterpret_cast<void*>(address), bytes.data(), bytes.size());
+        const VAddr base=reinterpret_cast<VAddr>(dst_addr);
+        BbReadbackMerge::ForEachGpuWrite(base,copy.size,cpu_owned,[&](u64 address,u64 size){
+            memory->TryWriteBacking(reinterpret_cast<void*>(address),data+(address-base),size);
+        });
     }
     memory_tracker->UnmarkRegionAsGpuModified(device_addr, size);
 }

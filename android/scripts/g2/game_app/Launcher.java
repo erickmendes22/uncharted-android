@@ -113,6 +113,7 @@ public class Launcher extends Activity {
     private PkgInstaller pkgInstaller;
 
     private int selectedPage;
+    private Runnable refreshNativeAa;
     private ScrollView pageScroll;
     private android.app.AlertDialog activeDialog;
 
@@ -444,6 +445,7 @@ public class Launcher extends Activity {
     }
 
     private void buildViews() {
+        refreshNativeAa=null;
         initPalette();
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -555,6 +557,7 @@ public class Launcher extends Activity {
             for(int n=0;n<values.length;n++)if(values[n]==prefs.getInt("mobile_upscale",0))selected=n;
             new ExpeditionDialog(this).setTitle(AppLanguage.text("Upscale")).setSingleChoiceItems(labels,selected,(dialog,which)->{
                 prefs.edit().putInt("mobile_upscale",values[which]).apply();
+                if(refreshNativeAa!=null)refreshNativeAa.run();
                 upscaleChoice.setText(AppLanguage.text("Upscale · "+upscaleLabel(values[which])));dialog.dismiss();
             }).setNegativeButton("Cancel",null).show();
         });
@@ -1070,9 +1073,13 @@ public class Launcher extends Activity {
         state.setAllCaps(false);state.setTextSize(13);state.setMinWidth(0);state.setMinimumWidth(0);
         state.setPadding(dp(8),0,dp(8),0);
         Runnable update=()->{
-            boolean enabled=!prefs.getBoolean(key,false);
-            state.setText(AppLanguage.text(enabled?"Enabled":"Disabled"));
-            state.setContentDescription(AppLanguage.text(title)+": "+AppLanguage.text(enabled?"Enabled in game":"Disabled in game"));
+            boolean aa=key.equals("patch_Disable anti-aliasing");
+            int fsr=prefs.getInt("mobile_upscale",0);
+            boolean managedAa=aa && UpscalePreset.normalize(fsr)>0;
+            boolean enabled=aa ? !UpscalePreset.disableNativeAa(fsr,prefs.getBoolean(key,false)) : !prefs.getBoolean(key,false);
+            state.setEnabled(!managedAa);
+            state.setText(managedAa?"FSR":AppLanguage.text(enabled?"Enabled":"Disabled"));
+            state.setContentDescription(AppLanguage.text(title)+": "+(managedAa?"FSR":AppLanguage.text(enabled?"Enabled in game":"Disabled in game")));
             state.setTextColor(enabled?accent:0xFFB0AAA0);
             GradientDrawable bg=new GradientDrawable();bg.setCornerRadius(dp(10));
             bg.setColor(enabled?0x333D3321:0xFF222522);bg.setStroke(dp(1),enabled?accent:0xFF555B54);state.setBackground(bg);
@@ -1083,6 +1090,7 @@ public class Launcher extends Activity {
                 prefs.edit().putBoolean(key,which==1).apply();update.run();dialog.dismiss();
             }).setNegativeButton("Cancel",null).show();
         });
+        if(key.equals("patch_Disable anti-aliasing"))refreshNativeAa=update;
         update.run();line.addView(state,new LinearLayout.LayoutParams(dp(100),dp(44)));
         parent.addView(line);
         View divider=new View(this);divider.setBackgroundColor(0x225F553A);parent.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
@@ -1119,11 +1127,13 @@ public class Launcher extends Activity {
     /** Merge existing recipes with independently validated Bachata batches. No game bytes are changed on disk. */
     private byte[] makePreset(String recipe, File boot, int width, int height) {
         byte[] nativePreset = makeBasePreset(recipe, boot, width, height);
+        boolean fsrRequested=UpscalePreset.normalize(prefs.getInt("mobile_upscale",0))>0;
+        boolean nativeAaReady=!fsrRequested;
         try (RandomAccessFile file = new RandomAccessFile(boot, "r")) {
             byte[] head = new byte[16]; file.readFully(head);
             long imageSize = ByteBuffer.wrap(head, 8, 8).order(ByteOrder.LITTLE_ENDIAN).getLong();
             long imageAt = file.length() - imageSize;
-            if (imageSize < 0 || imageAt < 16) return nativePreset;
+            if (imageSize < 0 || imageAt < 16) return fsrRequested?null:nativePreset;
             final long base = 0x400000L;
             List<long[]> places = new ArrayList<>();
             List<byte[]> data = new ArrayList<>();
@@ -1147,6 +1157,7 @@ public class Launcher extends Activity {
                 boolean wanted = resolution ? nativePreset == null && height < 1080 && name.startsWith("Resolution: " + height + "p ")
                     : name.startsWith("Shadows: 2") ? prefs.getInt("shadow_cascades", 0) == 1
                     : name.startsWith("Shadows: 1") ? prefs.getInt("shadow_cascades", 0) == 2
+                    : name.equals("Disable anti-aliasing") ? UpscalePreset.disableNativeAa(prefs.getInt("mobile_upscale",0),prefs.getBoolean("patch_"+name,false))
                     : prefs.getBoolean("patch_" + name, false);
                 if (wanted) groups.computeIfAbsent(name, key -> new ArrayList<>()).add(patch);
             }
@@ -1187,10 +1198,11 @@ public class Launcher extends Activity {
                 if (!conflict) {
                     places.addAll(batchPlaces); data.addAll(batchData);
                     if (group.getKey().startsWith("Resolution:")) resolutionReady = true;
+                    if (group.getKey().equals("Disable anti-aliasing")) nativeAaReady = true;
                     android.util.Log.i("Patches", elf + ": " + group.getKey() + " verified and enabled");
                 }
             }
-            if (!resolutionReady) return null; // never label an unpatched native render as low resolution
+            if (!resolutionReady || !nativeAaReady) return null; // never label an unpatched native render as low resolution
             int total = 24;
             for (byte[] bytes : data) total = Math.addExact(total, 16 + bytes.length);
             ByteBuffer out = ByteBuffer.allocate(total).order(ByteOrder.LITTLE_ENDIAN);
@@ -1199,7 +1211,7 @@ public class Launcher extends Activity {
             return out.array();
         } catch (Exception ex) {
             android.util.Log.w("Patches", "Catalog: " + ex.getMessage());
-            return nativePreset;
+            return fsrRequested?null:nativePreset;
         }
     }
 

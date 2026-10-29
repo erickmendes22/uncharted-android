@@ -9,6 +9,11 @@ public final class TestUpscalePreset {
   if(!UpscalePreset.label(3).equals("FSR Balanced"))throw new AssertionError("balanced label");
   if(!UpscalePreset.label(4).equals("FSR Performance"))throw new AssertionError("performance label");
   if(!UpscalePreset.label(5).equals("FSR Performance"))throw new AssertionError("legacy preset migration");
+  for(int mode=0;mode<=4;++mode)for(boolean saved:new boolean[]{false,true}) {
+   boolean effective=UpscalePreset.disableNativeAa(mode,saved);
+   if(effective!=(mode>0 || saved))throw new AssertionError("native AA conflict mode="+mode);
+  }
+  if(UpscalePreset.disableNativeAa(0,false))throw new AssertionError("native AA must return to user's saved enabled choice");
   System.out.println("FSR presets: PASS (Native 720, Quality 540, Balanced 468, Performance 360 -> 720p)");
  }
 }

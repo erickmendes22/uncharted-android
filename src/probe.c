@@ -1044,6 +1044,7 @@ static int64_t find_unique_pattern(uint64_t image_size,const char *pattern) {
     size_t count=runtime_find_guest_fix(image,(size_t)image_size,pattern,&found,&length);
     return count==1 ? (int64_t)found : count>1 ? -2 : -1;
 }
+#include "u3_startup_skip.h"
 extern _Thread_local int runtime_ndgi_open; /* runtime_fiber.c */
 static void __attribute__((ms_abi)) ndgi_end(uint64_t rdi, uint64_t rsi, uint64_t base, uint64_t r14) {
     (void)rdi; (void)rsi; (void)base; (void)r14;
@@ -1633,6 +1634,7 @@ int main(int argc, char **argv) {
         uint64_t image_end=0;
         for (uint64_t s=0;s<ns;++s) if (segments[s].address+segments[s].size>image_end) image_end=segments[s].address+segments[s].size;
         install_signature_fixes(segments, ns);
+        install_u3_skip_logos(image_end);
         install_game_callbacks(segments, ns, image_end);
         install_ndgi_hooks(image_end);
         patch_job_lock_wait(image_end);
