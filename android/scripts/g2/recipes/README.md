@@ -37,3 +37,9 @@ The supplied corrected XML was compared to all 112 catalog entries without
 removing the 01.02 entries. All 12 resolution variants for the three supplied
 01.00 executables match their original bytes. 01.02 executables were not supplied
 for direct comparison. See `android/validation/patches-1.00-1.02.json`.
+
+U3 correction after device testing: reduced-resolution catalog batches now also
+scale the display-configuration +0x24/+0x28 pair, matching scene targets and the
+main 1.02 recipe. Both 1.00 constructors are covered. Movie textures/blit remain
+native. See `android/STABILITY_U3_PATCHES.md`; the earlier XML parity report is a
+historical validation of the supplied XML, preceding this correction.

@@ -27,9 +27,14 @@ int main(void){
  int32_t rel=0x400-(0x800+8);memcpy(image+0x804,&rel,4);
  rel=0x1800-(0x100+15);memcpy(image+0x100+11,&rel,4);
  rel=0x1000-(0x800+93);memcpy(image+0x800+89,&rel,4);
+ hex(image+0x1000,"488b03483b45d075124881c4380100005b415c415d415e415f5dc3");
  setenv("BB_U3_SKIP_LOGOS","1",1);
  install_u3_skip_logos(0x2000);
- memcpy(&rel,image+0x800+89,4);assert(image+0x800+93+rel==image+0x2000);
+ memcpy(&rel,image+0x800+89,4);assert(image+0x800+93+rel==image+0x1000);
+ assert(image[0x1000]==0xe9 && image[0x1005]==0x90 && image[0x1006]==0x90);
+ memcpy(&rel,image+0x1001,4);assert(image+0x1005+rel==image+0x2000);
+ /* Unsupported/corrupt epilogue must remain untouched. */
+ image[0x1000]=0xcc;install_u3_skip_logos(0x2000);assert(image[0x1000]==0xcc);
  puts("PASS: production U3 logo installer derives relocated targets from verified instruction fixtures");
 }
 '''

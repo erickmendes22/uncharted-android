@@ -57,6 +57,7 @@ jobs:
           python3 tests/test_fsr_native_aa_policy.py
           python3 tests/test_u3_skip_logos.py
           python3 tests/test_u3_patch_install.py
+          python3 tests/test_u3_resolution_dimensions.py
           c++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_readback_cpu_ownership.cpp -o "$RUNNER_TEMP/readback-ownership"
           "$RUNNER_TEMP/readback-ownership"
           python3 tests/test_readback_cpu_ownership.py
