@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -87,7 +88,7 @@ public class Launcher extends Activity {
         {"1920x1080", "1920x1080, the game's own (much slower)"},
     };
     private static final String[] MODULES = {"sce_module/libc.prx", "sce_module/libSceFios2.prx", "sce_sys/param.sfo"};
-    private static final int PICK_FOLDER = 1, PICK_DRIVER = 2, PICK_LOSSLESS = 3;
+    private static final int PICK_FOLDER = 1, PICK_DRIVER = 2, PICK_LOSSLESS = 3, PICK_SAVE_ZIP = 4;
     private final SetupFlow setupFlow=new SetupFlow();
     private android.app.AlertDialog setupDialog,storageDialog;
     private static final int STORAGE_PERMISSION=40;
@@ -530,21 +531,36 @@ public class Launcher extends Activity {
 
 
         LinearLayout page = root;
-        root = card(patches, "RESOLUTION PATCHES"); // the settings widgets below go into the card
-        text(root, "The game renders at:", 14, false);
-        resolution = new RadioGroup(this); // retained for diagnostic source compatibility
-        Button resolutionChoice=button(root,"Internal resolution · "+chosenResolution(),null);
-        resolutionChoice.setOnClickListener(v->{
-            String[] labels=new String[RESOLUTIONS.length];int selected=0;
-            for(int n=0;n<labels.length;n++){labels[n]=RESOLUTIONS[n][0];if(labels[n].equals(chosenResolution()))selected=n;}
-            new ExpeditionDialog(this).setTitle(AppLanguage.text("Internal resolution")).setSingleChoiceItems(labels,selected,(dialog,which)->{
-                prefs.edit().putString("resolution",RESOLUTIONS[which][0]).apply();
-                resolutionChoice.setText(AppLanguage.text("Internal resolution · "+RESOLUTIONS[which][0]));dialog.dismiss();
-            }).setNegativeButton("Cancel",null).show();
-        });
-        note(root,"Changes apply on the next game start.");
-        buildPatchOptions(patches);
+        // Manual resolution is only selectable without FSR; FSR's own presets define input size.
         LinearLayout displayCard = card(home, "DISPLAY & PERFORMANCE");
+        text(displayCard, "Internal resolution (FSR off):", 14, false);
+        resolution = new RadioGroup(this);
+        Button resolutionChoice = button(displayCard, "Internal resolution · " + chosenResolution(), null);
+        Runnable updateManualResolution = () -> {
+            boolean enabled = prefs.getInt("mobile_upscale", 0) == 0;
+            resolutionChoice.setEnabled(enabled);
+            resolutionChoice.setAlpha(enabled ? 1.0f : 0.5f);
+        };
+        updateManualResolution.run();
+        resolutionChoice.setOnClickListener(v -> {
+            if (prefs.getInt("mobile_upscale", 0) != 0) return;
+            String[] labels = new String[RESOLUTIONS.length];
+            int selected = 0;
+            for (int n = 0; n < labels.length; n++) {
+                labels[n] = RESOLUTIONS[n][0];
+                if (labels[n].equals(chosenResolution())) selected = n;
+            }
+            new ExpeditionDialog(this).setTitle(AppLanguage.text("Internal resolution"))
+                .setSingleChoiceItems(labels, selected, (dialog, which) -> {
+                    if (prefs.getInt("mobile_upscale", 0) != 0) { dialog.dismiss(); return; }
+                    prefs.edit().putString("resolution", RESOLUTIONS[which][0]).apply();
+                    resolutionChoice.setText(AppLanguage.text("Internal resolution · " + RESOLUTIONS[which][0]));
+                    dialog.dismiss();
+                }).setNegativeButton("Cancel", null).show();
+        });
+        note(displayCard, "Manual resolution is available only with FSR disabled. "
+            + "FSR modes set their own input resolution; changes apply on the next game start.");
+        buildPatchOptions(patches);
         android.widget.Switch fullscreen=new android.widget.Switch(this);
         fullscreen.setText(AppLanguage.text("Fullscreen"));fullscreen.setTextColor(0xFFF4EFDF);fullscreen.setMinHeight(dp(54));
         fullscreen.setChecked("1".equals(iniGet("fullscreen")));
@@ -557,6 +573,7 @@ public class Launcher extends Activity {
             for(int n=0;n<values.length;n++)if(values[n]==prefs.getInt("mobile_upscale",0))selected=n;
             new ExpeditionDialog(this).setTitle(AppLanguage.text("Upscale")).setSingleChoiceItems(labels,selected,(dialog,which)->{
                 prefs.edit().putInt("mobile_upscale",values[which]).apply();
+                updateManualResolution.run();
                 if(refreshNativeAa!=null)refreshNativeAa.run();
                 upscaleChoice.setText(AppLanguage.text("Upscale · "+upscaleLabel(values[which])));dialog.dismiss();
             }).setNegativeButton("Cancel",null).show();
@@ -686,18 +703,15 @@ public class Launcher extends Activity {
 
 
         LinearLayout savesCard = card(config, "SAVES");
-        note(savesCard, "Back up saves before uninstalling the app.");
+        note(savesCard, "Export your saves as ZIP to a destination you choose before uninstalling.");
         LinearLayout saves = row(savesCard);
-        button(saves, "Back up saves", v -> {
-            String done = backupSaves();
-            status(done != null ? "Saves copied to " + done : "Backing up failed (no saves yet, or no access).");
-        });
+        button(saves, "Export saves (.zip)", v -> exportSaves());
         button(saves, "Restore saves", v -> restoreSaves());
         LinearLayout helpCard = card(config, "DIAGNOSTICS");
         note(helpCard, "Export the game log to a folder of your choice.");
         button(helpCard, "Export Uncharted log...", v -> LogExport.pick(this));
         LinearLayout aboutCard=card(about,"Uncharted Daedalus");
-        String version="0.2.5";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
+        String version="0.2.9";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
         text(aboutCard,AppLanguage.text("Version")+" "+version,20,true);
         note(aboutCard,"Android port with a Bionic runtime.");
         text(aboutCard,"Fork and modifications:",15,true);
@@ -830,6 +844,26 @@ public class Launcher extends Activity {
         if(LogExport.result(this,request,result,data))return;
         if(pkgInstaller!=null&&pkgInstaller.result(request,result,data))return;
         if (result != RESULT_OK || data == null || data.getData() == null) return;
+        if (request == PICK_SAVE_ZIP) {
+            Uri destination = data.getData();
+            status("Exporting saves ...");
+            new Thread(() -> {
+                File user = new File(files, "user");
+                try (OutputStream stream = getContentResolver().openOutputStream(destination, "w")) {
+                    if (stream == null) throw new IOException("the selected destination cannot be opened");
+                    if (!user.isDirectory()) throw new IOException("no save directory found");
+                    int exported;
+                    try (ZipOutputStream zip = new ZipOutputStream(stream)) {
+                        exported = zipUserTree(zip, user, user);
+                        if (exported == 0) throw new IOException("no save files found");
+                    }
+                    status("Saves exported to ZIP (" + exported + " files).");
+                } catch (Exception e) {
+                    status("Save export failed: " + e.getMessage());
+                }
+            }, "Uncharted save export").start();
+            return;
+        }
         if (request == PICK_LOSSLESS) {
             status("Importing Lossless.dll ...");
             new Thread(() -> {
@@ -1413,11 +1447,11 @@ public class Launcher extends Activity {
     private String automaticDriver() {
         if ((gpuChip >>> 24) == 0x44) {
             try {
-                File marker = new File(driversDir(), ".gen8-v37");
+                File marker = new File(driversDir(), ".gen8-v38-patched");
                 String installed = marker.isFile() ? readText(marker).trim() : "";
                 if (!installed.isEmpty() && packageLibrary(new File(driversDir(), installed)) != null) return "pkg:" + installed;
-                try (InputStream in = getAssets().open("drivers/Turnip_Gen8_V37.zip")) {
-                    installed = installDriver(in, "Turnip_Gen8_V37");
+                try (InputStream in = getAssets().open("drivers/Turnip_Gen8_V38_Patched.zip")) {
+                    installed = installDriver(in, "Turnip_Gen8_V38_Patched");
                 }
                 writeText(marker, installed);
                 return "pkg:" + installed;
@@ -1450,7 +1484,7 @@ public class Launcher extends Activity {
         drivers = new RadioGroup(this);
         boolean kgsl = new File("/dev/kgsl-3d0").exists();
         List<String[]> options = new ArrayList<>();
-        options.add(new String[] {"auto", AppLanguage.text("Automatic")+": "+((gpuChip>>>24)==0x44?"Turnip Gen8 V37 (Adreno 8xx)":kgsl?AppLanguage.text("Bundled Turnip")+" (Adreno)":AppLanguage.text("System Vulkan driver"))});
+        options.add(new String[] {"auto", AppLanguage.text("Automatic")+": "+((gpuChip>>>24)==0x44?"Turnip Gen8 V38 Patched (Adreno 8xx)":kgsl?AppLanguage.text("Bundled Turnip")+" (Adreno)":AppLanguage.text("System Vulkan driver"))});
         options.add(new String[] {"turnip", AppLanguage.text("Bundled Turnip")+" · Mesa 26.2.5 · Adreno"+(kgsl?"":" · "+AppLanguage.text("Adreno GPU not detected"))});
         options.add(new String[] {"system", AppLanguage.text("System Vulkan driver")+(kgsl?" · "+AppLanguage.text("Untested with these games"):"")});
         File[] installed = driversDir().listFiles(File::isDirectory);
@@ -1613,6 +1647,40 @@ public class Launcher extends Activity {
     }
 
     // ---- saves ----
+
+    /** SAF write permission is granted for the user-selected destination URI. */
+    private void exportSaves() {
+        File user = new File(files, "user");
+        if (!user.isDirectory()) { status("No saves found to export."); return; }
+        Intent choose = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        choose.addCategory(Intent.CATEGORY_OPENABLE);
+        choose.setType("application/zip");
+        String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT)
+            .format(new java.util.Date());
+        choose.putExtra(Intent.EXTRA_TITLE, "Uncharted-Daedalus-Saves-" + stamp + ".zip");
+        startActivityForResult(choose, PICK_SAVE_ZIP);
+    }
+
+    private static int zipUserTree(ZipOutputStream zip, File root, File current) throws IOException {
+        if (current.isDirectory()) {
+            File[] children = current.listFiles();
+            if (children == null) throw new IOException("cannot read " + current.getName());
+            int count = 0;
+            for (File child : children) count += zipUserTree(zip, root, child);
+            return count;
+        }
+        if (!current.isFile()) throw new IOException("cannot read " + current.getName());
+        String relative = root.toPath().relativize(current.toPath()).toString().replace(File.separatorChar, '/');
+        if (relative.isEmpty() || relative.startsWith("../") || relative.contains("/../"))
+            throw new IOException("invalid save path");
+        zip.putNextEntry(new ZipEntry("user/" + relative));
+        try (InputStream in = new java.io.FileInputStream(current)) {
+            byte[] buf = new byte[65536];
+            for (int n; (n = in.read(buf)) != -1;) zip.write(buf, 0, n);
+        }
+        zip.closeEntry();
+        return 1;
+    }
 
     /** Where save backups go: shared storage survives the app (all files access). */
     private static File backups() {
