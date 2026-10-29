@@ -88,7 +88,7 @@ public class Launcher extends Activity {
         {"1920x1080", "1920x1080, the game's own (much slower)"},
     };
     private static final String[] MODULES = {"sce_module/libc.prx", "sce_module/libSceFios2.prx", "sce_sys/param.sfo"};
-    private static final int PICK_FOLDER = 1, PICK_DRIVER = 2, PICK_LOSSLESS = 3, PICK_SAVE_ZIP = 4;
+    private static final int PICK_FOLDER = 1, PICK_DRIVER = 2, PICK_LOSSLESS = 3, PICK_SAVE_ZIP = 4, PICK_SAVE_IMPORT = 5;
     private final SetupFlow setupFlow=new SetupFlow();
     private android.app.AlertDialog setupDialog,storageDialog;
     private static final int STORAGE_PERMISSION=40;
@@ -703,9 +703,10 @@ public class Launcher extends Activity {
 
 
         LinearLayout savesCard = card(config, "SAVES");
-        note(savesCard, "Export your saves as ZIP to a destination you choose before uninstalling.");
+        note(savesCard, "Import or export saves with the game closed.");
         LinearLayout saves = row(savesCard);
-        button(saves, "Export saves (.zip)", v -> exportSaves());
+        button(saves, "Export saves (ZIP)", v -> exportSaves());
+        button(saves, "Import saves (ZIP)", v -> importSaves());
         button(saves, "Restore saves", v -> restoreSaves());
         LinearLayout helpCard = card(config, "DIAGNOSTICS");
         note(helpCard, "Export the game log to a folder of your choice.");
@@ -846,22 +847,44 @@ public class Launcher extends Activity {
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         if (request == PICK_SAVE_ZIP) {
             Uri destination = data.getData();
-            status("Exporting saves ...");
+            status("Exporting saves…");
             new Thread(() -> {
                 File user = new File(files, "user");
-                try (OutputStream stream = getContentResolver().openOutputStream(destination, "w")) {
-                    if (stream == null) throw new IOException("the selected destination cannot be opened");
-                    if (!user.isDirectory()) throw new IOException("no save directory found");
+                try {
+                    if (!user.isDirectory()) throw new IOException(AppLanguage.text("There are no saves to export yet."));
                     int exported;
-                    try (ZipOutputStream zip = new ZipOutputStream(stream)) {
-                        exported = zipUserTree(zip, user, user);
-                        if (exported == 0) throw new IOException("no save files found");
+                    try (OutputStream stream = getContentResolver().openOutputStream(destination, "w")) {
+                        if (stream == null) throw new IOException("Cannot open the selected destination");
+                        try (ZipOutputStream zip = new ZipOutputStream(stream)) {
+                            exported = SaveZipImporter.exportZip(user, zip);
+                            if (exported == 0) throw new IOException(AppLanguage.text("There are no saves to export yet."));
+                        }
                     }
-                    status("Saves exported to ZIP (" + exported + " files).");
+                    status(AppLanguage.text("Saves exported successfully.") + " (" + exported + " " + AppLanguage.text("files") + ")");
                 } catch (Exception e) {
-                    status("Save export failed: " + e.getMessage());
+                    status(AppLanguage.text("Save export failed") + ": " + e.getMessage());
                 }
             }, "Uncharted save export").start();
+            return;
+        }
+        if (request == PICK_SAVE_IMPORT) {
+            Uri source = data.getData();
+            new ExpeditionDialog(this)
+                .setTitle(AppLanguage.text("Import saves (ZIP)"))
+                .setMessage(AppLanguage.text("Replace saves from this ZIP? The current saves will be preserved as a local backup."))
+                .setPositiveButton(AppLanguage.text("Import saves (ZIP)"), (dialog, which) -> {
+                    status("Importing and validating saves…");
+                    new Thread(() -> {
+                        try (InputStream input = getContentResolver().openInputStream(source)) {
+                            if (input == null) throw new IOException("Cannot open the selected ZIP file");
+                            int imported = SaveZipImporter.importZip(input, files);
+                            status(AppLanguage.text("Saves imported successfully.") + " (" + imported + " " + AppLanguage.text("files") + ")");
+                        } catch (Exception e) {
+                            status(AppLanguage.text("Import failed") + ": " + e.getMessage());
+                        }
+                    }, "Uncharted save import").start();
+                })
+                .setNegativeButton(AppLanguage.text("Cancel"), null).show();
             return;
         }
         if (request == PICK_LOSSLESS) {
@@ -1651,7 +1674,7 @@ public class Launcher extends Activity {
     /** SAF write permission is granted for the user-selected destination URI. */
     private void exportSaves() {
         File user = new File(files, "user");
-        if (!user.isDirectory()) { status("No saves found to export."); return; }
+        if (!user.isDirectory()) { status("There are no saves to export yet."); return; }
         Intent choose = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         choose.addCategory(Intent.CATEGORY_OPENABLE);
         choose.setType("application/zip");
@@ -1661,25 +1684,16 @@ public class Launcher extends Activity {
         startActivityForResult(choose, PICK_SAVE_ZIP);
     }
 
-    private static int zipUserTree(ZipOutputStream zip, File root, File current) throws IOException {
-        if (current.isDirectory()) {
-            File[] children = current.listFiles();
-            if (children == null) throw new IOException("cannot read " + current.getName());
-            int count = 0;
-            for (File child : children) count += zipUserTree(zip, root, child);
-            return count;
-        }
-        if (!current.isFile()) throw new IOException("cannot read " + current.getName());
-        String relative = root.toPath().relativize(current.toPath()).toString().replace(File.separatorChar, '/');
-        if (relative.isEmpty() || relative.startsWith("../") || relative.contains("/../"))
-            throw new IOException("invalid save path");
-        zip.putNextEntry(new ZipEntry("user/" + relative));
-        try (InputStream in = new java.io.FileInputStream(current)) {
-            byte[] buf = new byte[65536];
-            for (int n; (n = in.read(buf)) != -1;) zip.write(buf, 0, n);
-        }
-        zip.closeEntry();
-        return 1;
+    /** Choose an existing ZIP from Android storage. Other apps' save archives are not assumed to be compatible. */
+    private void importSaves() {
+        Intent choose = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        choose.addCategory(Intent.CATEGORY_OPENABLE);
+        choose.setType("*/*");
+        choose.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {
+            "application/zip", "application/x-zip-compressed", "application/octet-stream"
+        });
+        choose.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(choose, PICK_SAVE_IMPORT);
     }
 
     /** Where save backups go: shared storage survives the app (all files access). */

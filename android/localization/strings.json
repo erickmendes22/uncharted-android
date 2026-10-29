@@ -1476,7 +1476,7 @@
     "zh": "暂无可导出的存档。",
     "tr": "Dışa aktarılacak kayıt yok.",
     "pl": "Nie ma jeszcze zapisów do eksportu.",
-    "pt": "Ainda não há saves para exportar."
+    "pt": "Ainda não há salvamentos para exportar."
   },
   "Saves exported successfully.": {
     "es": "Partidas exportadas.",
@@ -1489,7 +1489,7 @@
     "zh": "存档导出成功。",
     "tr": "Kayıtlar başarıyla dışa aktarıldı.",
     "pl": "Pomyślnie wyeksportowano zapisy.",
-    "pt": "Saves exportados com sucesso."
+    "pt": "Salvamentos exportados com sucesso."
   },
   "Exporting saves…": {
     "es": "Exportando partidas…",
@@ -1502,7 +1502,7 @@
     "zh": "正在导出存档…",
     "tr": "Kayıtlar dışa aktarılıyor…",
     "pl": "Eksportowanie zapisów…",
-    "pt": "Exportando saves…"
+    "pt": "Exportando salvamentos…"
   },
   "Importing and validating saves…": {
     "es": "Importando y validando partidas…",
@@ -1515,7 +1515,7 @@
     "zh": "正在导入并验证存档…",
     "tr": "Kayıtlar içe aktarılıyor ve doğrulanıyor…",
     "pl": "Importowanie i weryfikowanie zapisów…",
-    "pt": "Importando e validando saves…"
+    "pt": "Importando e verificando salvamentos…"
   },
   "⌂\nHome": {
     "es": "⌂\nInicio",
@@ -4142,7 +4142,7 @@
     "pl": "Utwórz kopię zapisów"
   },
   "Restore saves": {
-    "pt": "Restaurar saves",
+    "pt": "Restaurar salvamentos",
     "es": "Restaurar partidas",
     "fr": "Restaurer les sauvegardes",
     "de": "Spielstände wiederherstellen",
@@ -5063,5 +5063,57 @@
     "zh": "图形对比模式使用独立缓存。每种模式首次运行时，着色器编译可能导致卡顿。",
     "tr": "Grafik karşılaştırma modları ayrı önbellekler kullanır. İlk çalıştırmada gölgelendirici derlemesi takılmaya neden olabilir.",
     "pl": "Tryby porównania grafiki używają osobnych pamięci podręcznych. Pierwsze uruchomienie może przycinać podczas kompilacji shaderów."
+  },
+  "Save export failed": {
+    "pt": "Falha ao exportar salvamentos",
+    "es": "Error al exportar partidas",
+    "fr": "Échec de l'exportation",
+    "de": "Export fehlgeschlagen",
+    "it": "Esportazione non riuscita",
+    "ru": "Не удалось экспортировать сохранения",
+    "ja": "セーブのエクスポートに失敗",
+    "ko": "저장 데이터 내보내기 실패",
+    "zh": "导出存档失败",
+    "tr": "Kayıtlar dışa aktarılamadı",
+    "pl": "Nie udało się wyeksportować zapisów"
+  },
+  "Saves imported successfully.": {
+    "pt": "Salvamentos importados com sucesso.",
+    "es": "Partidas importadas correctamente.",
+    "fr": "Sauvegardes importées avec succès.",
+    "de": "Spielstände erfolgreich importiert.",
+    "it": "Salvataggi importati correttamente.",
+    "ru": "Сохранения успешно импортированы.",
+    "ja": "セーブをインポートしました。",
+    "ko": "저장 데이터를 가져왔습니다.",
+    "zh": "存档导入成功。",
+    "tr": "Kayıtlar başarıyla içe aktarıldı.",
+    "pl": "Pomyślnie zaimportowano zapisy."
+  },
+  "Replace saves from this ZIP? The current saves will be preserved as a local backup.": {
+    "pt": "Importar os salvamentos deste ZIP? Os salvamentos atuais serão preservados em um backup local.",
+    "es": "¿Importar las partidas de este ZIP? Las actuales se conservarán en una copia local.",
+    "fr": "Importer les sauvegardes de ce ZIP ? Les sauvegardes actuelles seront conservées localement.",
+    "de": "Spielstände aus dieser ZIP importieren? Die aktuellen Spielstände werden lokal gesichert.",
+    "it": "Importare i salvataggi da questo ZIP? Quelli attuali saranno conservati in un backup locale.",
+    "ru": "Импортировать сохранения из ZIP? Текущие сохранения будут сохранены в локальной копии.",
+    "ja": "このZIPからセーブを読み込みますか？現在のセーブは端末内にバックアップされます。",
+    "ko": "이 ZIP의 저장 데이터를 가져오시겠습니까? 현재 데이터는 기기에 백업됩니다.",
+    "zh": "从此 ZIP 导入存档？当前存档会在本地备份。",
+    "tr": "Bu ZIP'ten kayıtlar içe aktarılsın mı? Mevcut kayıtlar yerel olarak yedeklenecek.",
+    "pl": "Zaimportować zapisy z tego ZIP? Bieżące zapisy zostaną zachowane w lokalnej kopii."
+  },
+  "files": {
+    "pt": "arquivos",
+    "es": "archivos",
+    "fr": "fichiers",
+    "de": "Dateien",
+    "it": "file",
+    "ru": "файлов",
+    "ja": "ファイル",
+    "ko": "파일",
+    "zh": "个文件",
+    "tr": "dosya",
+    "pl": "plików"
   }
 }

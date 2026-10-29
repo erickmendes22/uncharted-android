@@ -73,6 +73,8 @@ jobs:
           python3 tests/test_pkg_descriptor.py
           javac -d "$RUNNER_TEMP/setup-test" android/scripts/g2/game_app/SetupFlow.java tests/TestSetupFlow.java
           java -cp "$RUNNER_TEMP/setup-test" dev.unchartedg2.game.TestSetupFlow
+          javac -d "$RUNNER_TEMP/save-zip-test" android/scripts/g2/game_app/SaveZipImporter.java tests/TestSaveZipImporter.java
+          java -cp "$RUNNER_TEMP/save-zip-test" dev.unchartedg2.game.TestSaveZipImporter
           javac -d "$RUNNER_TEMP/storage-test" android/scripts/g2/game_app/StoragePaths.java tests/TestStoragePaths.java
           java -cp "$RUNNER_TEMP/storage-test" dev.unchartedg2.game.TestStoragePaths
           g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_staging_reuse.cpp -o "$RUNNER_TEMP/staging-test"

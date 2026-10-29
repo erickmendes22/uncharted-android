@@ -10,7 +10,7 @@ FEX CPU translation and native Vulkan rendering.
   Simplified Chinese, Turkish and Polish. Automatic language follows the system,
   falling back to English. The selected language is passed to the game at startup;
   available game text and audio depend on your copy.
-- PKG installation and updates, game-folder selection, ZIP save export via Android file picker, legacy backup restore and log export.
+- PKG installation and updates, game-folder selection, ZIP save import/export via Android file picker (with pre-import local backup), legacy backup restore and log export.
 - Fullscreen, configurable frame limits and a performance HUD with up to 300% scale.
 - FSR 3.1 temporal reconstruction to **1280×720**: Native AA (720p), Quality (540p),
   Balanced (468p) and Performance (360p).
