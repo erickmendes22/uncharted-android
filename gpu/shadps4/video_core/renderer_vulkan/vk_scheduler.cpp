@@ -551,6 +551,14 @@ void Scheduler::WaitSubmitted() {
 }
 
 void Scheduler::Wait(u64 tick) {
+    // revvv991/uncharted-android 0.2.14: do not enter an owner wait or
+    // flush the recorder for a timeline tick that has already completed.
+    // An already-free tick can be awaited under a region lock; entering
+    // owner Scope in that case lets a helper resolve a fault on the same
+    // locked range, leaving both threads waiting on each other.
+    if (work_semaphore.IsFree(tick)) {
+        return;
+    }
     if (tick >= work_semaphore.CurrentTick()) {
         // Make sure we are not waiting for the current tick without signalling
         SubmitInfo info{};
