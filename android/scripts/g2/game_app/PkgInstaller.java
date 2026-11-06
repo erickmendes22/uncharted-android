@@ -94,7 +94,11 @@ final class PkgInstaller {
     if(update)execute(helper,dest,input,"extract",input.argumentPath(),"--output",dest.getPath(),"--force");
     else execute(helper,dest,input,"extract",input.argumentPath(),"--output",dest.getPath());
     if(!new File(dest,"eboot.bin").isFile()||!new File(dest,"u1data").isDirectory()||!id.equals(Launcher.sfoValue(dest.getPath(),"TITLE_ID")))throw new IOException(text("Extraction does not contain a complete Uncharted Collection dump. Check eboot.bin, u1data/ and sce_sys/param.sfo.", "Extração não contém um dump completo de Uncharted Collection. Confira eboot.bin, u1data/ e sce_sys/param.sfo."));
-    for(String game : new String[]{"u1","u2","u3"}){\n     String broken=GameArchiveCheck.problem(dest,game);\n     if(broken!=null)throw new IOException(broken);\n    }\n    if(!activity.getSharedPreferences("launcher",0).edit().putString("game_dir",dest.getPath()).commit())throw new IOException(text("Content extracted, but the folder could not be selected.", "Conteúdo extraído, mas não foi possível selecionar a pasta."));
+    for(String game : new String[]{"u1","u2","u3"}){
+     String broken=GameArchiveCheck.problem(dest,game);
+     if(broken!=null)throw new IOException(broken);
+    }
+    if(!activity.getSharedPreferences("launcher",0).edit().putString("game_dir",dest.getPath()).commit())throw new IOException(text("Content extracted, but the folder could not be selected.", "Conteúdo extraído, mas não foi possível selecionar a pasta."));
     message=(update?text("Update", "Atualização"):text("Game", "Jogo"))+" "+id+text(" installed at ", " instalado em ")+dest.getPath();
    }catch(Exception e){message=text("Installation failed: ", "Falha na instalação: ")+e.getMessage();}
    running=false;stateOnUi(false,message);
