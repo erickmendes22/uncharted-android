@@ -2,6 +2,7 @@ package dev.unchartedg2.game;
 
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
@@ -1360,6 +1361,16 @@ public class Launcher extends Activity {
         if(!storageAccess()){runSetupAction(setupFlow.begin(SetupFlow.PLAY,false));return;}
         if (!prepared()) {
             prepare(true);
+            return;
+        }
+        // A valid executable with a missing/mismatched PSARC otherwise aborts in
+        // ingame-shaders.cpp with an opaque files.json assertion.
+        String assetProblem = GameArchiveCheck.problem(
+            new File(folder()), prefs.getString("selected_game", "u1"));
+        if (assetProblem != null) {
+            status(assetProblem);
+            new AlertDialog.Builder(this).setTitle("Uncharted game files")
+                .setMessage(assetProblem).setPositiveButton("OK", null).show();
             return;
         }
         prefs.edit().putString("extra_env", extraEnv.getText().toString()).apply();
