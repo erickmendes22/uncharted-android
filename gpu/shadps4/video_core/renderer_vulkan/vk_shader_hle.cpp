@@ -1,4 +1,5 @@
 #include "bbport_mesh_copy_policy.h"
+#include "bbport_scalar_guest_copy_policy.h"
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -253,6 +254,14 @@ static bool MeshCopyResultsEnabled(){
     return enabled;
 }
 
+static bool U3ScalarGuestSyncEnabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("BB_U3_SCALAR_GUEST_SYNC");
+        return value && value[0] == '1';
+    }();
+    return enabled;
+}
+
 static constexpr u64 SCALAR_COPY_SHADER_HASH = 0x2d215c3b;    // one dword per workgroup
 static constexpr u64 SCALAR_COPY64_SHADER_HASH = 0x6a6422a9;  // 64 dwords per workgroup (U2)
 
@@ -333,7 +342,10 @@ static bool ExecuteScalarCopyHLE(const Shader::Info& info, const AmdGpu::Compute
             }
         } else if (size < 1_MB && (both || (group_size==64 && MeshCopyResultsEnabled()))) {
             const bool mesh_copy=group_size==64 && MeshCopyResultsEnabled();
-            const bool copy_sync=sync || (mesh_copy && BbMeshCopy::NeedsGuestResult(
+            const bool u3_cpu_result = BbScalarGuestCopy::NeedsOrderedReadback(
+                U3ScalarGuestSyncEnabled(), static_cast<unsigned>(group_size), src_written,
+                size <= 4096 && buffer_cache.IsRegionCpuModified(dst.base_address, size), size);
+            const bool copy_sync=sync || u3_cpu_result || (mesh_copy && BbMeshCopy::NeedsGuestResult(
                 64,true,buffer_cache.IsRegionCpuModified(dst.base_address,size)));
             bool deferred = false;
             if (src_written && copy_sync && mesh_copy && !sync) {
