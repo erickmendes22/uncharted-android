@@ -767,12 +767,17 @@ void BufferCache::InvalidateMemory(VAddr device_addr, u64 size, bool assume_lock
         }();
         const VAddr page = Common::AlignDown(device_addr, TRACKER_BYTES_PER_PAGE);
         const u64 length = Common::AlignUp(device_addr + size, TRACKER_BYTES_PER_PAGE) - page;
+        // Upstream Android 0.2.14: when a helper's guest-memory write faults
+        // while the GPU owner is waiting for that helper, the helper performs
+        // the resolution itself. It must not wait on a GPU submission that is
+        // itself recorded or submitted by that blocked helper.
+        const bool helper = BbOwnerWait::helper_thread;
         // Decided on the GPU thread, where GPU writes are recorded: none can come in between.
-        auto resolve = [this, page, length, device_addr, size] {
+        auto resolve = [this, page, length, device_addr, size, helper] {
             const u32 frames = g_guest_frames.load(std::memory_order_relaxed);
             const u32 gpu_write = memory_tracker->LatestGpuWriteFrame(page, length);
             const u32 gpu_use = LastGpuUse(page, length);
-            if (DownloadOnSideQueue(page, length)) {
+            if (!helper && DownloadOnSideQueue(page, length)) {
                 memory_tracker->MarkRegionAsCpuModified(device_addr, size);
                 BbStats::gpu_side_downloads.fetch_add(1, std::memory_order_relaxed);
                 NoteFault(page, length, frames, gpu_write, gpu_use, 4);
@@ -787,7 +792,7 @@ void BufferCache::InvalidateMemory(VAddr device_addr, u64 size, bool assume_lock
                 NoteFault(page, length, frames, gpu_write, gpu_use, 1);
                 return;
             }
-            if (merge) {
+            if (merge || helper) {
                 ShadowGpuData(page, length);
                 memory_tracker->MarkRegionAsCpuModified(device_addr, size);
                 BbStats::gpu_merges.fetch_add(1, std::memory_order_relaxed);

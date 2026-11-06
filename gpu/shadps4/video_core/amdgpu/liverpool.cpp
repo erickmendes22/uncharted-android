@@ -12,6 +12,7 @@
 #endif
 #include <time.h>
 #include "bbport_copy.h"
+#include "bbport_ce_wait_policy.h"
 #include "bbport_toggles.h"
 #include <cstdio>
 #include <boost/preprocessor/stringize.hpp>
@@ -1046,7 +1047,10 @@ Liverpool::Task Liverpool::ProcessCeUpdate(std::span<const u32> ccb) {
         }
         case PM4ItOpcode::WaitOnDeCounterDiff: {
             const auto diff = it_body[0];
-            while ((cblock.de_count - cblock.ce_count) >= diff) {
+            // Supermedo/uncharted_pc 0.3.12 (shadPS4): never subtract when
+            // the counters are reversed; unsigned underflow caused a CE
+            // wait that could spin forever, looking like a game freeze.
+            while (BbCeWait::ShouldYield(cblock.ce_count, cblock.de_count, diff)) {
                 YIELD_CE();
             }
             break;

@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106]
+    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106, fix/u2-freeze-touch-upstream-20261106]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
@@ -87,6 +87,8 @@ jobs:
           "$RUNNER_TEMP/mesh-copy-test"
           g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_u3_scalar_guest_copy.cpp -o "$RUNNER_TEMP/u3-guest-copy-test"
           "$RUNNER_TEMP/u3-guest-copy-test"
+          g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_pm4_ce_wait.cpp -o "$RUNNER_TEMP/pm4-ce-wait-test"
+          "$RUNNER_TEMP/pm4-ce-wait-test"
           javac -d "$RUNNER_TEMP/archive-test" android/scripts/g2/game_app/GameArchiveCheck.java tests/TestGameArchiveCheck.java
           java -cp "$RUNNER_TEMP/archive-test" dev.unchartedg2.game.TestGameArchiveCheck
       - name: Install native build tools and SDK

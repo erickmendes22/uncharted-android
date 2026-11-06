@@ -64,6 +64,49 @@ int main(){
         }
         assert(green && blue && red && purple);
     }
+    // A rapid second tap reuses SDL's finger ID. The first button must not
+    // remain pressed during the second one (MinHold used to produce both).
+    BbOverlay::TouchPadReset();
+    frame(1920,1080);
+    auto current = BbTouchLayout::Build(1920,1080,settings.touch_pad_scale.load());
+    e=finger(SDL_EVENT_FINGER_DOWN,current.slots[0].x/1920,current.slots[0].y/1080);
+    assert(BbOverlay::TouchPadEvent(e));
+    e.type=SDL_EVENT_FINGER_UP;assert(BbOverlay::TouchPadEvent(e));
+    e=finger(SDL_EVENT_FINGER_DOWN,current.slots[2].x/1920,current.slots[2].y/1080);
+    assert(BbOverlay::TouchPadEvent(e));
+    frame();
+    assert((last_buttons & 0x4000)!=0); // Cross
+    assert((last_buttons & 0x1000)==0); // no stale Triangle
+    BbOverlay::TouchPadReset();
+    // Once a D-pad direction is pressed, moving slightly over another
+    // direction must not substitute its bit until a new press.
+    e=finger(SDL_EVENT_FINGER_DOWN,current.slots[12].x/1920,current.slots[12].y/1080);
+    assert(BbOverlay::TouchPadEvent(e));
+    e=finger(SDL_EVENT_FINGER_MOTION,current.slots[15].x/1920,current.slots[15].y/1080);
+    assert(BbOverlay::TouchPadEvent(e));
+    frame();
+    assert((last_buttons & 0x10)!=0); // Up remains
+    assert((last_buttons & 0x20)==0); // Right was never pressed
+    BbOverlay::TouchPadReset();
+    frame();
+    // Every drawn button must generate exactly its displayed PS button bit
+    // on phones using Android's pre-rotated 2688x1216 logical viewport.
+    constexpr uint32_t mapped_bits[16] = {
+        0x1000,0x2000,0x4000,0x8000,0x100,0x400,0x200,0x800,
+        0x100000,0x8,0x2,0x4,0x10,0x40,0x80,0x20
+    };
+    for (const auto size : {ImVec2(1920,1080),ImVec2(2400,1080),ImVec2(2688,1216)}) {
+        frame(size.x,size.y);
+        const auto all = BbTouchLayout::Build(size.x,size.y,settings.touch_pad_scale.load());
+        for (int i=0; i<16; ++i) {
+            BbOverlay::TouchPadReset();
+            e=finger(SDL_EVENT_FINGER_DOWN,all.slots[i].x/size.x,all.slots[i].y/size.y);
+            assert(BbOverlay::TouchPadEvent(e));
+            frame(size.x,size.y);
+            assert(last_buttons == mapped_bits[i]);
+        }
+    }
+    BbOverlay::TouchPadReset();
     frame();
     // Draw the actual Android panel with each HUD mode, including its child/footer.
     for(int mode=0;mode<3;++mode){settings.hud_mode=mode;bool open=true;ImGui::NewFrame();BbOverlay::AndroidMenu(1,16.6f,open);ImGui::Render();}

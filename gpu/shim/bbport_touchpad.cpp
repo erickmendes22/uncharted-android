@@ -70,7 +70,7 @@ struct Finger {
     bool lifted = false;            // released before MinHold: still pressed until then
     double down_time = 0.0;
     Kind kind = Kind::None;
-    int control = -1;               // Controls index for Kind::Button
+    int control = -1;               // Controls index for Button, 12..15 for Dpad
     float x0 = 0, y0 = 0;           // where it landed (normalized)
     float x = 0, y = 0;             // where it is
     float look_dx = 0, look_dy = 0; // normalized travel since the last frame (Kind::Look)
@@ -138,9 +138,14 @@ void Push(bool neutral) {
                 if (Controls[f.control].bit == BtnL2) l2 = 255;
                 if (Controls[f.control].bit == BtnR2) r2 = 255;
                 break;
-            case Kind::Dpad:
-                buttons |= DpadBits(f.x * Width, f.y * Height, scale);
+            case Kind::Dpad: {
+                // Lock the directional button at FINGER_DOWN. A small finger
+                // movement must never turn an Up press into Right/Down.
+                constexpr uint32_t bits[] = {BtnUp, BtnDown, BtnLeft, BtnRight};
+                if (f.control >= 12 && f.control < 16)
+                    buttons |= bits[f.control - 12];
                 break;
+            }
             case Kind::Stick: {
                 const float r = StickRadius * Height * scale;
                 float dx = (f.x - f.x0) * Width / r, dy = (f.y - f.y0) * Height / r;
@@ -223,7 +228,10 @@ void Draw(float alpha, float scale) {
         for (const auto& f : fingers) {
             if (!f.down) continue;
             if (f.kind == Kind::Button) held |= Controls[f.control].bit;
-            if (f.kind == Kind::Dpad) held |= DpadBits(f.x * Width, f.y * H, scale);
+            if (f.kind == Kind::Dpad && f.control >= 12 && f.control < 16) {
+                constexpr uint32_t bits[] = {BtnUp, BtnDown, BtnLeft, BtnRight};
+                held |= bits[f.control - 12];
+            }
 
         }
     }
@@ -330,6 +338,14 @@ bool TouchPadEvent(const SDL_Event& event) {
         }
         // the menu's swipe-in strip, unless the finger is on a control there (R1, R2)
         if (control < 0 && event.tfinger.x >= 1.0f - EdgeZone) return false;
+        // SDL reuses a finger ID for successive taps. Old short taps remain
+        // pressed for MinHold and used to coexist with the *new* button;
+        // pressing Cross immediately after Circle thus pressed both.
+        for (auto& previous : fingers) {
+            if (previous.down && previous.id == event.tfinger.fingerID) {
+                previous = Finger{};
+            }
+        }
         Finger* f = Free();
         if (!f) return false;
         *f = Finger{};
@@ -341,8 +357,10 @@ bool TouchPadEvent(const SDL_Event& event) {
         if (control >= 0) {
             f->kind = Kind::Button;
             f->control = control;
-        } else if (DpadBits(px, py, scale)) {
+        } else if (const uint32_t dpad = DpadBits(px, py, scale)) {
             f->kind = Kind::Dpad;
+            f->control = dpad == BtnUp ? 12 : dpad == BtnDown ? 13 :
+                         dpad == BtnLeft ? 14 : 15;
         } else {
             f->kind = event.tfinger.x < 0.5f ? Kind::Stick : Kind::Look;
         }
@@ -377,8 +395,6 @@ bool TouchPadEvent(const SDL_Event& event) {
 }
 
 void TouchPadFrame(float width, float height) {
-    Width = width;
-    Height = height;
     const bool active = TouchPadActive();
     if (!active) {
         if (was_active) TouchPadReset();
@@ -388,13 +404,20 @@ void TouchPadFrame(float width, float height) {
     was_active = true;
     const auto& s = BbSettings::Get();
     const float alpha = std::clamp(s.touch_pad_alpha.load(), 0.1f, 1.0f);
-    layout=BbTouchLayout::Build(width,height,s.touch_pad_scale.load(),hud_bounds);
-    const float scale=layout.scale;
+    const auto next_layout = BbTouchLayout::Build(
+        width, height, s.touch_pad_scale.load(), hud_bounds);
+    // SDL finger events arrive on the window thread. Previously the renderer
+    // updated the dimensions and 19-slot layout without the mutex held by the
+    // hit-test thread. A half-updated layout could hit a different PS button,
+    // particularly after orientation, fullscreen or HUD changes.
     {
         std::scoped_lock lock{fingers_mutex};
+        Width = width;
+        Height = height;
+        layout = next_layout;
         Push(false);
     }
-    Draw(alpha, scale);
+    Draw(alpha, next_layout.scale);
 }
 
 BbTouchLayout::Rect TouchPadMenuRect(float width,float height) {
