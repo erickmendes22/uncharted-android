@@ -89,6 +89,25 @@ int main(){
     assert((last_buttons & 0x20)==0); // Right was never pressed
     BbOverlay::TouchPadReset();
     frame();
+    // Every drawn button must generate exactly its displayed PS button bit
+    // on phones using Android's pre-rotated 2688x1216 logical viewport.
+    constexpr uint32_t mapped_bits[16] = {
+        0x1000,0x2000,0x4000,0x8000,0x100,0x400,0x200,0x800,
+        0x100000,0x8,0x2,0x4,0x10,0x40,0x80,0x20
+    };
+    for (const auto size : {ImVec2(1920,1080),ImVec2(2400,1080),ImVec2(2688,1216)}) {
+        frame(size.x,size.y);
+        const auto all = BbTouchLayout::Build(size.x,size.y,settings.touch_pad_scale.load());
+        for (int i=0; i<16; ++i) {
+            BbOverlay::TouchPadReset();
+            e=finger(SDL_EVENT_FINGER_DOWN,all.slots[i].x/size.x,all.slots[i].y/size.y);
+            assert(BbOverlay::TouchPadEvent(e));
+            frame(size.x,size.y);
+            assert(last_buttons == mapped_bits[i]);
+        }
+    }
+    BbOverlay::TouchPadReset();
+    frame();
     // Draw the actual Android panel with each HUD mode, including its child/footer.
     for(int mode=0;mode<3;++mode){settings.hud_mode=mode;bool open=true;ImGui::NewFrame();BbOverlay::AndroidMenu(1,16.6f,open);ImGui::Render();}
     ImGui::DestroyContext();std::puts("Android touch/menu: PASS (menu hidden-pad access, held analog, independent sticks, panel layout)");
