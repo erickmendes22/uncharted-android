@@ -64,6 +64,30 @@ int main(){
         }
         assert(green && blue && red && purple);
     }
+    // A rapid second tap reuses SDL's finger ID. The first button must not
+    // remain pressed during the second one (MinHold used to produce both).
+    BbOverlay::TouchPadReset();
+    frame(1920,1080);
+    auto current = BbTouchLayout::Build(1920,1080,settings.touch_pad_scale.load());
+    e=finger(SDL_EVENT_FINGER_DOWN,current.slots[0].x/1920,current.slots[0].y/1080);
+    assert(BbOverlay::TouchPadEvent(e));
+    e.type=SDL_EVENT_FINGER_UP;assert(BbOverlay::TouchPadEvent(e));
+    e=finger(SDL_EVENT_FINGER_DOWN,current.slots[2].x/1920,current.slots[2].y/1080);
+    assert(BbOverlay::TouchPadEvent(e));
+    frame();
+    assert((last_buttons & 0x4000)!=0); // Cross
+    assert((last_buttons & 0x1000)==0); // no stale Triangle
+    BbOverlay::TouchPadReset();
+    // Once a D-pad direction is pressed, moving slightly over another
+    // direction must not substitute its bit until a new press.
+    e=finger(SDL_EVENT_FINGER_DOWN,current.slots[12].x/1920,current.slots[12].y/1080);
+    assert(BbOverlay::TouchPadEvent(e));
+    e=finger(SDL_EVENT_FINGER_MOTION,current.slots[15].x/1920,current.slots[15].y/1080);
+    assert(BbOverlay::TouchPadEvent(e));
+    frame();
+    assert((last_buttons & 0x10)!=0); // Up remains
+    assert((last_buttons & 0x20)==0); // Right was never pressed
+    BbOverlay::TouchPadReset();
     frame();
     // Draw the actual Android panel with each HUD mode, including its child/footer.
     for(int mode=0;mode<3;++mode){settings.hud_mode=mode;bool open=true;ImGui::NewFrame();BbOverlay::AndroidMenu(1,16.6f,open);ImGui::Render();}
