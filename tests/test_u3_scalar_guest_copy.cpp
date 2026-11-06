@@ -4,7 +4,8 @@
 #include <cstdint>
 int main() {
     using BbScalarGuestCopy::NeedsOrderedReadback;
-    assert(NeedsOrderedReadback(true, 1, true, true, 4));
+    assert(!NeedsOrderedReadback(true, 1, true, true, 4));
+    assert(NeedsOrderedReadback(true, 1, true, true, 256));
     assert(NeedsOrderedReadback(true, 1, true, true, 1024));
     assert(NeedsOrderedReadback(true, 1, true, true, 4096));
     assert(!NeedsOrderedReadback(false, 1, true, true, 1024));
