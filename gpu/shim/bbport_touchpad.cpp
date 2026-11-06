@@ -395,8 +395,6 @@ bool TouchPadEvent(const SDL_Event& event) {
 }
 
 void TouchPadFrame(float width, float height) {
-    Width = width;
-    Height = height;
     const bool active = TouchPadActive();
     if (!active) {
         if (was_active) TouchPadReset();
@@ -406,13 +404,20 @@ void TouchPadFrame(float width, float height) {
     was_active = true;
     const auto& s = BbSettings::Get();
     const float alpha = std::clamp(s.touch_pad_alpha.load(), 0.1f, 1.0f);
-    layout=BbTouchLayout::Build(width,height,s.touch_pad_scale.load(),hud_bounds);
-    const float scale=layout.scale;
+    const auto next_layout = BbTouchLayout::Build(
+        width, height, s.touch_pad_scale.load(), hud_bounds);
+    // SDL finger events arrive on the window thread. Previously the renderer
+    // updated the dimensions and 19-slot layout without the mutex held by the
+    // hit-test thread. A half-updated layout could hit a different PS button,
+    // particularly after orientation, fullscreen or HUD changes.
     {
         std::scoped_lock lock{fingers_mutex};
+        Width = width;
+        Height = height;
+        layout = next_layout;
         Push(false);
     }
-    Draw(alpha, scale);
+    Draw(alpha, next_layout.scale);
 }
 
 BbTouchLayout::Rect TouchPadMenuRect(float width,float height) {
