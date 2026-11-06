@@ -195,7 +195,7 @@ public class GameActivity extends SDLActivity {
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
             }
             // Repair CPU-visible animation constants copied from GPU-written sources in U3.
-            // Unlike a global precise readback, this is scoped to 4..4096-byte scalar copies
+            // Unlike a global precise readback, this is scoped to 256..4096-byte scalar copies
             // going into a CPU-modified destination. U1 and U2 retain their established paths.
             Os.setenv("BB_U3_SCALAR_GUEST_SYNC","u3".equals(game)?"1":"0",true);
             Os.setenv("BB_U3_SKIP_LOGOS","u3".equals(game) && options.getBoolean("patch_Skip startup logos",false)?"1":"0",true);
