@@ -1362,6 +1362,16 @@ public class Launcher extends Activity {
             prepare(true);
             return;
         }
+        // A valid executable with a missing/mismatched PSARC otherwise aborts in
+        // ingame-shaders.cpp with an opaque files.json assertion.
+        String assetProblem = GameArchiveCheck.problem(
+            new File(folder()), prefs.getString("selected_game", "u1"));
+        if (assetProblem != null) {
+            status(assetProblem);
+            new AlertDialog.Builder(this).setTitle("Uncharted game files")
+                .setMessage(assetProblem).setPositiveButton("OK", null).show();
+            return;
+        }
         prefs.edit().putString("extra_env", extraEnv.getText().toString()).apply();
         String dir = folder(), d = files.getAbsolutePath();
         int upscale=prefs.getInt("mobile_upscale",0);
