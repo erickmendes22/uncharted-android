@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options]
+    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
