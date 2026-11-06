@@ -13,7 +13,15 @@ final class ArmCompatibility {
     static String environment(String game,boolean fastReads,boolean smallBatches,boolean idleSleep) {
         boolean sequel="u2".equals(game)||"u3".equals(game);
         // These options never choose a readback precision or override the side queue.
-        return "BB_UMA_READBACK="+(sequel&&fastReads?"1":"0")+"\n"
+        // U3's animation/cloth buffers are shared by CPU job workers and compute shaders.
+        // ShadowGpuData guesses ownership by comparing old/new bytes at 64-byte granularity;
+        // a guest store of the same value is invisible to that comparison. A later GPU
+        // merge can then restore stale transforms and make animated limbs jitter.
+        // Only U3 uses the precise, existing readback path. It still prefers completed
+        // mapped/side-queue reads and falls back to an ordered GPU download for in-flight data.
+        // Keep U1/U2 on their established policies; do not force global readback modes.
+        return "BB_GPU_MERGE="+("u3".equals(game)?"0":"1")+"\n"
+            +"BB_UMA_READBACK="+(sequel&&fastReads?"1":"0")+"\n"
             +"BB_FLUSH_DRAWS="+(sequel&&smallBatches?"100":"0")+"\n"
             +"BB_JOB_SPIN="+(idleSleep?"256,20":"0")+"\n";
     }
