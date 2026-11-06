@@ -85,6 +85,10 @@ jobs:
           "$RUNNER_TEMP/file-mods-test"
           g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_mesh_copy_policy.cpp -o "$RUNNER_TEMP/mesh-copy-test"
           "$RUNNER_TEMP/mesh-copy-test"
+          g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_u3_scalar_guest_copy.cpp -o "$RUNNER_TEMP/u3-guest-copy-test"
+          "$RUNNER_TEMP/u3-guest-copy-test"
+          javac -d "$RUNNER_TEMP/archive-test" android/scripts/g2/game_app/GameArchiveCheck.java tests/TestGameArchiveCheck.java
+          java -cp "$RUNNER_TEMP/archive-test" dev.unchartedg2.game.TestGameArchiveCheck
       - name: Install native build tools and SDK
         shell: bash
         run: |
