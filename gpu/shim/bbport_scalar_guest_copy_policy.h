@@ -11,6 +11,6 @@ constexpr bool NeedsOrderedReadback(bool enabled, unsigned group_size,
                                     bool gpu_written, bool cpu_destination,
                                     std::uint64_t bytes) noexcept {
     return enabled && group_size == 1 && gpu_written && cpu_destination &&
-           bytes >= 4 && bytes <= 4096 && (bytes & 3) == 0;
+           bytes >= 256 && bytes <= 4096 && (bytes & 3) == 0;
 }
 } // namespace BbScalarGuestCopy
