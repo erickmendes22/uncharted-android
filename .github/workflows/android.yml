@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106, fix/u2-freeze-touch-upstream-20261106]
+    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106, fix/u2-freeze-touch-upstream-20261106, fix/u2-eop-recorder-freeze-20261106]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
@@ -69,6 +69,7 @@ jobs:
           "$RUNNER_TEMP/guest-fault-test"
       - name: Verify protected file reads and mesh results
         run: |
+          python3 tests/test_u2_eop_flip_threading.py
           python3 tests/test_landing_order.py
           python3 tests/test_pkg_descriptor.py
           javac -d "$RUNNER_TEMP/setup-test" android/scripts/g2/game_app/SetupFlow.java tests/TestSetupFlow.java
