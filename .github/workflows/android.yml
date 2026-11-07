@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106, fix/u2-freeze-touch-upstream-20261106, fix/u2-eop-recorder-freeze-20261106, fix/u2-touch-video-20261106]
+    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106, fix/u2-freeze-touch-upstream-20261106, fix/u2-eop-recorder-freeze-20261106, fix/u2-touch-video-20261106, fix/u2-native-android-touch-20261107]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
@@ -42,6 +42,7 @@ jobs:
       - name: Verify release base and optional optimization controls
         run: |
           python3 tests/test_release025_base.py
+          python3 tests/test_android_native_touch_bridge.py
           javac -d "$RUNNER_TEMP/compat-test" android/scripts/g2/game_app/ArmCompatibility.java tests/TestArmCompatibility.java
           java -cp "$RUNNER_TEMP/compat-test" dev.unchartedg2.game.TestArmCompatibility
           cc -std=c11 -Wall -Wextra -Werror -O2 -pthread tests/test_uncharted_jobspin.c -o "$RUNNER_TEMP/jobspin-test"
