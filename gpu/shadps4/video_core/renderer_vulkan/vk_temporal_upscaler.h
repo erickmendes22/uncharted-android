@@ -127,7 +127,9 @@ public:
                          vk::ImageView& view, vk::ImageLayout& layout);
     /// Whether RedirectSampled would replace `image` (it may record a barrier then).
     [[nodiscard]] bool RedirectsSampled(VideoCore::ImageId image) const {
-        return !MovieFsrBypass() && display_redirect && image == ui_color;
+        // Avoid a clock read for every ordinary sampled texture; only the
+        // single redirected display image needs the movie check.
+        return display_redirect && image == ui_color && !MovieFsrBypass();
     }
 
     /// Presenter: the output-size display buffer standing in for the guest one at `address`.
