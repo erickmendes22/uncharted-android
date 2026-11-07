@@ -21,7 +21,7 @@ assert 'c.drawText("MENU"' not in view
 assert 'if (x>550 && x<730 && y>0 && y<69)' not in view
 assert 'GameActivity.nativeToggleMenu()' in view
 assert "menuSwipePointer=id;" in view
-assert "x<=40f" in view and "x-menuSwipeStartX>=140f" in view
+assert "x<=40f && hit(x,y)==null" in view and "x-menuSwipeStartX>=140f" in view
 assert "Math.abs(y-menuSwipeStartY)<=65f" in view
 assert "if (id==menuSwipePointer) menuSwipePointer=-1" in view
 assert "if (const char* java_touch = std::getenv(\"BB_JAVA_TOUCH\");" in menu
