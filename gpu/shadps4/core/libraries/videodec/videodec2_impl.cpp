@@ -13,6 +13,7 @@
 
 #include "common/support/avdec.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
