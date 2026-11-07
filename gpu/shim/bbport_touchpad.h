@@ -18,9 +18,14 @@ bool TouchPadActive();
 /// A finger event while the menu is closed. Fingers that start in the menu's edge zone (the
 /// last 3% of the width) are not taken. Returns true when the touch pad took the finger.
 bool TouchPadEvent(const SDL_Event& event);
+/// SDL reports touch positions in the Android window's orientation; Vulkan's
+/// pre-rotated overlay may be rendered in the opposite orientation.
+void TouchPadInputSize(float width, float height);
+void TouchPadTransformFinger(SDL_Event& event);
 /// Every frame while active, inside an ImGui frame: draws the controls at the display size
 /// `width` x `height` (logical pixels) and hands the pad state to the runtime.
-void TouchPadFrame(float width, float height);
+/// quarter_turns is the Vulkan pre-rotation already used for ImGui vertices.
+void TouchPadFrame(float width, float height, unsigned quarter_turns = 0);
 /// Releases every finger and sends a neutral state (the menu opened, the setting turned off).
 void TouchPadReset();
 /// Screen rectangle occupied by the corner FPS HUD (zero releases the reservation).
