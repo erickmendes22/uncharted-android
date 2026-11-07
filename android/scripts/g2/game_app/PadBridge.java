@@ -30,11 +30,14 @@ final class PadBridge {
         // tokens, not l2=/r2= analog tokens. The overlay triggers are digital.
         if (l2 > 0) line.append("l2 ");
         if (r2 > 0) line.append("r2 ");
-        line.append("lx=").append(leftActive ? clamp(lx) : 128)
-            .append(" ly=").append(leftActive ? clamp(ly) : 128)
-            .append(" rx=").append(rightActive ? clamp(rx) : 128)
-            .append(" ry=").append(rightActive ? clamp(ry) : 128)
-            .append('\n');
+        // The existing Uncharted runtime treats any lx=/ly=/rx=/ry=
+        // token as an override. Do NOT write neutral axes for unused
+        // fingers: they would cancel a connected physical SDL controller.
+        if (leftActive)
+            line.append("lx=").append(clamp(lx)).append(" ly=").append(clamp(ly)).append(' ');
+        if (rightActive)
+            line.append("rx=").append(clamp(rx)).append(" ry=").append(clamp(ry)).append(' ');
+        line.append('\n');
         publish(line.toString());
     }
     private static int clamp(int x) { return Math.min(255, Math.max(0, x)); }
