@@ -281,13 +281,13 @@ float Halton(u32 index, u32 base) {
 } // namespace
 
 bool TemporalUpscaler::ReducedScene(const VideoCore::Image& color) const {
-    return !MovieFsrBypass() && !scaled_session && scene_targets.Reduced() &&
-           scene_targets.EligibleScene(color);
+    return !scaled_session && scene_targets.Reduced() &&
+           scene_targets.EligibleScene(color) && !MovieFsrBypass();
 }
 
 bool TemporalUpscaler::RasterScaling() const {
-    return !MovieFsrBypass() && !scaled_session && scene_targets.Reduced() &&
-           !done_this_frame;
+    return !scaled_session && scene_targets.Reduced() && !done_this_frame &&
+           !MovieFsrBypass();
 }
 
 bool TemporalUpscaler::OnFrameStart() {
@@ -1438,6 +1438,7 @@ void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
 
 void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
                               VideoCore::ImageId depth, bool native_viewport) {
+    if (camera_motion.VelocityMode() && scaled_session) return;
     if (MovieFsrBypass()) {
         // Movie composition draws to the original guest target rather than
         // a temporary FSR UI target which can be stale/black on cutscenes.
@@ -1447,7 +1448,6 @@ void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
     }
     // Uncharted's UI shaders differ from the Bloodborne/Scaleform list. The
     // explicit BeforeDisplay hook owns this path; do not reconstruct a post pass.
-    if(camera_motion.VelocityMode() && scaled_session)return;
     if (!Scaled() && vs_hash == ui_trigger_vs) done_this_frame = true;
     if (!Scaled() || !color) {
         return;
@@ -2019,7 +2019,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
 }
 
 bool TemporalUpscaler::RedirectDepth(VideoCore::ImageId depth, Target& target) {
-    if (MovieFsrBypass() || !ui_phase || depth != ui_depth) {
+    if (!ui_phase || depth != ui_depth || MovieFsrBypass()) {
         return false;
     }
     target = {*ui_depth_view, vk::ImageLayout::eGeneral, ui_width, ui_height, true};
@@ -2029,7 +2029,7 @@ bool TemporalUpscaler::RedirectDepth(VideoCore::ImageId depth, Target& target) {
 bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
                                        const VideoCore::ImageViewInfo& info, vk::ImageView& view,
                                        vk::ImageLayout& layout) {
-    if (MovieFsrBypass() || !display_redirect || image != ui_color) {
+    if (!display_redirect || image != ui_color || MovieFsrBypass()) {
         return false;
     }
     if (!ui_read_barrier) {
