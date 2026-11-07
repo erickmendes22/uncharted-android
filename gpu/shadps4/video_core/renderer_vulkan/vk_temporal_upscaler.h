@@ -127,7 +127,7 @@ public:
                          vk::ImageView& view, vk::ImageLayout& layout);
     /// Whether RedirectSampled would replace `image` (it may record a barrier then).
     [[nodiscard]] bool RedirectsSampled(VideoCore::ImageId image) const {
-        return display_redirect && image == ui_color;
+        return !MovieFsrBypass() && display_redirect && image == ui_color;
     }
 
     /// Presenter: the output-size display buffer standing in for the guest one at `address`.
@@ -139,6 +139,9 @@ public:
     bool DisplayOverride(VAddr address, Display& display);
 
 private:
+    /// During U2 movie playback, the FSR display override may still refer to
+    /// the previous scene/UI buffer. Present the actual guest video output.
+    [[nodiscard]] bool MovieFsrBypass() const;
     /// bbport: views of guest images the upscaler reads, kept across frames: FSR 4 registers
     /// images by view in a registry of eight (a new view per frame filled it at Native AA).
     vk::ImageView CachedView(const VideoCore::Image& image, vk::Format format,
