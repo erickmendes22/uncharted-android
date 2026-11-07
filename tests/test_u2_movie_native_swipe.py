@@ -33,7 +33,9 @@ assert "java_touch && java_touch[0] == '1' && !open) return TouchAction::None;" 
 # metadata is still 1920x1080 and its chroma offset is based on 1088 rows.
 assert 'env[i] = g[0].equals("u2")' in launcher
 assert '"-BB_VDEC_CONTENT\\n-BB_VDEC_EXPLICIT_CONTENT\\n-BB_VDEC_SIZE\\n"' in launcher
-assert 'if (g[0].equals("u2")) env[i] += "BB_VDEC_DIAG=1\\n"' in launcher
+assert 'if (g[0].equals("u2")) {' in launcher
+assert 'env[i] += "BB_VDEC_DIAG=1\\n"' in launcher
+assert 'env[i] += "-BB_VDEC_DIAG\\n-BB_U2_MOVIE_FSR_BYPASS\\n"' in launcher
 assert "SampleDecodedMovie(*frame);" in video
 assert "n != 1 && n % 300 != 0" in video
 # Non-tightly packed FFmpeg planes cannot use bulk memcpy. This was a real
