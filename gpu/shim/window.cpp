@@ -216,6 +216,11 @@ bool WindowSDL::PollEvents() {
 #endif
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+#ifdef __ANDROID__
+        // Normalize the SDL finger exactly once, before BOTH the protected
+        // in-game menu and the virtual DualShock check its hit boxes.
+        BbOverlay::TouchPadTransformFinger(event);
+#endif
         if (text_active && (event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_KEY_DOWN)) {
             std::scoped_lock lock{text_mutex};
             if (event.type == SDL_EVENT_TEXT_INPUT) {
