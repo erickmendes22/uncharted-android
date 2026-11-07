@@ -83,6 +83,8 @@ bool was_active = false;
 double last_push = 0.0;
 
 float Width = 1920.0f, Height = 1080.0f;
+float InputWidth = 1920.0f, InputHeight = 1080.0f;
+unsigned OverlayTurns = 0;
 
 BbTouchLayout::Layout layout;
 BbTouchLayout::Rect hud_bounds;
@@ -100,6 +102,28 @@ uint32_t DpadBits(float px,float py,float) {
     for(int i=0;i<4;++i){const auto& slot=layout.slots[12+i];float dx=px-slot.x,dy=py-slot.y;
         if(dx*dx+dy*dy<=slot.w*slot.w*.25f)return bits[i];}
     return 0;
+}
+
+// The rendered circle/rectangle is the primary hit target. On a phone a
+// finger can land just beyond its border; never turn that into a camera/left
+// stick swipe or choose an arbitrary first button. Pick the nearest single
+// PlayStation control within a small, non-overlapping tolerance.
+int NearControl(float px, float py) {
+    const float allowance = 0.020f * Height;
+    float best = 1.0e30f;
+    int chosen = -1;
+    for (int i = 0; i < 16; ++i) {
+        const auto& slot = layout.slots[i];
+        const float dx = std::abs(px - slot.x), dy = std::abs(py - slot.y);
+        const float outside = slot.circle
+            ? std::max(0.0f, std::sqrt(dx * dx + dy * dy) - slot.w * 0.5f)
+            : std::hypot(std::max(0.0f, dx - slot.w * 0.5f),
+                         std::max(0.0f, dy - slot.h * 0.5f));
+        if (outside > std::min(allowance, slot.w * 0.22f)) continue;
+        const float distance = dx * dx + dy * dy;
+        if (distance < best) { best = distance; chosen = i; }
+    }
+    return chosen;
 }
 
 Finger* Find(SDL_FingerID id) {
@@ -323,7 +347,49 @@ bool TouchPadActive() {
     return mode == 1 || (mode == 2 && !runtime_gamepad_connected());
 }
 
+void TouchPadInputSize(float width, float height) {
+    if (width <= 0 || height <= 0) return;
+    std::scoped_lock lock{fingers_mutex};
+    InputWidth = width;
+    InputHeight = height;
+}
+
+void TouchPadPresentTurn(unsigned quarter_turns) {
+    std::scoped_lock lock{fingers_mutex};
+    OverlayTurns = quarter_turns & 3u;
+}
+
+void TouchPadTransformFinger(SDL_Event& event) {
+    switch (event.type) {
+    case SDL_EVENT_FINGER_DOWN:
+    case SDL_EVENT_FINGER_MOTION:
+    case SDL_EVENT_FINGER_UP:
+    case SDL_EVENT_FINGER_CANCELED: break;
+    default: return;
+    }
+    std::scoped_lock lock{fingers_mutex};
+    // SDL3 normalized finger coordinates normally match the logical landscape
+    // overlay. Some Android drivers report them in the portrait native-window
+    // orientation (e.g. 1216x2688 while Vulkan draws at 2688x1216).
+    // Only rotate when the window and overlay aspect ratios are reversed.
+    const float input_aspect = InputWidth / InputHeight;
+    const float overlay_aspect = Width / Height;
+    if (input_aspect < 1.0f && overlay_aspect > 1.0f &&
+        std::abs(input_aspect * overlay_aspect - 1.0f) < 0.20f) {
+        const float x = event.tfinger.x, y = event.tfinger.y;
+        if ((OverlayTurns & 3u) == 1u) {
+            event.tfinger.x = y;
+            event.tfinger.y = 1.0f - x;
+        } else if ((OverlayTurns & 3u) == 3u) {
+            event.tfinger.x = 1.0f - y;
+            event.tfinger.y = x;
+        }
+    }
+}
+
 bool TouchPadEvent(const SDL_Event& event) {
+    // WindowSDL maps SDL fingers into the Vulkan overlay orientation before
+    // the protected menu or this on-screen gamepad sees the event.
     std::scoped_lock lock{fingers_mutex};
     const float scale = layout.scale;
     switch (event.type) {
@@ -336,8 +402,17 @@ bool TouchPadEvent(const SDL_Event& event) {
                 break;
             }
         }
-        // the menu's swipe-in strip, unless the finger is on a control there (R1, R2)
-        if (control < 0 && event.tfinger.x >= 1.0f - EdgeZone) return false;
+        uint32_t dpad = control < 0 ? DpadBits(px, py, scale) : 0;
+        if (control < 0 && dpad == 0) {
+            const int near = NearControl(px, py);
+            if (near >= 0 && near < ControlCount) control = near;
+            else if (near >= 12 && near < 16) {
+                constexpr uint32_t bits[] = {BtnUp, BtnDown, BtnLeft, BtnRight};
+                dpad = bits[near - 12];
+            }
+        }
+        // the menu's swipe-in strip, unless the finger is on a control there
+        if (control < 0 && !dpad && event.tfinger.x >= 1.0f - EdgeZone) return false;
         // SDL reuses a finger ID for successive taps. Old short taps remain
         // pressed for MinHold and used to coexist with the *new* button;
         // pressing Cross immediately after Circle thus pressed both.
@@ -357,7 +432,7 @@ bool TouchPadEvent(const SDL_Event& event) {
         if (control >= 0) {
             f->kind = Kind::Button;
             f->control = control;
-        } else if (const uint32_t dpad = DpadBits(px, py, scale)) {
+        } else if (dpad) {
             f->kind = Kind::Dpad;
             f->control = dpad == BtnUp ? 12 : dpad == BtnDown ? 13 :
                          dpad == BtnLeft ? 14 : 15;
@@ -394,7 +469,8 @@ bool TouchPadEvent(const SDL_Event& event) {
     }
 }
 
-void TouchPadFrame(float width, float height) {
+void TouchPadFrame(float width, float height, unsigned quarter_turns) {
+    (void)quarter_turns; // Vulkan presenter publishes orientation separately.
     const bool active = TouchPadActive();
     if (!active) {
         if (was_active) TouchPadReset();

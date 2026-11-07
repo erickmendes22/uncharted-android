@@ -1,4 +1,5 @@
 #include "bbport_settings.h"
+#include "bbport_vdec_content.h"
 // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -109,20 +110,29 @@ bool EnvOutputSize(s32& width, s32& height) {
 /// output only the top-left 1280x720 of the movie showed, magnified 1.5x. With
 /// BB_VDEC_CONTENT=1280x720 that corner holds the whole movie.
 bool EnvContentSize(s32& width, s32& height) {
-    static const std::pair<s32, s32> size = [] {
-        const char* env = std::getenv("BB_VDEC_CONTENT");
-        int w = 0, h = 0;
-        if (!env || std::sscanf(env, "%dx%d", &w, &h) != 2 || w <= 0 || h <= 0) {
-            return std::pair<s32, s32>{0, 0};
-        }
-        return std::pair<s32, s32>{w & ~1, h & ~1};
-    }();
+    // The Android launcher explicitly sets BB_VDEC_CONTENT for resolution
+    // patches, even if the game's VideoOut framebuffer remains 1920x1080.
+    // Previously this setting was parsed but ignored: we instead substituted
+    // game_display_width/height and silently returned the original 1080p
+    // picture for 360p/720p renders. Use the requested picture dimensions
+    // while preserving the decoded NV12 frame stride and metadata.
+    static const auto requested = BbVdecContent::Parse(std::getenv("BB_VDEC_CONTENT"));
+    const char* explicit_env = std::getenv("BB_VDEC_EXPLICIT_CONTENT");
+    if (explicit_env && explicit_env[0] == '1') {
+        width = requested.width;
+        height = requested.height;
+        return width > 0 && height > 0;
+    }
+    // Preserve the old movie layout in U1/U3, where the game's configured
+    // display size is authoritative. Opt in to the corrected path for U2 only.
     const auto& settings = BbSettings::Get();
     width = settings.game_display_width.load();
     height = settings.game_display_height.load();
-    // A 720p render patch can deliberately keep a 1080p display/UI. Never shrink its movies into a corner.
-    if (width >= 1920 && height >= 1080) { width=0; height=0; return false; }
-    if (!size.first) { width=0; height=0; return false; }
+    if (width >= 1920 && height >= 1080) {
+        width = height = 0;
+        return false;
+    }
+    if (!requested.width) { width = height = 0; return false; }
     return width > 0 && height > 0;
 }
 
@@ -295,10 +305,15 @@ void VdecDecoder::OutputSize(const AVFrame& frame, s32& width, s32& height, s32&
         width = m_max_width & ~1;
         height = m_max_height & ~1;
     }
-    if (!EnvContentSize(content_width, content_height) || content_width > width ||
-        content_height > height) {
+    const bool explicit_content = EnvContentSize(content_width, content_height);
+    const auto requested = BbVdecContent::Choose(
+        {content_width, content_height}, {width, height});
+    if (!explicit_content || requested.width == 0) {
         content_width = width;
         content_height = height;
+    } else {
+        content_width = requested.width;
+        content_height = requested.height;
     }
     if (!m_reported) {
         m_reported = true;

@@ -207,8 +207,20 @@ bool WindowSDL::PollEvents() {
             mouse_buttons = 0;
         }
     }
+#ifdef __ANDROID__
+    // SDL finger events use the window orientation, which can differ from
+    // Vulkan's pre-rotated render surface on Android phones.
+    int touch_width = 0, touch_height = 0;
+    SDL_GetWindowSizeInPixels(window, &touch_width, &touch_height);
+    BbOverlay::TouchPadInputSize(float(touch_width), float(touch_height));
+#endif
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+#ifdef __ANDROID__
+        // Normalize the SDL finger exactly once, before BOTH the protected
+        // in-game menu and the virtual DualShock check its hit boxes.
+        BbOverlay::TouchPadTransformFinger(event);
+#endif
         if (text_active && (event.type == SDL_EVENT_TEXT_INPUT || event.type == SDL_EVENT_KEY_DOWN)) {
             std::scoped_lock lock{text_mutex};
             if (event.type == SDL_EVENT_TEXT_INPUT) {
