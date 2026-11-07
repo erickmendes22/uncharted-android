@@ -15,6 +15,8 @@
 #include <vk_mem_alloc.h>
 
 #include "bbport_settings.h"
+#include "bbport_u2_movie_fsr_policy.h"
+#include "core/libraries/videoout/driver.h"
 #include "bbport_toggles.h"
 #include "ffx_vk_portable.h"
 #include "video_core/host_shaders/upscale_merge_comp.h"
@@ -230,9 +232,26 @@ TemporalUpscaler::~TemporalUpscaler() {
     }
 }
 
+bool TemporalUpscaler::MovieFsrBypass() const {
+    // Only the Uncharted 2 Android launcher opts into this protection.
+    // MovieRecentlyDecoded is an atomic 300 ms decoder-activity window
+    // already used by VideoOut for film pacing. The 2D movie does not have
+    // the FSR scene-depth/motion vectors; it must use the guest video buffer.
+    static const bool uncharted2 = [] {
+        const char* env = std::getenv("BB_U2_MOVIE_FSR_BYPASS");
+        return env && env[0] == '1';
+    }();
+    if (!uncharted2) return false;
+    const auto provider = BbSettings::Get().upscaler.load();
+    const bool fsr_selected = provider == BbSettings::UpscalerFsr3 ||
+                              BbSettings::IsFsr4(provider);
+    return BbU2MovieFsr::ShouldUseGuestDisplay(
+        uncharted2, fsr_selected, Libraries::VideoOut::MovieRecentlyDecoded());
+}
+
 bool TemporalUpscaler::Active() const {
     // Toggle 1 << 24 switches it off at run time (A/B); history restarts after.
-    return enabled && !failed &&
+    return !MovieFsrBypass() && enabled && !failed &&
            (BbSettings::Get().upscaler == BbSettings::UpscalerFsr3 ||
             BbSettings::IsFsr4(BbSettings::Get().upscaler) ||
             BbSettings::Get().upscaler == BbSettings::UpscalerTaa ||
@@ -262,11 +281,13 @@ float Halton(u32 index, u32 base) {
 } // namespace
 
 bool TemporalUpscaler::ReducedScene(const VideoCore::Image& color) const {
-    return !scaled_session && scene_targets.Reduced() && scene_targets.EligibleScene(color);
+    return !MovieFsrBypass() && !scaled_session && scene_targets.Reduced() &&
+           scene_targets.EligibleScene(color);
 }
 
 bool TemporalUpscaler::RasterScaling() const {
-    return !scaled_session && scene_targets.Reduced() && !done_this_frame;
+    return !MovieFsrBypass() && !scaled_session && scene_targets.Reduced() &&
+           !done_this_frame;
 }
 
 bool TemporalUpscaler::OnFrameStart() {
@@ -298,6 +319,7 @@ bool TemporalUpscaler::OnFrameStart() {
     // Velocity mode (Uncharted) runs at the game's own size: anti-aliasing (Native AA) only.
     const int preset = camera_motion.VelocityMode() ? 0 : BbSettings::RenderPreset();
     if (applied_preset != preset || settings.upscaler == BbSettings::UpscalerOff) failed = false;
+    const bool movie_bypass = MovieFsrBypass();
     const bool active = Active();
     const bool jitter_on = active && settings.jitter && !BbToggle::Disabled(1u << 25);
     const int upscaler = settings.upscaler.load();
@@ -334,8 +356,8 @@ bool TemporalUpscaler::OnFrameStart() {
         BbSettings::Get().active_render_width = Scaled() ? render_width : scene_targets.Size().width;
         BbSettings::Get().active_render_height = Scaled() ? render_height : scene_targets.Size().height;
     }
-    if (changed || !dispatched_last_frame) reset = true;
-    if (changed) jitter_index = 0;
+    if (changed || !dispatched_last_frame || movie_bypass) reset = true;
+    if (changed || movie_bypass) jitter_index = 0;
     applied_preset = preset;
     applied_output = output;
     applied_upscaler = upscaler;
@@ -345,7 +367,7 @@ bool TemporalUpscaler::OnFrameStart() {
     dispatched_last_frame = false;
 
     // The display pass of an upscaled frame reads the upscaled UI image.
-    display_redirect = ui_phase;
+    display_redirect = ui_phase && !movie_bypass;
     ui_phase = false;
     ui_read_barrier = false;
     done_this_frame = false;
@@ -1416,6 +1438,13 @@ void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
 
 void TemporalUpscaler::OnDraw(u64 vs_hash, VideoCore::ImageId color,
                               VideoCore::ImageId depth, bool native_viewport) {
+    if (MovieFsrBypass()) {
+        // Movie composition draws to the original guest target rather than
+        // a temporary FSR UI target which can be stale/black on cutscenes.
+        ui_phase = display_redirect = false;
+        reset = true;
+        return;
+    }
     // Uncharted's UI shaders differ from the Bloodborne/Scaleform list. The
     // explicit BeforeDisplay hook owns this path; do not reconstruct a post pass.
     if(camera_motion.VelocityMode() && scaled_session)return;
@@ -1914,6 +1943,19 @@ vk::ImageView TemporalUpscaler::Mirror(vk::Image image, std::vector<MirrorView>&
 
 bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
                                      const VideoCore::ImageViewInfo& view_info, Target& target) {
+    if (MovieFsrBypass()) {
+        ui_phase = display_redirect = false;
+        reset = true;
+        // A previously valid host display must not return when the movie
+        // ends and before a fresh FSR scene/UI image has been produced.
+        const auto& image = texture_cache.GetImage(color);
+        if (FrameCapture::IsDisplayBuffer(image.info.guest_address)) {
+            std::scoped_lock lock{display_mutex};
+            if (const auto it = displays.find(image.info.guest_address); it != displays.end())
+                it->second.valid = false;
+        }
+        return false;
+    }
     if (ui_phase && color == ui_color) {
         target = {Mirror(vk::Image(ui_image), ui_views, view_info.format, {}),
                   vk::ImageLayout::eGeneral, ui_width, ui_height, true};
@@ -1977,7 +2019,7 @@ bool TemporalUpscaler::RedirectColor(VideoCore::ImageId color,
 }
 
 bool TemporalUpscaler::RedirectDepth(VideoCore::ImageId depth, Target& target) {
-    if (!ui_phase || depth != ui_depth) {
+    if (MovieFsrBypass() || !ui_phase || depth != ui_depth) {
         return false;
     }
     target = {*ui_depth_view, vk::ImageLayout::eGeneral, ui_width, ui_height, true};
@@ -1987,7 +2029,7 @@ bool TemporalUpscaler::RedirectDepth(VideoCore::ImageId depth, Target& target) {
 bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
                                        const VideoCore::ImageViewInfo& info, vk::ImageView& view,
                                        vk::ImageLayout& layout) {
-    if (!display_redirect || image != ui_color) {
+    if (MovieFsrBypass() || !display_redirect || image != ui_color) {
         return false;
     }
     if (!ui_read_barrier) {
@@ -2015,6 +2057,16 @@ bool TemporalUpscaler::RedirectSampled(VideoCore::ImageId image,
 bool TemporalUpscaler::DisplayOverride(VAddr address, Display& display) {
     std::scoped_lock lock{display_mutex};
     const auto it = displays.find(address);
+    if (MovieFsrBypass()) {
+        // Key fix: don't present the old FSR host image instead of the
+        // 1920x1080 guest video frame. Mark it invalid so returning to
+        // gameplay cannot reuse it before a newly rendered FSR frame.
+        if (it != displays.end()) it->second.valid = false;
+        static std::atomic<u32> bypassed{0};
+        const u32 n = bypassed.fetch_add(1, std::memory_order_relaxed);
+        if (n < 5) std::printf("U2 movie: FSR display override bypassed; presenting guest video buffer\n");
+        return false;
+    }
     if (it == displays.end() || !it->second.valid) {
         return false;
     }
