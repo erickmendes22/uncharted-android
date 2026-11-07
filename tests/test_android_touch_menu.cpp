@@ -18,7 +18,7 @@ extern "C" void runtime_restart(){}
 extern "C" void runtime_mobile_action(int){}
 unsigned BbDisplayRefreshHz(){return 120;}
 
-static void frame(float w=1920,float h=1080,unsigned turns=0){ImGui::GetIO().DisplaySize=ImVec2(w,h);ImGui::NewFrame();BbOverlay::TouchPadFrame(w,h,turns);BbOverlay::AndroidMenuButton(1);ImGui::Render();}
+static void frame(float w=1920,float h=1080,unsigned turns=0){ImGui::GetIO().DisplaySize=ImVec2(w,h);ImGui::NewFrame();BbOverlay::TouchPadPresentTurn(turns);BbOverlay::TouchPadFrame(w,h,turns);BbOverlay::AndroidMenuButton(1);ImGui::Render();}
 static SDL_Event finger(Uint32 type,float x,float y){
     SDL_Event e{};e.type=type;e.tfinger.fingerID=42;e.tfinger.x=x;e.tfinger.y=y;return e;
 }
@@ -130,7 +130,6 @@ int main(){
         const float logical_x=landscape.slots[i].x/2688;
         const float logical_y=landscape.slots[i].y/1216;
         e=finger(SDL_EVENT_FINGER_DOWN,1.0f-logical_y,logical_x);
-        BbOverlay::TouchPadTransformFinger(e);
         assert(BbOverlay::TouchPadEvent(e));
         frame(2688,1216,1);
         assert(last_buttons == mapped_bits[i]);
@@ -141,7 +140,6 @@ int main(){
     // Landscape SDL events must be left untouched by the orientation mapper.
     e=finger(SDL_EVENT_FINGER_DOWN,
         landscape.slots[2].x/2688,landscape.slots[2].y/1216);
-    BbOverlay::TouchPadTransformFinger(e);
     assert(BbOverlay::TouchPadEvent(e));frame(2688,1216,1);
     assert(last_buttons == 0x4000);
     BbOverlay::TouchPadReset();
