@@ -130,6 +130,7 @@ int main(){
         const float logical_x=landscape.slots[i].x/2688;
         const float logical_y=landscape.slots[i].y/1216;
         e=finger(SDL_EVENT_FINGER_DOWN,1.0f-logical_y,logical_x);
+        BbOverlay::TouchPadTransformFinger(e); // WindowSDL does this before dispatch
         assert(BbOverlay::TouchPadEvent(e));
         frame(2688,1216,1);
         assert(last_buttons == mapped_bits[i]);
@@ -140,6 +141,7 @@ int main(){
     // Landscape SDL events must be left untouched by the orientation mapper.
     e=finger(SDL_EVENT_FINGER_DOWN,
         landscape.slots[2].x/2688,landscape.slots[2].y/1216);
+    BbOverlay::TouchPadTransformFinger(e);
     assert(BbOverlay::TouchPadEvent(e));frame(2688,1216,1);
     assert(last_buttons == 0x4000);
     BbOverlay::TouchPadReset();
