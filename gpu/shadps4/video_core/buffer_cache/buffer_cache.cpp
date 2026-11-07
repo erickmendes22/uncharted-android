@@ -578,13 +578,23 @@ void BufferCache::WaitLanding(u64 seq) {
     }
 }
 
-void BufferCache::RunAfterLanding(u64 seq, std::function<void()> fn) {
+void BufferCache::RunAfterLanding(u64 seq, std::function<void()> fn, bool off_caller) {
     {
         std::unique_lock lk{landing_mutex};
-        if (landing_stop || (seq <= landing_done_seq && gated_labels.empty() && !gate_running)) {
+        const bool ready =
+            seq <= landing_done_seq && gated_labels.empty() && !gate_running;
+        if (landing_stop || (ready && !off_caller)) {
             lk.unlock();
             fn();
             return;
+        }
+        if (ready && off_caller) {
+            static std::atomic<u64> moved{0};
+            const u64 count = moved.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (count <= 5 || count % 1000 == 0) {
+                std::printf("Landing: EOP flip dispatched off recorder/copy thread (%llu)\n",
+                            static_cast<unsigned long long>(count));
+            }
         }
         gated_labels.push_back({seq, std::move(fn)});
         gate_outstanding.fetch_add(1, std::memory_order_release);
@@ -611,6 +621,13 @@ void Run(u64 seq, std::function<void()> fn) {
         cache->RunAfterLanding(seq, std::move(fn));
     } else {
         fn();
+    }
+}
+void Post(u64 seq, std::function<void()> fn) {
+    if (auto* cache = land_instance.load(std::memory_order_acquire)) {
+        cache->RunAfterLanding(seq, std::move(fn), true);
+    } else {
+        fn(); // shutdown: no landing worker remains
     }
 }
 bool Stopped() {

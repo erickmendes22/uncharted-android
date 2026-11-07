@@ -72,7 +72,7 @@ public:
     u64 PendingLanding() const;
     bool LandingGateActive() const;
     void WaitLanding(u64 seq);
-    void RunAfterLanding(u64 seq, std::function<void()> fn);
+    void RunAfterLanding(u64 seq, std::function<void()> fn, bool off_caller = false);
     void StopLanding();
 
     /// Returns a pointer to GDS device local buffer.

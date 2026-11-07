@@ -605,16 +605,30 @@ bool VideoOutDriver::SubmitFlip(VideoOutPort* port, s32 index, s64 flip_arg,
         port->flip_status.submit_tsc = Libraries::Kernel::sceKernelReadTsc();
     }
 
-    if (!is_eop) {
-        // Non EOP flips can arrive from any thread so ask GPU thread to perform them
-        liverpool->SendCommand([=, this]() { SubmitFlipInternal(port, index, flip_arg, is_eop); });
-    } else {
-        SubmitFlipInternal(port, index, flip_arg, is_eop);
+    const auto eop_flip_reached = [] {
         {
             std::scoped_lock lock{eop_flip_mutex};
             eop_flips_reached.fetch_add(1, std::memory_order_relaxed);
         }
         eop_flip_cv.notify_all();
+    };
+    if (!is_eop) {
+        // Non EOP flips can arrive from any thread so ask GPU thread to perform them.
+        liverpool->SendCommand([=, this]() { SubmitFlipInternal(port, index, flip_arg, is_eop); });
+    } else if (Vulkan::Scheduler::OnRecorderThread()) {
+        // Double guard: if an EOP callback still reaches the Vulkan recorder,
+        // doing PrepareFrame there invokes SyncRecording and waits for itself.
+        // Hand it to the GPU command thread, counting completion only afterward.
+        static std::atomic<u32> forwarded{0};
+        if (forwarded.fetch_add(1, std::memory_order_relaxed) < 5)
+            std::printf("VideoOut: EOP flip forwarded off Vulkan recorder thread\n");
+        liverpool->SendCommand([=, this]() {
+            SubmitFlipInternal(port, index, flip_arg, is_eop);
+            eop_flip_reached();
+        });
+    } else {
+        SubmitFlipInternal(port, index, flip_arg, is_eop);
+        eop_flip_reached();
     }
 
     return true;

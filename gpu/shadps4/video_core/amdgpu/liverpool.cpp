@@ -812,7 +812,8 @@ void SignalFlip(Vulkan::Rasterizer& rasterizer, const u8*) {
         rasterizer.GetBufferCache().CheckStableBindings();
         rasterizer.CheckConstants();
         rasterizer.SignalAfterHostCopies(
-            [] { Platform::IrqC::Instance()->Signal(Platform::InterruptId::GfxFlip); }, landing_seq);
+            [] { Platform::IrqC::Instance()->Signal(Platform::InterruptId::GfxFlip); },
+            landing_seq, true); // always run flip interrupt on landing thread
         return;
     }
     const bool steps = TaskStepsOn();
