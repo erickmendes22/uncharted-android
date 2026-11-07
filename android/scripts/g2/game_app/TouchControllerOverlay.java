@@ -36,6 +36,9 @@ final class TouchControllerOverlay extends View {
     private final Set<String> pressed=new LinkedHashSet<>();
     private boolean editing;
     private int editPointer=-1;
+    // Dedicated pointer for the left-edge menu swipe; never enters pad state.
+    private int menuSwipePointer=-1;
+    private float menuSwipeStartX,menuSwipeStartY;
     private String dragged;
     private Runnable onEditDone;
 
@@ -115,7 +118,7 @@ final class TouchControllerOverlay extends View {
         pad.virtual(pressed,lx,ly,rx,ry,left,right,l2,r2);
         invalidate();
     }
-    void release() { controls.clear(); positions.clear(); publish(); }
+    void release() { menuSwipePointer=-1; controls.clear(); positions.clear(); publish(); }
     void edit(Runnable done) { release(); editing=true; onEditDone=done; invalidate(); }
     private void finishEdit() {
         editPointer=-1; dragged=null; editing=false; invalidate();
@@ -158,11 +161,14 @@ final class TouchControllerOverlay extends View {
         if (action==MotionEvent.ACTION_CANCEL) { release(); return true; }
         if (action==MotionEvent.ACTION_DOWN || action==MotionEvent.ACTION_POINTER_DOWN) {
             float x=layoutX(e,at),y=layoutY(e,at);
-            // Android Canvas and MotionEvent use the same coordinate system.
-            // Never compensate Vulkan pre-rotation on these touch positions.
-            if (x>550 && x<730 && y>0 && y<69) {
-                GameActivity.nativeToggleMenu();
-                release();
+            // The first 40 logical units are outside the D-pad/buttons.
+            // This gesture is not forwarded as a PS button or camera motion.
+            // L2 and draggable controls may extend into this strip. Do
+            // not hijack a finger if it actually landed on a PS button.
+            if (menuSwipePointer<0 && x<=40f && hit(x,y)==null) {
+                menuSwipePointer=id;
+                menuSwipeStartX=x;
+                menuSwipeStartY=y;
                 return true;
             }
             String name=hit(x,y);
@@ -170,9 +176,25 @@ final class TouchControllerOverlay extends View {
             controls.put(id,name);
             positions.put(id,new PointF(x,y));
         } else if (action==MotionEvent.ACTION_UP || action==MotionEvent.ACTION_POINTER_UP) {
+            if (id==menuSwipePointer) menuSwipePointer=-1;
             controls.remove(id); positions.remove(id);
         }
         if (action==MotionEvent.ACTION_MOVE) {
+            if (menuSwipePointer>=0) {
+                int pointer=e.findPointerIndex(menuSwipePointer);
+                if (pointer>=0) {
+                    float x=layoutX(e,pointer),y=layoutY(e,pointer);
+                    if (Math.abs(y-menuSwipeStartY)>65f && x-menuSwipeStartX<140f)
+                        menuSwipePointer=-1;
+                    else if (x-menuSwipeStartX>=140f &&
+                             Math.abs(y-menuSwipeStartY)<=65f) {
+                        menuSwipePointer=-1;
+                        release();
+                        GameActivity.nativeToggleMenu();
+                        return true;
+                    }
+                }
+            }
             for (int i=0;i<e.getPointerCount();i++) {
                 PointF p=positions.get(e.getPointerId(i));
                 if (p!=null) p.set(layoutX(e,i),layoutY(e,i));
@@ -233,13 +255,6 @@ final class TouchControllerOverlay extends View {
     }
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c); c.save(); c.translate(offsetX(),offsetY()); c.scale(scale(),scale());
-        paint.setStyle(Paint.Style.FILL);paint.setColor(0x99212625);
-        c.drawRoundRect(550,8,730,66,12,12,paint);
-        paint.setStyle(Paint.Style.STROKE);paint.setColor(0xffc6ad76);
-        paint.setStrokeWidth(2);c.drawRoundRect(550,8,730,66,12,12,paint);
-        paint.setStyle(Paint.Style.FILL);paint.setTypeface(Typeface.DEFAULT_BOLD);
-        paint.setTextSize(24);paint.setTextAlign(Paint.Align.CENTER);
-        c.drawText("MENU",640,37-(paint.ascent()+paint.descent())/2,paint);
         rectangle(c,"l2",108,"L2"); rectangle(c,"l1",108,"L1");
         rectangle(c,"r1",108,"R1"); rectangle(c,"r2",108,"R2");
         rectangle(c,"touchpad",126,"TOUCH"); rectangle(c,"options",108,"OPTIONS");

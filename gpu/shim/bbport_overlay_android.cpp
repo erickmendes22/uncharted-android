@@ -12,6 +12,7 @@
 #include <type_traits>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 #include "imgui.h"
 
@@ -133,6 +134,10 @@ void Note(const char* text) {
 } // namespace
 
 void AndroidMenuButton(float base_scale) {
+    // The native Android controller now owns opening the panel via a swipe
+    // from the left edge. Suppress the legacy ImGui three-bars icon entirely.
+    if (const char* java_touch = std::getenv("BB_JAVA_TOUCH");
+        java_touch && java_touch[0] == '1') return;
     const auto size=ImGui::GetIO().DisplaySize;
     const float h=size.y;
     const auto box=TouchPadMenuRect(size.x,size.y);
@@ -241,6 +246,11 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
 }
 
 TouchAction AndroidTouch(const SDL_Event& event, bool open) {
+    // With native Android touch, the only menu-opening gesture is handled
+    // by Java. Keep SDL events for interacting with/closing the OPEN panel,
+    // not for the old right-edge opening gesture.
+    const char* java_touch = std::getenv("BB_JAVA_TOUCH");
+    if (java_touch && java_touch[0] == '1' && !open) return TouchAction::None;
     static SDL_FingerID edge_finger = 0;
     static bool edge_tracking = false;
     static float edge_start_x = 0.0f;

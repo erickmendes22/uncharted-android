@@ -13,6 +13,7 @@
 
 #include "common/support/avdec.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -31,6 +32,39 @@ u64 NowNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
                std::chrono::steady_clock::now().time_since_epoch())
         .count();
+}
+
+// Observe the decoded NV12 frame BEFORE it becomes a guest GPU texture.
+// The old log only reported picture_count=1, which does not tell whether
+// black cutscenes originate in FFmpeg, guest memory, or Vulkan composition.
+// Sample 512 Y values on the first frame and once per ~5 seconds, not
+// per-pixel or per-frame. BB_VDEC_DIAG=1 is enabled only for U2.
+void SampleDecodedMovie(const AVFrame& frame) {
+    static const bool enabled = [] {
+        const char* v = std::getenv("BB_VDEC_DIAG");
+        return v && v[0] == '1';
+    }();
+    if (!enabled || frame.format != AV_PIX_FMT_NV12 || !frame.data[0] ||
+        frame.width <= 0 || frame.height <= 0) return;
+    static std::atomic<u64> count{0};
+    const u64 n = count.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (n != 1 && n % 300 != 0) return;
+    u32 min_y = 255, max_y = 0;
+    u64 total_y = 0;
+    for (int y = 0; y < 16; ++y) {
+        const int sy = y * (frame.height - 1) / 15;
+        const u8* row = frame.data[0] + sy * frame.linesize[0];
+        for (int x = 0; x < 32; ++x) {
+            const u32 v = row[x * (frame.width - 1) / 31];
+            min_y = std::min(min_y, v);
+            max_y = std::max(max_y, v);
+            total_y += v;
+        }
+    }
+    std::printf("MovieDiag: decoded frame %llu %dx%d pitch %d Y min/max/avg %u/%u/%llu\n",
+                static_cast<unsigned long long>(n), frame.width, frame.height,
+                frame.linesize[0], min_y, max_y,
+                static_cast<unsigned long long>(total_y / (16 * 32)));
 }
 
 void AddDecodeNs(u64 ns) {
@@ -403,6 +437,7 @@ s32 VdecDecoder::Decode(const OrbisVideodec2InputData& input_data,
         frame = nv12_frame;
     }
 
+    SampleDecodedMovie(*frame);
     const bool is_avc = m_codec_context->codec_id == AV_CODEC_ID_H264;
     const u64 info_size =
         is_avc ? sizeof(OrbisVideodec2AvcPictureInfo) : sizeof(OrbisVideodec2HevcPictureInfo);
