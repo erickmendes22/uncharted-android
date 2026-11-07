@@ -627,11 +627,7 @@ bool HandleEvent(const SDL_Event& event) {
         // g2-arm64: a swipe in from the right edge opens the menu, a tap outside closes it. The
         // mouse events SDL makes from touches work the panel itself; the game gets neither
         // while the menu is open.
-        // Transform to the same logical space used to draw the PS controls
-        // before either the menu hit-test or the pad consumes this finger.
-        SDL_Event mapped_touch = event;
-        TouchPadTransformFinger(mapped_touch);
-        switch (AndroidTouch(mapped_touch, is_open)) {
+        switch (AndroidTouch(event, is_open)) {
         case TouchAction::Open:
             SetOpen(true);
             return true;
@@ -642,7 +638,7 @@ bool HandleEvent(const SDL_Event& event) {
             break;
         }
         if (!is_open && TouchPadActive()) {
-            TouchPadEvent(mapped_touch); // hit-test in the same orientation as the rendered icons
+            TouchPadEvent(event); // g2-arm64: the on-screen gamepad takes fingers off the edge
         }
         return is_open;
 #endif
@@ -939,7 +935,7 @@ void Render(vk::CommandBuffer cmdbuf, vk::ImageView view, vk::Extent2D extent,
     }
 #ifdef __ANDROID__
     if (!menu_open) {
-        TouchPadFrame(io.DisplaySize.x, io.DisplaySize.y, quarter_turns); // match Vulkan pre-rotation
+        TouchPadFrame(io.DisplaySize.x, io.DisplaySize.y); // g2-arm64: the on-screen gamepad
         AndroidMenuButton(base_scale);
     }
 #endif
