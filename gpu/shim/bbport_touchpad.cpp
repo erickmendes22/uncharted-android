@@ -354,6 +354,11 @@ void TouchPadInputSize(float width, float height) {
     InputHeight = height;
 }
 
+void TouchPadPresentTurn(unsigned quarter_turns) {
+    std::scoped_lock lock{fingers_mutex};
+    OverlayTurns = quarter_turns & 3u;
+}
+
 void TouchPadTransformFinger(SDL_Event& event) {
     switch (event.type) {
     case SDL_EVENT_FINGER_DOWN:
@@ -383,11 +388,15 @@ void TouchPadTransformFinger(SDL_Event& event) {
 }
 
 bool TouchPadEvent(const SDL_Event& event) {
+    // Handle raw SDL touch coordinates here instead of editing the
+    // release-0.2.5 protected overlay UI. The menu remains untouched.
+    SDL_Event mapped = event;
+    TouchPadTransformFinger(mapped);
     std::scoped_lock lock{fingers_mutex};
     const float scale = layout.scale;
-    switch (event.type) {
+    switch (mapped.type) {
     case SDL_EVENT_FINGER_DOWN: {
-        const float px = event.tfinger.x * Width, py = event.tfinger.y * Height;
+        const float px = mapped.tfinger.x * Width, py = mapped.tfinger.y * Height;
         int control = -1;
         for (int i = 0; i < ControlCount; ++i) {
             if (Hits(Controls[i], px, py, scale)) {
@@ -405,23 +414,23 @@ bool TouchPadEvent(const SDL_Event& event) {
             }
         }
         // the menu's swipe-in strip, unless the finger is on a control there
-        if (control < 0 && !dpad && event.tfinger.x >= 1.0f - EdgeZone) return false;
+        if (control < 0 && !dpad && mapped.tfinger.x >= 1.0f - EdgeZone) return false;
         // SDL reuses a finger ID for successive taps. Old short taps remain
         // pressed for MinHold and used to coexist with the *new* button;
         // pressing Cross immediately after Circle thus pressed both.
         for (auto& previous : fingers) {
-            if (previous.down && previous.id == event.tfinger.fingerID) {
+            if (previous.down && previous.id == mapped.tfinger.fingerID) {
                 previous = Finger{};
             }
         }
         Finger* f = Free();
         if (!f) return false;
         *f = Finger{};
-        f->id = event.tfinger.fingerID;
+        f->id = mapped.tfinger.fingerID;
         f->down = true;
         f->down_time = Now();
-        f->x = f->x0 = event.tfinger.x;
-        f->y = f->y0 = event.tfinger.y;
+        f->x = f->x0 = mapped.tfinger.x;
+        f->y = f->y0 = mapped.tfinger.y;
         if (control >= 0) {
             f->kind = Kind::Button;
             f->control = control;
@@ -430,27 +439,27 @@ bool TouchPadEvent(const SDL_Event& event) {
             f->control = dpad == BtnUp ? 12 : dpad == BtnDown ? 13 :
                          dpad == BtnLeft ? 14 : 15;
         } else {
-            f->kind = event.tfinger.x < 0.5f ? Kind::Stick : Kind::Look;
+            f->kind = mapped.tfinger.x < 0.5f ? Kind::Stick : Kind::Look;
         }
         return true;
     }
     case SDL_EVENT_FINGER_MOTION: {
-        Finger* f = Find(event.tfinger.fingerID);
+        Finger* f = Find(mapped.tfinger.fingerID);
         if (!f) return false;
         if (f->kind == Kind::Look) {
-            f->look_dx += event.tfinger.x - f->x;
-            f->look_dy += event.tfinger.y - f->y;
+            f->look_dx += mapped.tfinger.x - f->x;
+            f->look_dy += mapped.tfinger.y - f->y;
         }
-        f->x = event.tfinger.x;
-        f->y = event.tfinger.y;
+        f->x = mapped.tfinger.x;
+        f->y = mapped.tfinger.y;
         return true;
     }
     case SDL_EVENT_FINGER_UP:
     case SDL_EVENT_FINGER_CANCELED: {
-        Finger* f = Find(event.tfinger.fingerID);
+        Finger* f = Find(mapped.tfinger.fingerID);
         if (!f) return false;
         if ((f->kind == Kind::Button || f->kind == Kind::Dpad) && Now() - f->down_time < MinHold &&
-            event.type == SDL_EVENT_FINGER_UP) {
+            mapped.type == SDL_EVENT_FINGER_UP) {
             f->lifted = true; // pressed until MinHold (Push)
         } else {
             f->down = false;
@@ -463,6 +472,7 @@ bool TouchPadEvent(const SDL_Event& event) {
 }
 
 void TouchPadFrame(float width, float height, unsigned quarter_turns) {
+    (void)quarter_turns; // Vulkan presenter publishes orientation separately.
     const bool active = TouchPadActive();
     if (!active) {
         if (was_active) TouchPadReset();
@@ -482,7 +492,6 @@ void TouchPadFrame(float width, float height, unsigned quarter_turns) {
         std::scoped_lock lock{fingers_mutex};
         Width = width;
         Height = height;
-        OverlayTurns = quarter_turns & 3u;
         layout = next_layout;
         Push(false);
     }
