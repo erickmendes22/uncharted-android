@@ -21,7 +21,12 @@ void CopyNV12Data(u8* dst, u64 max_size, const AVFrame& src, u32 height_align) {
     const auto luma_dst = dst;
     const auto chroma_dst = dst + dst_pitch * dst_height;
 
-    if (src.width != dst_pitch) {
+    // A tightly packed copy is only valid if BOTH FFmpeg source planes have
+    // the exact destination pitch. Other H.264 streams may use padded source
+    // lines even when their visible width is a multiple of 64. Bulk memcpy
+    // would then shift chroma/luma rows and yield a corrupt or black movie.
+    if (src.width != dst_pitch || src.linesize[0] != src.width ||
+        src.linesize[1] != src.width) {
         for (u32 y = 0; y < src.height; ++y) {
             std::memcpy(luma_dst + y * dst_pitch, src.data[0] + y * src.linesize[0], src.width);
         }
