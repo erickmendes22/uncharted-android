@@ -26,12 +26,15 @@ final class PadBridge {
             if (b.equals("l2") || b.equals("r2")) continue;
             line.append(b).append(' ');
         }
+        // The existing Uncharted BB_PAD_FILE reader understands PS button
+        // tokens, not l2=/r2= analog tokens. The overlay triggers are digital.
+        if (l2 > 0) line.append("l2 ");
+        if (r2 > 0) line.append("r2 ");
         line.append("lx=").append(leftActive ? clamp(lx) : 128)
             .append(" ly=").append(leftActive ? clamp(ly) : 128)
             .append(" rx=").append(rightActive ? clamp(rx) : 128)
             .append(" ry=").append(rightActive ? clamp(ry) : 128)
-            .append(" l2=").append(clamp(l2))
-            .append(" r2=").append(clamp(r2)).append('\n');
+            .append('\n');
         publish(line.toString());
     }
     private static int clamp(int x) { return Math.min(255, Math.max(0, x)); }
