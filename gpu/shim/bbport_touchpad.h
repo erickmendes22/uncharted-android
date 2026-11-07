@@ -21,6 +21,7 @@ bool TouchPadEvent(const SDL_Event& event);
 /// SDL reports touch positions in the Android window's orientation; Vulkan's
 /// pre-rotated overlay may be rendered in the opposite orientation.
 void TouchPadInputSize(float width, float height);
+void TouchPadPresentTurn(unsigned quarter_turns);
 void TouchPadTransformFinger(SDL_Event& event);
 /// Every frame while active, inside an ImGui frame: draws the controls at the display size
 /// `width` x `height` (logical pixels) and hands the pad state to the runtime.
