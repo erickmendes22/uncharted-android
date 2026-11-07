@@ -50,7 +50,7 @@ public:
  bool LandingGateActive() const;
  u64 PendingLanding() const;
  void WaitLanding(u64);
- void RunAfterLanding(u64,std::function<void()>);
+ void RunAfterLanding(u64,std::function<void()>,bool off_caller=false);
  void add() {
    std::scoped_lock lk(landing_mutex);
    auto item=std::make_shared<Landing>();item->seq=++landing_registered_seq;
@@ -87,6 +87,18 @@ int main(){
  std::promise<void> final;
  b.RunAfterLanding(0,[&]{assert(order++==3);final.set_value();});
  final.get_future().get();
+ // Reproduce the original EOP problem: even with no copies left to land,
+ // off_caller must schedule the callback on the worker, never run it inline
+ // on the thread that would then wait for itself (bb:VkRecorder).
+ std::promise<void> eop_dispatched;
+ const auto caller=std::this_thread::get_id();
+ b.RunAfterLanding(0,[&]{
+   assert(std::this_thread::get_id()!=caller);
+   assert(order++==4);
+   eop_dispatched.set_value();
+ },true);
+ eop_dispatched.get_future().get();
+ assert(order==5);
  // Shutdown releases direct label waits even when the requested sequence is absent.
  auto waiter=std::async(std::launch::async,[&]{b.WaitLanding(3);});
  {std::scoped_lock lk(b.landing_mutex);b.landing_stop=true;}
