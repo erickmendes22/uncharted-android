@@ -24,6 +24,42 @@ import org.libsdl.app.SDLActivity;
  *  arguments (--guest-argv). Environment: files/env.txt, then env-u1.txt, env-u2.txt or env-u3.txt
  *  for the game started (KEY=VALUE per line; -KEY removes KEY). */
 public class GameActivity extends SDLActivity {
+    // GoW3/Bloodborne input path: Android View local coordinates and MotionEvent
+    // pointer IDs, delivered via the existing atomic BB_PAD_FILE OrbisPad hook.
+    private PadBridge androidPad;
+    private TouchControllerOverlay androidPadView;
+    private final android.os.Handler padHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable padVisibilityPoll = new Runnable() {
+        @Override public void run() {
+            if (androidPadView == null) return;
+            boolean nativeMenu = false;
+            try { nativeMenu = nativeOverlayCapturing(); }
+            catch (UnsatisfiedLinkError ignored) { }
+            boolean enabled = !nativeMenu && virtualPadEnabled();
+            if (!enabled && androidPadView.getVisibility() == android.view.View.VISIBLE)
+                androidPadView.release();
+            androidPadView.setVisibility(enabled ? android.view.View.VISIBLE : android.view.View.GONE);
+            padHandler.postDelayed(this, 140);
+        }
+    };
+    private boolean virtualPadEnabled() {
+        String mode=getSharedPreferences("launcher", MODE_PRIVATE).getString("touch_pad","auto");
+        for (String line : lines(new File(dir(), "bbport.ini"), false)) {
+            if (line.startsWith("touch_pad=")) { mode=line.substring(10).trim(); break; }
+        }
+        if (mode.equals("0") || mode.equals("off")) return false;
+        if (mode.equals("1") || mode.equals("on")) return true;
+        // Auto: only suppress the touch overlay for a physical Android gamepad.
+        for (int id : android.view.InputDevice.getDeviceIds()) {
+            android.view.InputDevice device=android.view.InputDevice.getDevice(id);
+            if (device != null && (device.getSources() & android.view.InputDevice.SOURCE_GAMEPAD)
+                                     == android.view.InputDevice.SOURCE_GAMEPAD) return false;
+        }
+        return true;
+    }
+    static native boolean nativeOverlayCapturing();
+    static native void nativeToggleMenu();
     @Override protected void attachBaseContext(android.content.Context base) {super.attachBaseContext(AppLanguage.attach(base));}
     private boolean gameReady;
     private void gameState(boolean loading,int mode) {
@@ -33,7 +69,16 @@ public class GameActivity extends SDLActivity {
         }catch(RuntimeException ignored){}
     }
     public void gameStarted(){runOnUiThread(()->{gameReady=true;gameState(false,android.app.GameState.MODE_GAMEPLAY_INTERRUPTIBLE);});}
-    @Override protected void onPause(){gameState(false,android.app.GameState.MODE_NONE);super.onPause();}
+    @Override protected void onPause(){
+        padHandler.removeCallbacks(padVisibilityPoll);
+        if(androidPadView!=null)androidPadView.release();
+        gameState(false,android.app.GameState.MODE_NONE);super.onPause();
+    }
+    @Override protected void onDestroy(){
+        padHandler.removeCallbacks(padVisibilityPoll);
+        if(androidPadView!=null)androidPadView.release();
+        super.onDestroy();
+    }
     private final List<String> bootArgs = new ArrayList<>();
 
     public void exportLogToFolder() { runOnUiThread(()->LogExport.pick(this)); }
@@ -44,6 +89,10 @@ public class GameActivity extends SDLActivity {
 
     @Override protected void onResume() {
         super.onResume();
+        if(androidPadView!=null){
+            padHandler.removeCallbacks(padVisibilityPoll);
+            padHandler.post(padVisibilityPoll);
+        }
         gameState(!gameReady,android.app.GameState.MODE_GAMEPLAY_INTERRUPTIBLE);
         setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         getWindow().getDecorView().setSystemUiVisibility(
@@ -147,6 +196,10 @@ public class GameActivity extends SDLActivity {
             Os.setenv("HOME", d + "/home", true);
             Os.setenv("XDG_DATA_HOME", d + "/home/.local/share", true);
             Os.setenv("BB_CONFIG", d + "/bbport.ini", true);
+            // Native GoW3/Bloodborne style controller; BB_PAD_FILE is already
+            // sampled by Uncharted's runtime_pad.c and merges with SDL gamepads.
+            Os.setenv("BB_PAD_FILE", d + "/touch-pad-state.txt", true);
+            Os.setenv("BB_JAVA_TOUCH", "1", true);
             Os.setenv("BB_UI_LANGUAGE",AppLanguage.code(),true);
             // The collection's shaders the upscaler hooks (docs/upscaler.md; run.py sets the same
             // on a PC): the camera velocity pass, the first compute after the lit scene, the
@@ -210,6 +263,14 @@ public class GameActivity extends SDLActivity {
             throw new RuntimeException(e);
         }
         super.onCreate(savedInstanceState);
+        // A View above the SDL surface draws and receives touches in the SAME
+        // coordinates. It avoids Vulkan Rotate90 and SDL synthetic touch/mouse
+        // routing entirely; native ImGui virtual buttons are disabled.
+        androidPad = new PadBridge(new File(d, "touch-pad-state.txt"));
+        androidPadView = new TouchControllerOverlay(this,androidPad);
+        addContentView(androidPadView,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        padHandler.removeCallbacks(padVisibilityPoll);
+        padHandler.post(padVisibilityPoll);
     }
 
     @Override
