@@ -688,6 +688,10 @@ void NoteMovieFrame() {
                          std::memory_order_relaxed);
 }
 
+bool MovieRecentlyDecoded() {
+    return MovieActive(std::chrono::steady_clock::now());
+}
+
 s64 LastFlipIntervalNs() {
     return last_flip_interval_ns.load(std::memory_order_relaxed);
 }
