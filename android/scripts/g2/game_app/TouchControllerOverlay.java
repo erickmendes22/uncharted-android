@@ -163,7 +163,9 @@ final class TouchControllerOverlay extends View {
             float x=layoutX(e,at),y=layoutY(e,at);
             // The first 40 logical units are outside the D-pad/buttons.
             // This gesture is not forwarded as a PS button or camera motion.
-            if (menuSwipePointer<0 && x<=40f) {
+            // L2 and draggable controls may extend into this strip. Do
+            // not hijack a finger if it actually landed on a PS button.
+            if (menuSwipePointer<0 && x<=40f && hit(x,y)==null) {
                 menuSwipePointer=id;
                 menuSwipeStartX=x;
                 menuSwipeStartY=y;
