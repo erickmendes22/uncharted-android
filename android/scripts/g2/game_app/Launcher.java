@@ -1422,6 +1422,8 @@ public class Launcher extends Activity {
                 : (preset != null && below1080
                     ? "BB_VDEC_CONTENT=" + movieSize + "\n" : "-BB_VDEC_CONTENT\n")
                     + "-BB_VDEC_EXPLICIT_CONTENT\n";
+            if (g[0].equals("u2")) env[i] += "BB_VDEC_DIAG=1\n";
+            else env[i] += "-BB_VDEC_DIAG\n";
             if(upscale>0 && made!=null)env[i]+="BB_RENDER_RES="+width+"x"+height+"\nBB_OUTPUT_RES="+UpscalePreset.OUTPUT+"\n";
             else env[i]+="-BB_RENDER_RES\n-BB_OUTPUT_RES\n";
             if(upscale>0 && made==null)env[i]+="BB_UPSCALER=none\n";
