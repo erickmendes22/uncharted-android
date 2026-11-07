@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <mutex>
 
 #include "imgui.h"
@@ -343,6 +344,12 @@ void Draw(float alpha, float scale) {
 } // namespace
 
 bool TouchPadActive() {
+#ifdef __ANDROID__
+    // The real Android View from GoW3/Bloodborne owns touch input and
+    // rendering. Do not draw or inject a second ImGui/SDL virtual gamepad.
+    const char* java_touch = std::getenv("BB_JAVA_TOUCH");
+    if (java_touch && java_touch[0] == '1') return false;
+#endif
     const int mode = BbSettings::Get().touch_pad.load();
     return mode == 1 || (mode == 2 && !runtime_gamepad_connected());
 }

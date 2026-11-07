@@ -24,6 +24,9 @@
 #include <time.h>
 #include <SDL3/SDL.h>
 #include <sys/stat.h>
+#ifdef __ANDROID__
+#include <jni.h>
+#endif
 
 #define ERR_INVALID_ARG ((int32_t)0x80920001)
 #define ERR_INVALID_HANDLE ((int32_t)0x80920003)
@@ -911,3 +914,24 @@ static const RuntimeExport exports[]={
 };
 uintptr_t runtime_pad_resolve(const char *name) { return RUNTIME_LOOKUP(exports,name); }
 void runtime_pad_report(void) { printf("Runtime: pad reads=%zu, gamepad=%s\n",reads,gamepad ? SDL_GetGamepadName(gamepad) : "none"); }
+
+#ifdef __ANDROID__
+/* GoW3/Bloodborne Java View overlay menu bridge: no SDL touch coordinate
+ * transforms and no direct GUI callbacks from the Java UI thread. */
+JNIEXPORT jboolean JNICALL
+Java_dev_unchartedg2_game_GameActivity_nativeOverlayCapturing(JNIEnv *env, jclass type) {
+    (void)env; (void)type;
+    return bbgpu_overlay_captures_input() ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_dev_unchartedg2_game_GameActivity_nativeToggleMenu(JNIEnv *env, jclass type) {
+    (void)env; (void)type;
+    SDL_Event e={0};
+    e.type=SDL_EVENT_KEY_DOWN;
+    e.key.key=SDLK_INSERT;
+    e.key.scancode=SDL_SCANCODE_INSERT;
+    e.key.repeat=false;
+    SDL_PushEvent(&e); /* window thread owns the ImGui menu */
+}
+#endif
