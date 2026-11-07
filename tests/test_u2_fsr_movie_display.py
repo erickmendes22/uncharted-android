@@ -21,9 +21,9 @@ assert "return !MovieFsrBypass() && enabled && !failed" in u
 assert "if (MovieFsrBypass()) {" in u
 assert "ui_phase = display_redirect = false;" in u
 assert "if (it != displays.end()) it->second.valid = false;" in u
-assert "if (MovieFsrBypass() || !display_redirect || image != ui_color)" in u
-assert "return !MovieFsrBypass() && display_redirect && image == ui_color;" in h
-assert "if (MovieFsrBypass() || !ui_phase || depth != ui_depth)" in u
+assert "if (!display_redirect || image != ui_color || MovieFsrBypass())" in u
+assert "return display_redirect && image == ui_color && !MovieFsrBypass();" in h
+assert "if (!ui_phase || depth != ui_depth || MovieFsrBypass())" in u
 # Preserve good Android pad and left-edge-only menu.
 assert "pad.virtual(pressed,lx,ly,rx,ry,left,right,l2,r2)" in menu
 assert "x<=40f && hit(x,y)==null" in menu
