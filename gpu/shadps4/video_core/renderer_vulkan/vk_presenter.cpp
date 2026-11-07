@@ -14,6 +14,9 @@
 #include "video_core/renderdoc.h"
 #include "video_core/renderer_vulkan/vk_platform.h"
 #include "bbport_overlay.h"
+#ifdef __ANDROID__
+#include "bbport_touchpad.h"
+#endif
 #include "bbport_settings.h"
 #include "video_core/renderer_vulkan/vk_temporal_upscaler.h"
 #include "video_core/renderer_vulkan/vk_presenter.h"
@@ -903,6 +906,9 @@ bool Presenter::PresentImage(Frame* frame, vk::Image image, bool last, bool orig
             cmdbuf.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
                                    vk::PipelineStageFlagBits::eColorAttachmentOutput,
                                    vk::DependencyFlagBits::eByRegion, {}, {}, frame_drawn);
+#ifdef __ANDROID__
+            BbOverlay::TouchPadPresentTurn(turns);
+#endif
             BbOverlay::Render(cmdbuf, swapchain.ImageView(), extent, turns);
         }
         const std::array post_barriers{
@@ -1010,6 +1016,9 @@ bool Presenter::PresentImage(Frame* frame, vk::Image image, bool last, bool orig
                                vk::PipelineStageFlagBits::eAllCommands,
                                vk::DependencyFlagBits::eByRegion, {}, {}, post_barriers);
         if (overlay) {
+#ifdef __ANDROID__
+            BbOverlay::TouchPadPresentTurn(0);
+#endif
             BbOverlay::Render(cmdbuf, swapchain.ImageView(), extent);
             const vk::ImageMemoryBarrier to_present{
                 .srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
