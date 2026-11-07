@@ -1410,7 +1410,17 @@ public class Launcher extends Activity {
             writeText(new File(files, "args-" + g[0] + ".txt"), args.toString());
             if (g[0].equals(prefs.getString("selected_game", "u1"))) writeText(new File(files, "args.txt"), args.toString());
             // The movie decoder's picture size goes with a size below 1080p (port 0015).
-            env[i] = preset != null && below1080 ? "BB_VDEC_CONTENT=" + width + "x" + height + "\n" : "-BB_VDEC_CONTENT\n";
+            // The movie is composited into the output viewport, which can
+            // be 1280x720 while the scene itself renders at 640x360.
+            // U2's game framebuffer may still report 1920x1080: require the
+            // explicit decoder content size only for U2 (the source of this
+            // movie regression), leaving U1/U3's existing layout untouched.
+            String movieSize = upscale > 0 && made != null
+                ? UpscalePreset.OUTPUT : width + "x" + height;
+            env[i] = preset != null && below1080
+                ? "BB_VDEC_CONTENT=" + movieSize + "\n" : "-BB_VDEC_CONTENT\n";
+            env[i] += g[0].equals("u2") && preset != null && below1080
+                ? "BB_VDEC_EXPLICIT_CONTENT=1\n" : "-BB_VDEC_EXPLICIT_CONTENT\n";
             if(upscale>0 && made!=null)env[i]+="BB_RENDER_RES="+width+"x"+height+"\nBB_OUTPUT_RES="+UpscalePreset.OUTPUT+"\n";
             else env[i]+="-BB_RENDER_RES\n-BB_OUTPUT_RES\n";
             if(upscale>0 && made==null)env[i]+="BB_UPSCALER=none\n";
