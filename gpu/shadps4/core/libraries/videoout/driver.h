@@ -24,6 +24,11 @@ namespace Libraries::VideoOut {
 /// While movies play, the present thread shows the guest a 60 Hz display (see PresentThread).
 void NoteMovieFrame();
 
+/// True when the prerecorded-video decoder has been fed in the last 300 ms.
+/// Safe to read from the GPU presentation/upscaler threads; no mutex/guest work.
+/// Used to prevent showing a stale FSR host display buffer over the movie.
+bool MovieRecentlyDecoded();
+
 /// bbport diagnosis: the time (ns) between the guest's last two flip submissions.
 s64 LastFlipIntervalNs();
 
