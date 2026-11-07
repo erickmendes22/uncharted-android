@@ -117,8 +117,22 @@ bool EnvContentSize(s32& width, s32& height) {
     // picture for 360p/720p renders. Use the requested picture dimensions
     // while preserving the decoded NV12 frame stride and metadata.
     static const auto requested = BbVdecContent::Parse(std::getenv("BB_VDEC_CONTENT"));
-    width = requested.width;
-    height = requested.height;
+    const char* explicit_env = std::getenv("BB_VDEC_EXPLICIT_CONTENT");
+    if (explicit_env && explicit_env[0] == '1') {
+        width = requested.width;
+        height = requested.height;
+        return width > 0 && height > 0;
+    }
+    // Preserve the old movie layout in U1/U3, where the game's configured
+    // display size is authoritative. Opt in to the corrected path for U2 only.
+    const auto& settings = BbSettings::Get();
+    width = settings.game_display_width.load();
+    height = settings.game_display_height.load();
+    if (width >= 1920 && height >= 1080) {
+        width = height = 0;
+        return false;
+    }
+    if (!requested.width) { width = height = 0; return false; }
     return width > 0 && height > 0;
 }
 
