@@ -201,7 +201,7 @@ void Menu() {
         if (ImGui::BeginTabItem("Graphics")) {
             ImGui::Spacing();
             ImGui::Text("Scene: %d x %d", s.active_render_width.load(), s.active_render_height.load());
-            static const char* upscalers[] = {"Off", "FSR 3.1", "FSR 4 (INT8)", "FSR 4.1.1 (INT8)", "TAA", "DLSS"};
+            static const char* upscalers[] = {"Off", "FSR 3.1", "FSR 4 (INT8)", "FSR 4.1.1 (INT8)", "TAA", "DLSS", "Snapdragon GSR 2"};
             int upscaler = s.upscaler;
             if (ImGui::BeginCombo("Anti-aliasing / upscaler", upscalers[upscaler])) {
                 for (int i = 0; i < BbSettings::UpscalerCount; ++i) {

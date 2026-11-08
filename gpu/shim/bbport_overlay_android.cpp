@@ -195,9 +195,9 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
             Section("Display");Toggle("Fullscreen",s.fullscreen);
             Note(s.fullscreen?"Fill the entire screen":"Keep the original aspect ratio");
             Section("Upscaling");
-            const char* upscalers[]={"Off","FSR 3.1","TAA"};const int providers[]={BbSettings::UpscalerOff,BbSettings::UpscalerFsr3,BbSettings::UpscalerTaa};
-            int up=0;for(int i=0;i<3;++i)if(providers[i]==s.upscaler)up=i;
-            if(Segmented("upscaler",up,upscalers,3))Store(s.upscaler,providers[up]);
+            const char* upscalers[]={"Off","FSR 3.1","GSR 2","TAA"};const int providers[]={BbSettings::UpscalerOff,BbSettings::UpscalerFsr3,BbSettings::UpscalerGsr2,BbSettings::UpscalerTaa};
+            int up=0;for(int i=0;i<4;++i)if(providers[i]==s.upscaler)up=i;
+            if(Segmented("upscaler",up,upscalers,4))Store(s.upscaler,providers[up]);
             Note("FSR mode and resolution apply on the next game start.");
             if(s.upscaler!=BbSettings::UpscalerOff)Note(s.temporal_running?"Temporal reconstruction: running":"Temporal reconstruction: waiting for a compatible scene");
             Slider("Sharpening",s.sharpness,0.f,2.f);Toggle("Sharpen (RCAS)",s.sharpen);
