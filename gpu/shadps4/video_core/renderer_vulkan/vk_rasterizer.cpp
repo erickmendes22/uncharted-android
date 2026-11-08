@@ -4227,9 +4227,29 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
                     const auto new_layout = image.info.props.is_depth
                                                 ? vk::ImageLayout::eDepthStencilReadOnlyOptimal
                                                 : vk::ImageLayout::eShaderReadOnlyOptimal;
-                    barrier |= runtime.Transit(
-                        &image, new_layout, vk::PipelineStageFlagBits2::eAllCommands,
-                        vk::AccessFlagBits2::eShaderRead, desc.view_info.range);
+                    // PC 0.3.14: when an image is sampled while still bound
+                    // as the depth target, retain attachment read/write as
+                    // well as shader read in its recorded synchronization
+                    // state. Fixes U3 depth WRITE_AFTER_WRITE/READ_AFTER_WRITE
+                    // hazards; BB_DEPTH_TARGET_STATE=0 restores old behavior.
+                    static const bool depth_target_state = [] {
+                        const char* env = std::getenv("BB_DEPTH_TARGET_STATE");
+                        return !(env && env[0] == '0');
+                    }();
+                    const bool depth_target = depth_target_state && image.info.props.is_depth &&
+                                              binding.is_target;
+                    const auto stage = depth_target
+                        ? vk::PipelineStageFlagBits2::eAllCommands |
+                              vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                              vk::PipelineStageFlagBits2::eLateFragmentTests
+                        : vk::PipelineStageFlags2(vk::PipelineStageFlagBits2::eAllCommands);
+                    const auto access = depth_target
+                        ? vk::AccessFlagBits2::eShaderRead |
+                              vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                              vk::AccessFlagBits2::eDepthStencilAttachmentWrite
+                        : vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead);
+                    barrier |= runtime.Transit(&image, new_layout, stage, access,
+                                               desc.view_info.range);
                 }
             }
             image.usage.storage |= is_storage;

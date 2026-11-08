@@ -16,6 +16,7 @@
  * Options, Tab touchpad, arrow keys and the wheel the d-pad, IJKL the right stick. */
 #define _GNU_SOURCE
 #include "runtime.h"
+#include "runtime_pad_host_policy.h"
 #include "gpu/bbgpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -535,12 +536,18 @@ static void sample_host(PadData *d) {
     uint32_t mouse=0;
     int wheel=0, captured=bbgpu_mouse_sample(&mdx,&mdy,&mouse,&wheel);
     if (bbgpu_overlay_captures_input()) return; /* settings menu open: neutral input */
-    /* Scripted runs (BB_PAD_FILE) ignore the player's controller and keyboard: a pad in use on
-     * the same PC reached the test window (BB_PAD_HOST=1 keeps them). */
+    /* BB_PAD_FILE normally disables host input for automated test replay.
+     * However the Android native MotionEvent controller writes that SAME
+     * file; it must never suppress a real USB/Bluetooth SDL controller.
+     * BB_PAD_HOST=1 explicitly retains host input. BB_JAVA_TOUCH=1 is a
+     * second safety guard if an old launcher omits BB_PAD_HOST. */
     static int scripted=-1;
     if (scripted<0) {
         const char *file=getenv("BB_PAD_FILE"), *host=getenv("BB_PAD_HOST");
-        scripted=file && *file && !(host && host[0]=='1');
+        const char *java_touch=getenv("BB_JAVA_TOUCH");
+        scripted=bb_pad_scripted_only(file,host,java_touch);
+        printf("Runtime: BB_PAD_FILE mode %s (physical SDL gamepads %s)\n",
+               scripted ? "scripted" : "merged", scripted ? "disabled" : "enabled");
     }
     if (scripted) return;
     const uint64_t now=d->timestamp;

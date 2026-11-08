@@ -59,7 +59,9 @@ Sampler::Sampler(const Vulkan::Instance& instance, const AmdGpu::Sampler& sample
         .compareEnable = is_depth,
         .compareOp = LiverpoolToVK::DepthCompare(sampler.depth_compare_func),
         .minLod = sampler.MinLod(),
-        .maxLod = sampler.MaxLod(),
+        // PC 0.3.14: transient sampler state during checkpoint loads can
+        // report maxLod < minLod, invalid for VkSamplerCreateInfo.
+        .maxLod = std::max(sampler.MinLod(), sampler.MaxLod()),
         .borderColor = border_color,
         .unnormalizedCoordinates = false, // Handled in shader due to Vulkan limitations.
     };

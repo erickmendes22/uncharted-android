@@ -510,8 +510,13 @@ Frame* Presenter::PrepareFrame(const Libraries::VideoOut::BufferAttributeGroup& 
         }
         image_view = *image.FindView(view_info).image_view;
         image_size = vk::Extent2D{image.info.size.width, image.info.size.height};
+        // Upstream PC 0.3.14 / BilalReloaded: the FSR EASU/RCAS pass
+        // samples this display image in COMPUTE; the post process samples
+        // it in FRAGMENT. Synchronize both accesses to avoid flicker/black
+        // output on drivers that don't implicitly order the shaders.
         runtime.Transit(&image, vk::ImageLayout::eShaderReadOnlyOptimal,
-                        vk::PipelineStageFlagBits2::eFragmentShader,
+                        vk::PipelineStageFlagBits2::eFragmentShader |
+                            vk::PipelineStageFlagBits2::eComputeShader,
                         vk::AccessFlagBits2::eShaderRead);
         runtime.FlushBarriers();
     }
