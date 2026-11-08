@@ -4,8 +4,16 @@ import json
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
+# GSR 2 adds shader compilation and a provider to the two render-side files.
+# Keep the original release's runtime audio/log hashes pinned, and inspect
+# the purpose-built renderer patches separately rather than falsely requiring
+# the modified files to have the previous release's exact hash.
 for name, expected in json.loads((root / 'tests/release025-baseline.json').read_text()).items():
+    if name in ('gpu/shim/bbport_overlay.cpp', 'gpu/CMakeLists.txt'):
+        continue
     assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected, name
+assert '"Snapdragon GSR 2"' in (root / 'gpu/shim/bbport_overlay.cpp').read_text()
+assert 'add_host_shader(gsr2_upscale.comp gsr2_upscale_comp)' in (root / 'gpu/CMakeLists.txt').read_text()
 for name in ('android/scripts/g2/game_app/GraphicsProfile.java',
              'gpu/shim/bbport_font_loader.cpp', 'android/GRAPHICS_RECOVERY_0.2.5.md'):
     assert not (root / name).exists(), name
