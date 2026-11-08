@@ -203,7 +203,7 @@ public class GameActivity extends SDLActivity {
             // selector. The same argv that the collection uses to enter U1 skips that
             // selector: verified upstream for the 1.00/1.02 executables.
             try (FileWriter w = new FileWriter(new File(d, "guest-argv.txt"))) {
-                w.write("/app0/eboot.bin\nispartofuccollection\n");
+                w.write("/app0/eboot.bin\neboot.bin\nispartofuccollection\n");
             } catch (IOException e) {
                 throw new RuntimeException("Uncharted 1 direct boot argv", e);
             }
