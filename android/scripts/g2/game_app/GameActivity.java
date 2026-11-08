@@ -199,6 +199,11 @@ public class GameActivity extends SDLActivity {
             // Native GoW3/Bloodborne style controller; BB_PAD_FILE is already
             // sampled by Uncharted's runtime_pad.c and merges with SDL gamepads.
             Os.setenv("BB_PAD_FILE", d + "/touch-pad-state.txt", true);
+            // BB_PAD_FILE was originally for automated replay and suppresses
+            // host SDL gamepads unless BB_PAD_HOST=1. The Java controller is
+            // a REAL player input source, not a scripted playback: merge
+            // Bluetooth/USB gamepads and keyboard with Android virtual keys.
+            Os.setenv("BB_PAD_HOST", "1", true);
             Os.setenv("BB_JAVA_TOUCH", "1", true);
             Os.setenv("BB_UI_LANGUAGE",AppLanguage.code(),true);
             // The collection's shaders the upscaler hooks (docs/upscaler.md; run.py sets the same
