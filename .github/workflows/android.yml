@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106, fix/u2-freeze-touch-upstream-20261106, fix/u2-eop-recorder-freeze-20261106, fix/u2-touch-video-20261106, fix/u2-native-android-touch-20261107, fix/u2-video-native-swipe-20261107, fix/u2-fsr-cutscene-display-20261107, fix/external-gamepad-upstream-20261108]
+    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106, fix/u2-freeze-touch-upstream-20261106, fix/u2-eop-recorder-freeze-20261106, fix/u2-touch-video-20261106, fix/u2-native-android-touch-20261107, fix/u2-video-native-swipe-20261107, fix/u2-fsr-cutscene-display-20261107, fix/external-gamepad-upstream-20261108, perf/job-workers-upstream-030-20261108]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
@@ -46,6 +46,7 @@ jobs:
           python3 tests/test_u2_movie_native_swipe.py
           python3 tests/test_u2_fsr_movie_display.py
           python3 tests/test_external_gamepad_upstream.py
+          python3 tests/test_upstream_job_workers.py
           cc -std=c11 -Wall -Wextra -Werror -Isrc tests/test_pad_host_policy.c -o "$RUNNER_TEMP/test-pad-host-policy"
           "$RUNNER_TEMP/test-pad-host-policy"
           g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_u2_movie_fsr_policy.cpp -o "$RUNNER_TEMP/u2-fsr-movie-test"
