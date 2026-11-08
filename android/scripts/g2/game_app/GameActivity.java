@@ -28,15 +28,21 @@ public class GameActivity extends SDLActivity {
     // pointer IDs, delivered via the existing atomic BB_PAD_FILE OrbisPad hook.
     private PadBridge androidPad;
     private TouchControllerOverlay androidPadView;
+    private File touchEditRequest;
     private final android.os.Handler padHandler =
         new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable padVisibilityPoll = new Runnable() {
         @Override public void run() {
             if (androidPadView == null) return;
+            // The native in-game Controls tab requests the Android layout editor.
+            // Polling this private one-shot file avoids touching SDL input mappings.
+            if (touchEditRequest != null && touchEditRequest.exists() && touchEditRequest.delete()) {
+                if (!androidPadView.isEditing()) androidPadView.edit(null);
+            }
             boolean nativeMenu = false;
             try { nativeMenu = nativeOverlayCapturing(); }
             catch (UnsatisfiedLinkError ignored) { }
-            boolean enabled = !nativeMenu && virtualPadEnabled();
+            boolean enabled = androidPadView.isEditing() || (!nativeMenu && virtualPadEnabled());
             if (!enabled && androidPadView.getVisibility() == android.view.View.VISIBLE)
                 androidPadView.release();
             androidPadView.setVisibility(enabled ? android.view.View.VISIBLE : android.view.View.GONE);
@@ -222,6 +228,9 @@ public class GameActivity extends SDLActivity {
             // Bluetooth/USB gamepads and keyboard with Android virtual keys.
             Os.setenv("BB_PAD_HOST", "1", true);
             Os.setenv("BB_JAVA_TOUCH", "1", true);
+            touchEditRequest = new File(d, "touch-edit-request");
+            touchEditRequest.delete();
+            Os.setenv("BB_TOUCH_EDIT_REQUEST", touchEditRequest.getAbsolutePath(), true);
             Os.setenv("BB_UI_LANGUAGE",AppLanguage.code(),true);
             // The collection's shaders the upscaler hooks (docs/upscaler.md; run.py sets the same
             // on a PC): the camera velocity pass, the first compute after the lit scene, the

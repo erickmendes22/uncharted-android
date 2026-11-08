@@ -231,6 +231,14 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
             Toggle("Swipe camera (instead of analog)",s.touch_mobile);
             Slider("Camera drag sensitivity",s.touch_pad_look,.25f,4.f);
             Note("Left: movement. Right: camera.");
+            // The Android View has the touch layout and its editor, not SDL/ImGui.
+            // Close the native panel before the Java controller receives the request.
+            if(ImGui::Button("Edit touch layout (move, resize, icons)",{-1,0})) {
+                if(const char* request=std::getenv("BB_TOUCH_EDIT_REQUEST")) {
+                    if(FILE* f=std::fopen(request,"wb")) { std::fputc('1',f); std::fclose(f); }
+                }
+                keep_open=false;
+            }
             ImGui::EndDisabled();
         }
         ImGui::EndChild();ImGui::Separator();
