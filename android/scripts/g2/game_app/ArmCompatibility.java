@@ -2,7 +2,7 @@ package dev.unchartedg2.game;
 
 /** Optional RedVorteX mechanisms on the published Daedalus 0.2.5 runtime. */
 final class ArmCompatibility {
-    static final String[] OWNED={"BB_GPU_MERGE","BB_SIDE_DOWNLOAD","BB_UMA_READBACK","BB_FLUSH_DRAWS","BB_JOB_SPIN"};
+    static final String[] OWNED={"BB_GPU_MERGE","BB_SIDE_DOWNLOAD","BB_UMA_READBACK","BB_FLUSH_DRAWS","BB_JOB_SPIN","BB_CHAIN_WRITEDATA"};
     static boolean owned(String key){for(String k:OWNED)if(k.equals(key))return true;return false;}
     static String key(String line){return line.startsWith("-")?line.substring(1):line.split("=",2)[0];}
     static java.util.List<String> cleanPerGame(java.util.List<String> lines){

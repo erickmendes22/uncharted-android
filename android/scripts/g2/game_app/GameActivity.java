@@ -253,6 +253,9 @@ public class GameActivity extends SDLActivity {
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
             }
+            // Experimental RedVorteX 0.1.8 chained labels. Restore exact
+            // Daedalus 0.2.9 synchronization unless explicitly enabled.
+            Os.setenv("BB_CHAIN_WRITEDATA",options.getBoolean("arm_chain_writedata",false)?"1":"0",true);
             String renderer=RendererOptions.environment(game);
             for(String line:renderer.split("\n")){
                 int eq=line.indexOf('=');

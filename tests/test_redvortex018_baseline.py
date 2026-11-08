@@ -30,4 +30,21 @@ assert "static constexpr size_t STREAM_BUFFER_SIZE = 128_MB;" in buffer
 assert "static constexpr u64 Capacity = 128ull << 20;" in ring
 assert "static constexpr u64 Capacity = 32ull << 20;" in ring
 assert "RunWriteDataSeq" in liverpool and "FenceWritten(task.seq)" in liverpool
-print("PASS: pre-worker regression-free base; mobile 256 MiB stream/128 MiB ring; fence sequence intact")
+# RedVorteX 0.1.8 label fast path is OFF by default and only opt-in.
+assert "BB_CHAIN_WRITEDATA" in liverpool
+assert "TryChainWriteDataSeq(rasterizer, task)" in liverpool
+assert "FenceWritten(seq); // only after the guest bytes land" in liverpool
+assert "VideoCore::ChainedWrites::Landed(landed)" in liverpool
+assert "VideoCore::ChainedWrites::AllowWait()" in liverpool
+assert "IsRegionCpuModified(address, size)" in liverpool
+assert "IsRegionGpuModified(address, size)" in liverpool
+assert "VideoCore::ChainedWrites::Overlaps" in read("gpu/shadps4/video_core/renderer_vulkan/vk_rasterizer.cpp")
+assert "ChainedWrites::MustWait(device_addr, size)" in buffer
+assert "ChainedWrites::MustWait(image.info.guest_address, image.info.guest_size)" in read("gpu/shadps4/video_core/texture_cache/texture_cache.cpp")
+assert 'options.getBoolean("arm_chain_writedata",false)' in read("android/scripts/g2/game_app/GameActivity.java")
+assert 'compatibilitySwitch(root,"Async GPU label writes (experimental)","arm_chain_writedata",false)' in read("android/scripts/g2/game_app/Launcher.java")
+assert '"BB_CHAIN_WRITEDATA"' in compat
+assert "BB_JOB_SLEEP" not in probe
+print("PASS: rollback + RedVorteX buffers; optional sequenced WriteData dependencies")
+
+

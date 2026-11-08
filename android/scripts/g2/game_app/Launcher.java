@@ -692,6 +692,7 @@ public class Launcher extends Activity {
         compatibilitySwitch(root,"Fast GPU memory reads (U2/U3)","arm_uma_readback",true);
         compatibilitySwitch(root,"Send GPU work in small batches (U2/U3)","arm_flush_draws",true);
         compatibilitySwitch(root,"Let idle game threads sleep","arm_job_spin",true);
+        compatibilitySwitch(root,"Async GPU label writes (experimental)","arm_chain_writedata",false);
         root = card(config, "ADVANCED");
         text(root, "Additional environment variables (optional):", 14, false);
         extraEnv = new EditText(this);
