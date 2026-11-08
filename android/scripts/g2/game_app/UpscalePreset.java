@@ -6,6 +6,8 @@ final class UpscalePreset {
     static final String[] NAMES={"Off","FSR Native AA","FSR Quality","FSR Balanced","FSR Performance"};
     static int normalize(int mode){return Math.max(0,Math.min(4,mode));}
     static String input(int mode,String manual){return mode==0?manual:SIZES[normalize(mode)];}
-    static boolean disableNativeAa(int mode,boolean userDisabled){return normalize(mode)>0 || userDisabled;}
+    // FSR 3.1/GSR 2 require the original AA and motion/velocity passes.
+    static boolean disableNativeAa(int mode,boolean userDisabled){return normalize(mode)==0 && userDisabled;}
+    static boolean disableMotionBlur(int mode,boolean userDisabled){return normalize(mode)==0 && userDisabled;}
     static String label(int mode){return NAMES[normalize(mode)];}
 }
