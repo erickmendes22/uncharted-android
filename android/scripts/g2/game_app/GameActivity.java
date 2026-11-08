@@ -192,7 +192,18 @@ public class GameActivity extends SDLActivity {
             finish();
             return;
         }
-        if (!guest.isEmpty()) {
+        if (guest.isEmpty() && "u1".equals(gameOf(bootArgs.get(0)))) {
+            // The collection's eboot.bin contains Drake's Fortune AND the three-game
+            // selector. The same argv that the collection uses to enter U1 skips that
+            // selector: verified upstream for the 1.00/1.02 executables.
+            try (FileWriter w = new FileWriter(new File(d, "guest-argv.txt"))) {
+                w.write("/app0/eboot.bin\nispartofuccollection\n");
+            } catch (IOException e) {
+                throw new RuntimeException("Uncharted 1 direct boot argv", e);
+            }
+            bootArgs.add("--guest-argv");
+            bootArgs.add(d + "/guest-argv.txt");
+        } else if (!guest.isEmpty()) {
             bootArgs.add("--guest-argv");
             bootArgs.add(d + "/guest-argv.txt");
         }
