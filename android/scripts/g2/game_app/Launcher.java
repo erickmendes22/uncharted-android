@@ -441,6 +441,19 @@ public class Launcher extends Activity {
     }
 
     private void openLink(String url) {startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}
+    private void editTouchLayout() {
+        // Shares one persisted layout with the game. The editor is a preview;
+        // it does not send gameplay events to the running app.
+        android.app.Dialog dialog=new android.app.Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        android.widget.FrameLayout frame=new android.widget.FrameLayout(this);
+        frame.setBackgroundColor(0xff071016);
+        TouchControllerOverlay view=new TouchControllerOverlay(this,
+            new PadBridge(new File(getCacheDir(),"touch-editor-state.txt")));
+        frame.addView(view,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        dialog.setContentView(frame);
+        dialog.show();
+        view.edit(dialog::dismiss);
+    }
 
     private int dp(int v) {
         return Math.round(v * getResources().getDisplayMetrics().density);
@@ -658,7 +671,31 @@ public class Launcher extends Activity {
         });
         root.addView(touchPad);
         text(root, "Auto: show touch controls when no controller is connected.", 14, false);
-        note(root, "Open the menu with its button, a right-edge swipe or L3+R3.");
+        note(root, "Open the in-game menu by swiping from left to right.");
+        android.content.SharedPreferences touchPrefs=getSharedPreferences("uncharted_touch", MODE_PRIVATE);
+        TextView touchSize=text(root,"Touch button size · "+Math.round(touchPrefs.getFloat("overlay_size",1.20f)*100)+"%",14,false);
+        android.widget.SeekBar touchScale=new android.widget.SeekBar(this);
+        touchScale.setMax(85);touchScale.setProgress(Math.round((touchPrefs.getFloat("overlay_size",1.20f)-.8f)*100f));
+        touchScale.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){
+            @Override public void onProgressChanged(android.widget.SeekBar bar,int progress,boolean user){
+                if(user) {
+                    float value=.8f+progress/100f;
+                    touchPrefs.edit().putFloat("overlay_size",value).apply();
+                    touchSize.setText("Touch button size · "+Math.round(value*100)+"%");
+                }
+            }
+            @Override public void onStartTrackingTouch(android.widget.SeekBar bar){}
+            @Override public void onStopTrackingTouch(android.widget.SeekBar bar){}
+        });
+        root.addView(touchScale);
+        CheckBox iconControls=new CheckBox(this);
+        iconControls.setText("GoW3 style · gameplay action icons");
+        iconControls.setTextColor(0xffeee2cc);
+        iconControls.setChecked(touchPrefs.getBoolean("overlay_action_icons",true));
+        iconControls.setOnCheckedChangeListener((button,on)->touchPrefs.edit()
+            .putBoolean("overlay_action_icons",on).apply());
+        root.addView(iconControls);
+        button(root,"Edit control layout (drag and resize)",v->editTouchLayout());
         root = card(home, "FRAME GENERATION");
         text(root, "LSFG requires your own Lossless.dll.", 14, false);
         button(root, "Import Lossless.dll", v -> {
