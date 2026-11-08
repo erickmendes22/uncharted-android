@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+//
+// Uncharted ARM port: Snapdragon Game Super Resolution 2 (SGSR 2), 2-pass compute variant, pass 1
+// of 2 (sgsr/v2/include/glsl_2_pass_cs/sgsr2_convert.comp of SnapdragonStudios/snapdragon-gsr).
+// Changes for the port: GLSL 450 with push constants and push descriptors; the motion comes from
+// the port's motion image (render-size pixels, previous - current, camera and objects: the
+// velocity pass), stored as the offset to the previous frame in UV units (the upscale pass reads
+// it as such) instead of SGSR's NDC motion with a camera reprojection for static pixels.
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D InputColor;
+layout(binding = 1) uniform sampler2D InputDepth;
+layout(binding = 2) uniform sampler2D InputMotion;
+layout(binding = 3, rgba16f) uniform writeonly image2D MotionDepthClipAlphaBuffer;
+layout(binding = 4, r32ui) uniform writeonly uimage2D YCoCgColor;
+
+layout(push_constant) uniform Params {
+    uvec2 renderSize;
+    uvec2 displaySize;
+    vec2 renderSizeRcp;
+    vec2 displaySizeRcp;
+    vec2 jitterOffset;
+    float preExposure;
+    float cameraFovAngleHor;
+    float minLerpContribution;
+    uint sameCamera;
+    uint reset;
+} params;
+
+void main() {
+    const uvec2 InputPos = gl_GlobalInvocationID.xy;
+    if (any(greaterThanEqual(InputPos, params.renderSize))) {
+        return;
+    }
+    const float Exposure_co_rcp = params.preExposure;
+    const vec2 ViewportSizeInverse = params.renderSizeRcp;
+    const vec2 gatherCoord = vec2(InputPos) * ViewportSizeInverse;
+
+    // Nearest depth of the 3x3 block (FSR 2's dilation); not inverted depth: the far plane is 1.
+    const vec4 topleft = textureGather(InputDepth, gatherCoord, 0);
+    const vec4 topRight = textureGather(InputDepth, gatherCoord + vec2(ViewportSizeInverse.x * 2.0, 0.0), 0);
+    const vec4 bottomLeft = textureGather(InputDepth, gatherCoord + vec2(0.0, ViewportSizeInverse.y * 2.0), 0);
+    const vec4 bottomRight = textureGather(InputDepth, gatherCoord + ViewportSizeInverse * 2.0, 0);
+    const float maxC = min(min(min(topleft.y, topRight.x), bottomLeft.z), bottomRight.w);
+    const float topleft4 = min(min(min(topleft.y, topleft.x), topleft.z), topleft.w);
+
+    float depthclip = 0.0;
+    if (maxC < 1.0 - 1.0e-05) {
+        const float topRight4 = min(min(min(topRight.y, topRight.x), topRight.z), topRight.w);
+        const float bottomLeft4 = min(min(min(bottomLeft.y, bottomLeft.x), bottomLeft.z), bottomLeft.w);
+        const float bottomRight4 = min(min(min(bottomRight.y, bottomRight.x), bottomRight.z), bottomRight.w);
+        const float Ksep = 1.37e-05;
+        const float Kfov = params.cameraFovAngleHor;
+        const float diagonal_length = length(vec2(params.renderSize));
+        const float Depthsep = Ksep * Kfov * diagonal_length * (1.0 - maxC);
+        const float EPSILON = 1.19e-07;
+        float Wdepth = 0.0;
+        Wdepth += clamp(Depthsep / (abs(maxC - topleft4) + EPSILON), 0.0, 1.0);
+        Wdepth += clamp(Depthsep / (abs(maxC - topRight4) + EPSILON), 0.0, 1.0);
+        Wdepth += clamp(Depthsep / (abs(maxC - bottomLeft4) + EPSILON), 0.0, 1.0);
+        Wdepth += clamp(Depthsep / (abs(maxC - bottomRight4) + EPSILON), 0.0, 1.0);
+        depthclip = clamp(1.0 - Wdepth * 0.25, 0.0, 1.0);
+    }
+
+    // The port's motion: pixels at the render size, previous - current.
+    const vec2 motion = texelFetch(InputMotion, ivec2(InputPos), 0).xy * ViewportSizeInverse;
+
+    // Luma and chroma (YCoCg) of the colour, after SGSR's reversible tonemap.
+    vec3 Colorrgb = max(texelFetch(InputColor, ivec2(InputPos), 0).xyz, vec3(0.0));
+    const float ColorMax = max(max(Colorrgb.x, Colorrgb.y), Colorrgb.z) + Exposure_co_rcp;
+    Colorrgb /= vec3(ColorMax);
+    vec3 Colorycocg;
+    Colorycocg.x = 0.25 * (Colorrgb.x + 2.0 * Colorrgb.y + Colorrgb.z);
+    Colorycocg.y = clamp(0.5 * Colorrgb.x + 0.5 - 0.5 * Colorrgb.z, 0.0, 1.0);
+    Colorycocg.z = clamp(Colorycocg.x + Colorycocg.y - Colorrgb.x, 0.0, 1.0);
+    const uint x11 = uint(Colorycocg.x * 2047.5);
+    const uint y11 = uint(Colorycocg.y * 2047.5);
+    const uint z10 = uint(Colorycocg.z * 1023.5);
+    imageStore(YCoCgColor, ivec2(InputPos), uvec4(((x11 << 21u) | (y11 << 10u)) | z10));
+    imageStore(MotionDepthClipAlphaBuffer, ivec2(InputPos), vec4(motion, depthclip, ColorMax));
+}
