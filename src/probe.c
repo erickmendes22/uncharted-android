@@ -1055,6 +1055,50 @@ static void __attribute__((ms_abi)) ndgi_begin(uint64_t rdi, uint64_t rsi, uint6
     runtime_ndgi_open=1;
 }
 static int64_t find_masked(const char *hex,uint64_t size) { return find_unique_pattern(size,hex); }
+
+/* Validated menu skip from RedVorteX: unique signature or original menu. */
+static void patch_collection_skip(uint64_t image_size) {
+    const char *skip=getenv("BB_SKIP_COLLECTION_MENU");
+    if (!skip || skip[0]!='1') return;
+    /* The menu callback, found by its code: push rbp; mov rbp, rsp; lea rax, [rip + ...];
+     * cmp byte [rax + 0x39c0], 0; je; mov rax, [rdi]; pop rbp; jmp [rax + 0x90]; call ...;
+     * mov rdi, rax; pop rbp; jmp (the collection). EU 1.02: image+0x65d540 (collection 0x14b0b0,
+     * U1 0x14ae00); US 1.02 (CUSA02320, as CUSA02344): image+0x6734a0 (0x14b570, 0x14b2c0). U1's
+     * front end is 0x2b0 bytes before the collection's in both. */
+    static const char decide[]="55 48 89 e5 48 8d 05 ?? ?? ?? ?? 80 b8 c0 39 00 00 00 74 0a 48 8b 07 5d ff a0 90 00 00 00 "
+                               "e8 ?? ?? ?? ?? 48 89 c7 5d e9 ?? ?? ?? ??";
+    static const unsigned char open_u1[]={
+        0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x78,0x49,0x89,0xfd,
+    };
+    const int64_t at=find_masked(decide,image_size);
+    uint64_t jump=0, collection=0, u1=0;
+    if (at>=0) {
+        int32_t to;
+        jump=(uint64_t)at+44-5;
+        memcpy(&to,image+jump+1,4);
+        collection=jump+5+(uint64_t)(int64_t)to;
+        u1=collection-0x2b0;
+    }
+    if (at<0 || collection<0x2b0 || collection>=image_size || memcmp(image+u1,open_u1,sizeof(open_u1))) {
+        printf("Collection menu: not found, the menu stays\n");
+        return;
+    }
+    unsigned char *t=near_image_memory(64);
+    if (!t) { printf("Collection menu: no thunk memory, the menu stays\n"); return; }
+    unsigned char *flag=t+32;
+    size_t k=0;
+    int32_t rel;
+    t[k++]=0x80; t[k++]=0x3d; rel=(int32_t)(flag-(t+k+5)); memcpy(t+k,&rel,4); k+=4; t[k++]=0x00; /* cmp byte [flag], 0 */
+    t[k++]=0x74; t[k++]=12;                                                                         /* je collection */
+    t[k++]=0xc6; t[k++]=0x05; rel=(int32_t)(flag-(t+k+5)); memcpy(t+k,&rel,4); k+=4; t[k++]=0x00; /* mov byte [flag], 0 */
+    t[k++]=0xe9; rel=(int32_t)((int64_t)(uintptr_t)(image+u1)-(int64_t)(uintptr_t)(t+k+4)); memcpy(t+k,&rel,4); k+=4;
+    t[k++]=0xe9; rel=(int32_t)((int64_t)(uintptr_t)(image+collection)-(int64_t)(uintptr_t)(t+k+4)); memcpy(t+k,&rel,4); k+=4;
+    *flag=1;
+    rel=(int32_t)((int64_t)(uintptr_t)t-(int64_t)(uintptr_t)(image+jump+5));
+    memcpy(image+jump+1,&rel,4);
+    printf("Collection menu: skipped once, U1's front end opens first\n");
+}
+
 static void install_ndgi_hooks(uint64_t image_size) {
     const char *wait=getenv("BB_JOB_LOCK_WAIT_MS");
     if (wait && wait[0]=='0' && !wait[1]) return; /* nothing uses the flag */
@@ -1634,6 +1678,7 @@ int main(int argc, char **argv) {
         uint64_t image_end=0;
         for (uint64_t s=0;s<ns;++s) if (segments[s].address+segments[s].size>image_end) image_end=segments[s].address+segments[s].size;
         install_signature_fixes(segments, ns);
+        patch_collection_skip(image_end);
         install_u3_skip_logos(image_end);
         install_game_callbacks(segments, ns, image_end);
         install_ndgi_hooks(image_end);

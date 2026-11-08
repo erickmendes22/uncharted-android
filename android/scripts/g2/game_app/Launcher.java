@@ -1178,13 +1178,13 @@ public class Launcher extends Activity {
             boolean aa=key.equals("patch_Disable anti-aliasing");
             boolean blur=key.equals("patch_Disable motion blur");
             int fsr=prefs.getInt("mobile_upscale",0);
-            boolean managed= (aa||blur) && UpscalePreset.normalize(fsr)>0;
+            boolean managed= aa && UpscalePreset.normalize(fsr)>0;
             boolean disabled=aa?UpscalePreset.disableNativeAa(fsr,prefs.getBoolean(key,false))
                 :blur?UpscalePreset.disableMotionBlur(fsr,prefs.getBoolean(key,false))
                 :prefs.getBoolean(key,false);
             boolean enabled=!disabled;
             state.setEnabled(!managed);
-            state.setText(managed?"TEMPORAL":AppLanguage.text(enabled?"Enabled":"Disabled"));
+            state.setText(managed?"UPSCALE":AppLanguage.text(enabled?"Enabled":"Disabled"));
             state.setContentDescription(AppLanguage.text(title)+": "+(managed?"Required for temporal upscale":AppLanguage.text(enabled?"Enabled in game":"Disabled in game")));
             state.setTextColor(enabled?accent:0xFFB0AAA0);
             GradientDrawable bg=new GradientDrawable();bg.setCornerRadius(dp(10));
@@ -1239,7 +1239,7 @@ public class Launcher extends Activity {
         boolean fsrRequested=UpscalePreset.normalize(prefs.getInt("mobile_upscale",0))>0;
         // Unlike the previous build, keep native AA enabled for FSR/GSR:
         // disabling it removed temporal inputs and caused black flicker.
-        boolean nativeAaReady=true;
+        boolean nativeAaReady=!fsrRequested;
         try (RandomAccessFile file = new RandomAccessFile(boot, "r")) {
             byte[] head = new byte[16]; file.readFully(head);
             long imageSize = ByteBuffer.wrap(head, 8, 8).order(ByteOrder.LITTLE_ENDIAN).getLong();

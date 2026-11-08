@@ -198,18 +198,9 @@ public class GameActivity extends SDLActivity {
             finish();
             return;
         }
-        if (guest.isEmpty() && "u1".equals(gameOf(bootArgs.get(0)))) {
-            // The collection's eboot.bin contains Drake's Fortune AND the three-game
-            // selector. The same argv that the collection uses to enter U1 skips that
-            // selector: verified upstream for the 1.00/1.02 executables.
-            try (FileWriter w = new FileWriter(new File(d, "guest-argv.txt"))) {
-                w.write("/app0/eboot.bin\neboot.bin\nispartofuccollection\n");
-            } catch (IOException e) {
-                throw new RuntimeException("Uncharted 1 direct boot argv", e);
-            }
-            bootArgs.add("--guest-argv");
-            bootArgs.add(d + "/guest-argv.txt");
-        } else if (!guest.isEmpty()) {
+        // Do not supply guessed collection argv: caused an infinite black screen.
+        // The signature-checked native menu skip is applied only for U1.
+        if (!guest.isEmpty()) {
             bootArgs.add("--guest-argv");
             bootArgs.add(d + "/guest-argv.txt");
         }
@@ -219,6 +210,7 @@ public class GameActivity extends SDLActivity {
             Os.setenv("HOME", d + "/home", true);
             Os.setenv("XDG_DATA_HOME", d + "/home/.local/share", true);
             Os.setenv("BB_CONFIG", d + "/bbport.ini", true);
+            Os.setenv("BB_SKIP_COLLECTION_MENU",("u1".equals(game) && guest.isEmpty())?"1":"0",true);
             // Native GoW3/Bloodborne style controller; BB_PAD_FILE is already
             // sampled by Uncharted's runtime_pad.c and merges with SDL gamepads.
             Os.setenv("BB_PAD_FILE", d + "/touch-pad-state.txt", true);

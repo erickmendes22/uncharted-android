@@ -2121,11 +2121,11 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
     // Full-screen UI quads still are NOT jittered.
     static const bool jitter_small = [] {
         const char* env = std::getenv("BB_JITTER_SMALL");
-        return !env || env[0] != '0';
+        return env && env[0] == '1';
     }();
     static const bool jitter_reconstruction = [] {
         const char* env = std::getenv("BB_JITTER_RECONSTRUCTION");
-        return !env || env[0] != '0';
+        return env && env[0] == '1';
     }();
     const auto small_scene_geometry = [&] {
         if (!jitter_small || !regs.depth_control.depth_enable) return false;
