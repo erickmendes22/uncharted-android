@@ -58,6 +58,12 @@ public class GameActivity extends SDLActivity {
         }
         return true;
     }
+    /** Upstream Android 0.3.0: SDL can request FULL_USER for a resizable
+     * window, overriding the manifest on portrait-native phones. Keep the
+     * three Uncharted games in sensor landscape without fixing one rotation. */
+    @Override public void setOrientationBis(int width, int height, boolean resizable, String hint) {
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+    }
     static native boolean nativeOverlayCapturing();
     static native void nativeToggleMenu();
     @Override protected void attachBaseContext(android.content.Context base) {super.attachBaseContext(AppLanguage.attach(base));}
