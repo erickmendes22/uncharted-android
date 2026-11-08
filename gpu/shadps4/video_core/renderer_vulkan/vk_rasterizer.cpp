@@ -2115,11 +2115,34 @@ void Rasterizer::DrawRecord(const GraphicsPipeline* pipeline, const PreparedDraw
         }
     }
     pipeline->BindResources(set_writes, push_data);
-    // bbport: jitter geometry drawn with the scene depth, not full-screen passes (a shifted
-    // full-screen quad leaves an edge column unwritten).
+    // RedVorteX 0.1.8: full-screen depth reconstruction and U3's single-quad
+    // wall geometry need the same temporal jitter as the scene. Without this,
+    // sun shadows, boat detail and London bar surfaces can flicker under FSR.
+    // Full-screen UI quads still are NOT jittered.
+    static const bool jitter_small = [] {
+        const char* env = std::getenv("BB_JITTER_SMALL");
+        return !env || env[0] != '0';
+    }();
+    static const bool jitter_reconstruction = [] {
+        const char* env = std::getenv("BB_JITTER_RECONSTRUCTION");
+        return !env || env[0] != '0';
+    }();
+    const auto small_scene_geometry = [&] {
+        if (!jitter_small || !regs.depth_control.depth_enable) return false;
+        const auto compare = LiverpoolToVK::CompareOp(regs.depth_control.depth_func);
+        return compare != vk::CompareOp::eAlways &&
+               (bool(regs.depth_control.depth_write_enable) ||
+                compare == vk::CompareOp::eEqual);
+    };
     draw_jitter = {};
     if (upscaler->Enabled() && db_desc.first && db_desc.first == camera_motion->Depth() &&
-        (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1)) {
+        (regs.num_indices > 6 || regs.num_instances.NumInstances() > 1 || small_scene_geometry())) {
+        draw_jitter = upscaler->Jitter();
+    } else if (const auto* ps = pipeline->GetStages()[u32(Shader::SwStage::Fragment)];
+               ps && upscaler->Enabled() && jitter_reconstruction &&
+               (u32(ps->pgm_hash) == 0xf614041eu || // U1 sun shadows
+                u32(ps->pgm_hash) == 0xb2a42acfu || // U1 boat detail
+                u32(ps->pgm_hash) == 0x1a08df2du)) { // U3 London bar surfaces
         draw_jitter = upscaler->Jitter();
     }
     UpdateDynamicState(pipeline, is_indexed);
