@@ -44,6 +44,11 @@ assert "498b07 80785900" in sleep    # 1.00
 assert 'BB_JOB_SLEEP' in sleep and "if (env && env[0]=='0')" in sleep
 assert "find_unique_pattern(image_size,\"4d8d7001 807f5900 9090 4981f802000000" in sleep  # existing U2 recipe
 
+# Guard against partial installation: a matched sleep loop alone is insufficient.
+assert "Job workers: incomplete 2-spin/wake signatures; keeping original workers" in sleep
+assert sleep.index("const int64_t wait_site=") < sleep.index("for (i=0;i<3;++i) {\n            memcpy(")
+assert sleep.index("if (!have_broadcast || resume_site1<0 || resume_site2<0)") < sleep.index("for (i=0;i<3;++i) {\n            memcpy(")
+
 # Validated 2-spin/1 ms timer replacement and U3/U1 fast fiber wake.
 assert 'const long spins=spins_env?strtol(spins_env,NULL,10):2;' in sleep
 assert "spins>0 && spins<1000" in sleep
@@ -78,7 +83,8 @@ assert probe.index("patch_job_sleep(image_end)") < probe.index("protect(image, r
 assert '"BB_JOB_SPIN","BB_JOB_SLEEP","BB_JOB_SPINS","BB_JOB_WAIT_US","BB_JOB_RESUME_WAKE"' in compat
 for entry in ["BB_JOB_SLEEP=", "BB_JOB_SPINS=", "BB_JOB_WAIT_US=1000", "BB_JOB_RESUME_WAKE="]:
     assert entry in compat
-assert 'idleSleep?"1":"0"' in compat and 'idleSleep?"2":"0"' in compat
+assert 'boolean upstreamWorkers=idleSleep && !"u2".equals(game);' in compat
+assert 'upstreamWorkers?"1":"0"' in compat and 'upstreamWorkers?"2":"0"' in compat
 assert 'BB_JOB_SPIN="+(idleSleep?"256,20":"0")' in compat
 assert "runtime_job_spin_install" in spin
 

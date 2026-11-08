@@ -1452,6 +1452,40 @@ static void patch_job_sleep(uint64_t image_size) {
             printf("Job workers: %s not found, idle workers keep spinning\n",builds[b][i].name);
             return;
         }
+        /* Fail closed on incomplete backports: this exact U2 executable matched
+         * all three sleep locations, but NOT the 1 ms timer or fiber wake.
+         * Installing two spins with the original 10 ms wait caused severe
+         * performance regression. Preflight ALL dependent signatures BEFORE
+         * modifying even one guest instruction. */
+        const char *preflight_spins_env=getenv("BB_JOB_SPINS");
+#ifdef __ANDROID__
+        const long preflight_spins=preflight_spins_env?strtol(preflight_spins_env,NULL,10):2;
+#else
+        const long preflight_spins=preflight_spins_env?strtol(preflight_spins_env,NULL,10):0;
+#endif
+        if (preflight_spins>0 && preflight_spins<1000) {
+            const int64_t wait_site=find_unique_pattern(
+                image_size,"4883c060 ba10270000 4889c6 e8???????? 89c1 81f93c000280");
+            if (wait_site<0) {
+                printf("Job workers: incomplete 2-spin/wake signatures; keeping original workers (1 ms wait missing)\n");
+                return;
+            }
+            const char *preflight_wake=getenv("BB_JOB_RESUME_WAKE");
+            if (preflight_wake && preflight_wake[0]=='1') {
+                static const unsigned char bc[]={0x49,0x8b,0x3e,0x48,0x83,0xef,0x80,0xe8};
+                int have_broadcast=0;
+                for (int64_t pos=at[2];pos>=0 && pos+12<=(int64_t)image_size && pos<at[2]+0x200;++pos)
+                    if (!memcmp(image+pos,bc,sizeof(bc))) { have_broadcast=1; break; }
+                const int64_t resume_site1=find_unique_pattern(
+                    image_size,"48ff04fe 488b9000010000 48ffc7 4839d7 72e4 488b5db8 488b83d84e0000 488b8be04e0000");
+                const int64_t resume_site2=find_unique_pattern(
+                    image_size,"48ff04f2 488b8f00010000 48ffc6 4839ce 72e4 4c89442478 4d89cc 31c0 4889442438 e9");
+                if (!have_broadcast || resume_site1<0 || resume_site2<0) {
+                    printf("Job workers: incomplete 2-spin/wake signatures; keeping original workers (fiber wake missing)\n");
+                    return;
+                }
+            }
+        }
         for (i=0;i<3;++i) {
             memcpy(image+at[i]+builds[b][i].offset,builds[b][i].replacement,builds[b][i].size);
             printf("Job workers: %s at %#" PRIx64 " (idle workers sleep)\n",builds[b][i].name,

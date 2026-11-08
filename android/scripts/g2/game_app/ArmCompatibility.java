@@ -13,18 +13,19 @@ final class ArmCompatibility {
     }
     static String environment(String game,boolean fastReads,boolean smallBatches,boolean idleSleep) {
         boolean sequel="u2".equals(game)||"u3".equals(game);
+        // U2 retail 1.02 regression: the new worker sleep patch matched, but its
+        // 1 ms timer and fiber resume wake did NOT. Keep the prior Daedalus
+        // FEX worker policy for U2 until the complete native patch is validated.
+        boolean upstreamWorkers=idleSleep && !"u2".equals(game);
         // These options never choose a readback precision or override the side queue.
         return "BB_UMA_READBACK="+(sequel&&fastReads?"1":"0")+"\n"
             +"BB_FLUSH_DRAWS="+(sequel&&smallBatches?"100":"0")+"\n"
-            // Android 0.3.0: the game worker loop sleeps after 2 guest PAUSE
-            // iterations (instead of 1000); fiber resumption wakes sleepers.
-            // The existing runtime_jobspin hook remains a fallback for any
-            // executable whose worker byte patterns do not match upstream.
-            // Keep all mechanisms behind the SAME existing launcher toggle.
+            // The existing runtime_jobspin hook retains its original toggle.
+            // New 0.3.0 native worker patches are gated separately for U2.
             +"BB_JOB_SPIN="+(idleSleep?"256,20":"0")+"\n"
-            +"BB_JOB_SLEEP="+(idleSleep?"1":"0")+"\n"
-            +"BB_JOB_SPINS="+(idleSleep?"2":"0")+"\n"
+            +"BB_JOB_SLEEP="+(upstreamWorkers?"1":"0")+"\n"
+            +"BB_JOB_SPINS="+(upstreamWorkers?"2":"0")+"\n"
             +"BB_JOB_WAIT_US=1000\n"
-            +"BB_JOB_RESUME_WAKE="+(idleSleep?"1":"0")+"\n";
+            +"BB_JOB_RESUME_WAKE="+(upstreamWorkers?"1":"0")+"\n";
     }
 }
