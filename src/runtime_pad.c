@@ -16,6 +16,7 @@
  * Options, Tab touchpad, arrow keys and the wheel the d-pad, IJKL the right stick. */
 #define _GNU_SOURCE
 #include "runtime.h"
+#include "runtime_pad_host_policy.h"
 #include "gpu/bbgpu.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -544,9 +545,7 @@ static void sample_host(PadData *d) {
     if (scripted<0) {
         const char *file=getenv("BB_PAD_FILE"), *host=getenv("BB_PAD_HOST");
         const char *java_touch=getenv("BB_JAVA_TOUCH");
-        const int merge_host=(host && host[0]=='1') ||
-                             (java_touch && java_touch[0]=='1');
-        scripted=file && *file && !merge_host;
+        scripted=bb_pad_scripted_only(file,host,java_touch);
         printf("Runtime: BB_PAD_FILE mode %s (physical SDL gamepads %s)\n",
                scripted ? "scripted" : "merged", scripted ? "disabled" : "enabled");
     }
