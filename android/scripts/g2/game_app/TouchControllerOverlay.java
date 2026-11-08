@@ -22,15 +22,16 @@ final class TouchControllerOverlay extends View {
         "leftstick","l3","r3","rightstick"
     };
     private static final float[][] DEFAULT={
-        {87,105},{213,105},{640,105},{773,105},{1067,105},{1193,105},
-        {160,395},{90,465},{230,465},{160,535},
-        {1120,405},{1190,475},{1120,545},{1050,475},
-        {320,612},{420,614},{860,614},{960,612}
+        {83,100},{230,100},{615,100},{790,100},{1050,100},{1197,100},
+        {160,370},{78,452},{242,452},{160,534},
+        {1120,370},{1202,452},{1120,534},{1038,452},
+        {318,620},{445,620},{835,620},{964,620}
     };
     private final PadBridge pad;
     private final SharedPreferences preferences;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private float sizeMultiplier;
+    private float surfaceOpacity;
     private boolean actionIcons;
     private final Map<String,PointF> centers=new LinkedHashMap<>();
     private final SparseArray<String> controls=new SparseArray<>();
@@ -47,7 +48,8 @@ final class TouchControllerOverlay extends View {
     TouchControllerOverlay(Context context,PadBridge pad) {
         super(context); this.pad=pad;
         preferences=context.getSharedPreferences("uncharted_touch",Context.MODE_PRIVATE);
-        sizeMultiplier=preferences.getFloat("overlay_size",1.20f);
+        sizeMultiplier=Math.max(.8f,Math.min(1.35f,preferences.getFloat("overlay_size",1.20f)));
+        surfaceOpacity=Math.max(.20f,Math.min(.80f,preferences.getFloat("overlay_opacity",.40f)));
         actionIcons=preferences.getBoolean("overlay_action_icons",true);
         for (int i=0;i<NAMES.length;i++) {
             String name=NAMES[i];
@@ -60,7 +62,7 @@ final class TouchControllerOverlay extends View {
     float buttonSize() { return sizeMultiplier; }
     boolean usesActionIcons() { return actionIcons; }
     void setSize(float size) {
-        sizeMultiplier=Math.max(.8f,Math.min(1.65f,size));
+        sizeMultiplier=Math.max(.8f,Math.min(1.35f,size));
         preferences.edit().putFloat("overlay_size",sizeMultiplier).apply();
         release();invalidate();
     }
@@ -68,6 +70,12 @@ final class TouchControllerOverlay extends View {
         actionIcons=on;
         preferences.edit().putBoolean("overlay_action_icons",on).apply();
         invalidate();
+    }
+    // Surface opacity affects only the button backgrounds, never the labels
+    // or the hitboxes. Default is the same translucent gamepad as GoW 3.
+    private int backgroundColor(boolean down) {
+        final float opacity=Math.min(1f,surfaceOpacity+(down?.25f:0f));
+        return (Math.round(opacity*255f)<<24)|0x0030394c;
     }
     private PointF center(String name) { return centers.get(name); }
     // The 1280x720 layout drawn at one scale in the centred 16:9 area, as the game (MainActivity):
@@ -229,16 +237,18 @@ final class TouchControllerOverlay extends View {
     // GoW III and inFAMOUS use the original translucent PlayStation controls.
     // The optional action overlay draws native Canvas vectors, not OS-dependent
     // emoji (the previous font glyphs rendered inconsistently on Android).
+    // Used only to decide whether to draw a small auxiliary badge.
+    // It must NEVER replace the main PlayStation symbols like X, O, square, triangle.
     private static String actionLabel(String name) {
-        switch(name) {
-            case "triangle": return "PEGAR";
-            case "square": return "SOCO";
-            case "cross": return "PULAR";
-            case "circle": return "COBERT.";
-            case "l2": return "MIRAR";
-            case "r2": return "ATIRAR";
-            case "l1": return "GRANADA";
-            case "r1": return "RECAR.";
+        switch (name) {
+            case "triangle": return "interact";
+            case "square": return "melee";
+            case "cross": return "jump";
+            case "circle": return "cover";
+            case "l2": return "aim";
+            case "r2": return "fire";
+            case "l1": return "grenade";
+            case "r1": return "reload";
             default: return null;
         }
     }
@@ -315,23 +325,24 @@ final class TouchControllerOverlay extends View {
         PointF p=center(name);
         r*=sizeMultiplier;
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : pressed.contains(name) ? 0xaae8dfc9 : 0x6630394c);
+        paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : backgroundColor(pressed.contains(name)));
         c.drawCircle(p.x,p.y,r,paint);
         paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(3); paint.setColor(accent);
         c.drawCircle(p.x,p.y,r,paint);
         paint.setStyle(Paint.Style.FILL); paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setTextAlign(Paint.Align.CENTER);
-        String action=actionIcons?actionLabel(name):null;
-        if(action!=null){
-            drawActionGlyph(c,name,p.x,p.y-r*.16f,r*.54f);
-            paint.setTypeface(Typeface.DEFAULT_BOLD);
-            paint.setColor(0xfff2ead9);paint.setTextSize(10*sizeMultiplier);
-            c.drawText(action,p.x,p.y+r*.70f,paint);
-            paint.setColor(accent);paint.setTextSize(15*sizeMultiplier);
-            c.drawText(label,p.x+r*.74f,p.y-r*.66f,paint);
-        } else {
-            paint.setTextSize((label.length()>2 ? 19 : 33)*sizeMultiplier);
-            c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
+        // Exact GoW3/ISS pad layout: large PlayStation legend is always central.
+        paint.setColor(accent);
+        paint.setTextSize((label.length()>2 ? 19 : 33)*sizeMultiplier);
+        c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
+        if (actionIcons && actionLabel(name)!=null) {
+            // Small, backgrounded secondary pictogram; never use text/emoji
+            // inside the already crowded face-button cluster.
+            final float bx=p.x+r*.76f, by=p.y+r*.70f;
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(0xdd14202b);
+            c.drawCircle(bx,by,12*sizeMultiplier,paint);
+            drawActionGlyph(c,name,bx,by,9*sizeMultiplier);
         }
     }
     private void rectangle(Canvas c,String name,float width,String label) {
@@ -342,25 +353,28 @@ final class TouchControllerOverlay extends View {
         boolean lit=pressed.contains(name) ||
             (name.equals("touchpad") && pressed.contains("touchpad_right"));
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : lit ? 0xaae8dfc9 : 0x6630394c);
+        paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : backgroundColor(lit));
         c.drawRoundRect(p.x-width/2,p.y-25*sizeMultiplier,p.x+width/2,p.y+25*sizeMultiplier,14,14,paint);
         paint.setStyle(Paint.Style.STROKE); paint.setColor(0xbbc6ad76); paint.setStrokeWidth(2);
         c.drawRoundRect(p.x-width/2,p.y-25*sizeMultiplier,p.x+width/2,p.y+25*sizeMultiplier,14,14,paint);
         paint.setStyle(Paint.Style.FILL); paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setTextSize(19*sizeMultiplier); paint.setTextAlign(Paint.Align.CENTER);
-        String action=actionIcons?actionLabel(name):null;
-        if(action!=null) {
-            drawActionGlyph(c,name,p.x+width*.20f,p.y,16*sizeMultiplier);
-            paint.setTypeface(Typeface.DEFAULT_BOLD);paint.setColor(0xfff2ead9);
-            paint.setTextSize(13*sizeMultiplier);
-            c.drawText(label,p.x-width*.29f,p.y-(paint.ascent()+paint.descent())/2,paint);
-        } else {
-            c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
+        // Both shoulder legends and TOUCH/OPTIONS remain clean and readable.
+        final boolean badge=actionIcons && actionLabel(name)!=null;
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setColor(0xfff2ead9);
+        c.drawText(label,p.x-(badge?width*.18f:0f),
+                   p.y-(paint.ascent()+paint.descent())/2f,paint);
+        if (badge) {
+            final float bx=p.x+width*.29f, by=p.y;
+            paint.setColor(0xdd14202b);
+            c.drawCircle(bx,by,12*sizeMultiplier,paint);
+            drawActionGlyph(c,name,bx,by,9*sizeMultiplier);
         }
     }
     private void drawStick(Canvas c,String name) {
         PointF center=center(name);
-        paint.setStyle(Paint.Style.FILL); paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : 0x6630394c);
+        paint.setStyle(Paint.Style.FILL); paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : backgroundColor(false));
         c.drawCircle(center.x,center.y,57*sizeMultiplier,paint);
         paint.setStyle(Paint.Style.STROKE); paint.setColor(0xffa0aec0); paint.setStrokeWidth(3);
         c.drawCircle(center.x,center.y,57*sizeMultiplier,paint);
@@ -401,7 +415,7 @@ final class TouchControllerOverlay extends View {
             paint.setColor(0xfff1e7ca); paint.setTypeface(Typeface.DEFAULT_BOLD);
             paint.setTextAlign(Paint.Align.CENTER);paint.setTextSize(18);
             c.drawText("- SIZE",379,43,paint);c.drawText("+ SIZE",486,43,paint);
-            c.drawText(actionIcons?"ACOES":"PLAYSTATION",845,43,paint);
+            c.drawText(actionIcons?"SIMBOLOS + ACOES":"PLAYSTATION",845,43,paint);
             c.drawText("RESET",1037,43,paint);
             paint.setStyle(Paint.Style.FILL); paint.setColor(0xcc15171d);
             c.drawRoundRect(548,9,732,62,13,13,paint);

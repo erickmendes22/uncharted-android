@@ -682,7 +682,7 @@ public class Launcher extends Activity {
         android.content.SharedPreferences touchPrefs=getSharedPreferences("uncharted_touch", MODE_PRIVATE);
         TextView touchSize=text(root,"Touch button size · "+Math.round(touchPrefs.getFloat("overlay_size",1.20f)*100)+"%",14,false);
         android.widget.SeekBar touchScale=new android.widget.SeekBar(this);
-        touchScale.setMax(85);touchScale.setProgress(Math.round((touchPrefs.getFloat("overlay_size",1.20f)-.8f)*100f));
+        touchScale.setMax(55);touchScale.setProgress(Math.round((Math.max(.8f,Math.min(1.35f,touchPrefs.getFloat("overlay_size",1.20f)))-.8f)*100f));
         touchScale.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){
             @Override public void onProgressChanged(android.widget.SeekBar bar,int progress,boolean user){
                 if(user) {
@@ -696,12 +696,28 @@ public class Launcher extends Activity {
         });
         root.addView(touchScale);
         CheckBox iconControls=new CheckBox(this);
-        iconControls.setText("GoW3 style · gameplay action icons");
+        iconControls.setText("PlayStation classico + pequenos indicadores de acao");
         iconControls.setTextColor(0xffeee2cc);
         iconControls.setChecked(touchPrefs.getBoolean("overlay_action_icons",true));
         iconControls.setOnCheckedChangeListener((button,on)->touchPrefs.edit()
             .putBoolean("overlay_action_icons",on).apply());
         root.addView(iconControls);
+        TextView touchOpacity=text(root,"Opacidade dos controles · "+
+            Math.round(touchPrefs.getFloat("overlay_opacity",.40f)*100f)+"%",14,false);
+        android.widget.SeekBar alphaScale=new android.widget.SeekBar(this);
+        alphaScale.setMax(60);
+        alphaScale.setProgress(Math.round((touchPrefs.getFloat("overlay_opacity",.40f)-.20f)*100f));
+        alphaScale.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){
+            @Override public void onProgressChanged(android.widget.SeekBar b,int progress,boolean user){
+                if (!user) return;
+                final float opacity=.20f+progress/100f;
+                touchPrefs.edit().putFloat("overlay_opacity",opacity).apply();
+                touchOpacity.setText("Opacidade dos controles · "+Math.round(opacity*100f)+"%");
+            }
+            @Override public void onStartTrackingTouch(android.widget.SeekBar b){}
+            @Override public void onStopTrackingTouch(android.widget.SeekBar b){}
+        });
+        root.addView(alphaScale);
         button(root,"Edit control layout (drag and resize)",v->editTouchLayout());
         root = card(home, "FRAME GENERATION");
         text(root, "LSFG requires your own Lossless.dll.", 14, false);
