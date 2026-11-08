@@ -1169,12 +1169,16 @@ public class Launcher extends Activity {
         state.setPadding(dp(8),0,dp(8),0);
         Runnable update=()->{
             boolean aa=key.equals("patch_Disable anti-aliasing");
+            boolean blur=key.equals("patch_Disable motion blur");
             int fsr=prefs.getInt("mobile_upscale",0);
-            boolean managedAa=aa && UpscalePreset.normalize(fsr)>0;
-            boolean enabled=aa ? !UpscalePreset.disableNativeAa(fsr,prefs.getBoolean(key,false)) : !prefs.getBoolean(key,false);
-            state.setEnabled(!managedAa);
-            state.setText(managedAa?"FSR":AppLanguage.text(enabled?"Enabled":"Disabled"));
-            state.setContentDescription(AppLanguage.text(title)+": "+(managedAa?"FSR":AppLanguage.text(enabled?"Enabled in game":"Disabled in game")));
+            boolean managed= (aa||blur) && UpscalePreset.normalize(fsr)>0;
+            boolean disabled=aa?UpscalePreset.disableNativeAa(fsr,prefs.getBoolean(key,false))
+                :blur?UpscalePreset.disableMotionBlur(fsr,prefs.getBoolean(key,false))
+                :prefs.getBoolean(key,false);
+            boolean enabled=!disabled;
+            state.setEnabled(!managed);
+            state.setText(managed?"TEMPORAL":AppLanguage.text(enabled?"Enabled":"Disabled"));
+            state.setContentDescription(AppLanguage.text(title)+": "+(managed?"Required for temporal upscale":AppLanguage.text(enabled?"Enabled in game":"Disabled in game")));
             state.setTextColor(enabled?accent:0xFFB0AAA0);
             GradientDrawable bg=new GradientDrawable();bg.setCornerRadius(dp(10));
             bg.setColor(enabled?0x333D3321:0xFF222522);bg.setStroke(dp(1),enabled?accent:0xFF555B54);state.setBackground(bg);
@@ -1185,7 +1189,10 @@ public class Launcher extends Activity {
                 prefs.edit().putBoolean(key,which==1).apply();update.run();dialog.dismiss();
             }).setNegativeButton("Cancel",null).show();
         });
-        if(key.equals("patch_Disable anti-aliasing"))refreshNativeAa=update;
+        if(key.equals("patch_Disable anti-aliasing") || key.equals("patch_Disable motion blur")) {
+            Runnable previous=refreshNativeAa;
+            refreshNativeAa=previous==null?update:()->{previous.run();update.run();};
+        }
         update.run();line.addView(state,new LinearLayout.LayoutParams(dp(100),dp(44)));
         parent.addView(line);
         View divider=new View(this);divider.setBackgroundColor(0x225F553A);parent.addView(divider,new LinearLayout.LayoutParams(-1,dp(1)));
@@ -1223,7 +1230,9 @@ public class Launcher extends Activity {
     private byte[] makePreset(String recipe, File boot, int width, int height) {
         byte[] nativePreset = makeBasePreset(recipe, boot, width, height);
         boolean fsrRequested=UpscalePreset.normalize(prefs.getInt("mobile_upscale",0))>0;
-        boolean nativeAaReady=!fsrRequested;
+        // Unlike the previous build, keep native AA enabled for FSR/GSR:
+        // disabling it removed temporal inputs and caused black flicker.
+        boolean nativeAaReady=true;
         try (RandomAccessFile file = new RandomAccessFile(boot, "r")) {
             byte[] head = new byte[16]; file.readFully(head);
             long imageSize = ByteBuffer.wrap(head, 8, 8).order(ByteOrder.LITTLE_ENDIAN).getLong();
@@ -1253,6 +1262,7 @@ public class Launcher extends Activity {
                     : name.startsWith("Shadows: 2") ? prefs.getInt("shadow_cascades", 0) == 1
                     : name.startsWith("Shadows: 1") ? prefs.getInt("shadow_cascades", 0) == 2
                     : name.equals("Disable anti-aliasing") ? UpscalePreset.disableNativeAa(prefs.getInt("mobile_upscale",0),prefs.getBoolean("patch_"+name,false))
+                    : name.equals("Disable motion blur") ? UpscalePreset.disableMotionBlur(prefs.getInt("mobile_upscale",0),prefs.getBoolean("patch_"+name,false))
                     : prefs.getBoolean("patch_" + name, false);
                 if (wanted) groups.computeIfAbsent(name, key -> new ArrayList<>()).add(patch);
             }
