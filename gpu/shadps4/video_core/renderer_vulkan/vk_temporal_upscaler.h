@@ -198,6 +198,10 @@ private:
     bool RecordFsr4(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Image color, Fsr4Upscaler::Image depth,
                     u32 w, u32 h, u32 ow, u32 oh, float frame_ms);
     void RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color, vk::ImageView depth);
+    /// Snapdragon GSR 2: two compute passes (convert + temporal upscale).
+    void RecordGsr2(vk::CommandBuffer cmdbuf, vk::ImageView color, vk::ImageView depth,
+                    u32 w, u32 h, u32 ow, u32 oh);
+    [[nodiscard]] static bool UseGsr2();
     /// Sharpness above 1 for FSR 3/4 (their RCAS stops at 1): one more RCAS pass over the target
     /// (output_image, or the 8-bit UI image with ldr) in General layout after the upscaler.
     void ExtraSharpen(vk::CommandBuffer cmdbuf, vk::Image target, bool ldr, u32 w, u32 h);
@@ -275,6 +279,7 @@ private:
     bool resources_ready = false; ///< images below match width/height/out size
     bool resources_fsr4 = false;  ///< made for FSR 4 (no FSR 3 context)
     bool resources_taa = false;
+    bool resources_gsr2 = false;
     std::unique_ptr<Fsr4Upscaler> fsr4;
     bool fsr4_failed = false;
     bool dlss_failed = false;
@@ -303,6 +308,16 @@ private:
     vk::UniquePipelineLayout taa_sharpen_pipeline_layout;
     vk::UniquePipeline taa_sharpen_pipeline;
     vk::UniquePipeline taa_sharpen_ldr_pipeline;
+    // Two-pass Snapdragon GSR 2: motion+depth clip, luminance, two ping-pong histories.
+    VideoCore::UniqueImage gsr_mdc_image, gsr_luma_image;
+    vk::UniqueImageView gsr_mdc_view, gsr_luma_view;
+    std::array<VideoCore::UniqueImage, 2> gsr_history;
+    std::array<vk::UniqueImageView, 2> gsr_history_views;
+    u32 gsr_next = 0;
+    vk::UniqueSampler gsr_linear_sampler;
+    vk::UniqueDescriptorSetLayout gsr_desc_layout;
+    vk::UniquePipelineLayout gsr_pipeline_layout;
+    vk::UniquePipeline gsr_convert_pipeline, gsr_upscale_pipeline;
     // ExtraSharpen: a copy of the upscaled frame (RCAS reads neighbours) and the target views.
     VideoCore::UniqueImage extra_sharpen_image;
     vk::UniqueImageView extra_sharpen_view;
