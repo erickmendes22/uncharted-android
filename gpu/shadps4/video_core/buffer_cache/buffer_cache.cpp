@@ -55,7 +55,14 @@ std::atomic<bool> land_stopping{false};
 
 
 static constexpr size_t GDS_BUFFER_SIZE = 64_KB;
+// RedVorteX ARM 0.1.8 / spacepepperoni: avoid exhausting the stream ring in
+// heavy scenes. Android uses 256 MiB (upstream mobile budget); other platforms
+// keep the pre-regression Daedalus value.
+#ifdef __ANDROID__
+static constexpr size_t STREAM_BUFFER_SIZE = 256_MB;
+#else
 static constexpr size_t STREAM_BUFFER_SIZE = 128_MB;
+#endif
 
 static constexpr auto ARENA_USAGE =
     vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst |

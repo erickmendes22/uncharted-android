@@ -25,7 +25,13 @@ namespace Vulkan {
 
 class ConstantRing {
 public:
+    // RedVorteX ARM 0.1.8: the old 32 MiB ring can require a GPU retirement
+    // poll each draw in busy scenes. Android mobile budget: 128 MiB.
+#ifdef __ANDROID__
+    static constexpr u64 Capacity = 128ull << 20;
+#else
     static constexpr u64 Capacity = 32ull << 20;
+#endif
 
     ConstantRing(const Instance& instance, Scheduler& scheduler_)
         : scheduler{scheduler_}, buffer{instance, 0, Capacity, RingMemoryType(),
