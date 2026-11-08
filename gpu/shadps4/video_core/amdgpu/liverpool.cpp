@@ -4,6 +4,7 @@
 #include <chrono>
 #include <algorithm>
 #include <vector>
+#include <array>
 #include <unordered_map>
 #include <thread>
 #include <pthread.h>
@@ -33,6 +34,7 @@
 #include "video_core/renderdoc.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
 #include "video_core/landing_gate.h"
+#include "video_core/chained_writes.h"
 
 namespace AmdGpu {
 
@@ -359,6 +361,7 @@ void RunMidFrameFlush(Vulkan::Rasterizer& rasterizer, const u8*) {
 
 void Liverpool::Process(std::stop_token stoken) {
     Common::SetCurrentThreadName("shadPS4:GpuCommandProcessor");
+    VideoCore::ChainedWrites::AllowWait();
     on_processor_thread = true;
 #ifndef _WIN32
     if (clockid_t clock; pthread_getcpuclockid(pthread_self(), &clock) == 0) {
@@ -836,8 +839,47 @@ void SignalFlip(Vulkan::Rasterizer& rasterizer, const u8*) {
 
 void RunWriteData(Vulkan::Rasterizer& rasterizer, const u8* data);
 
+// RedVorteX ARM v0.1.8: allow eligible small labels to land behind earlier
+// host-copy fences. Daedalus' sequence must be marked written IN the callback.
+// Opt-in only: BB_CHAIN_WRITEDATA=1; otherwise exact old 0.2.9 path.
+static bool TryChainWriteDataSeq(Vulkan::Rasterizer& rasterizer, const WriteDataTask& task) {
+    static const bool enabled = [] {
+        const char* env = std::getenv("BB_CHAIN_WRITEDATA");
+        return env && env[0] == '1';
+    }();
+    if (!enabled || task.seq == 0 || !Vulkan::DrawPipe::OnStageB() ||
+        BbToggle::Disabled(BbToggle::RecorderFences)) return false;
+    const auto* header = reinterpret_cast<const PM4Header*>(task.packet);
+    const auto* write_data = reinterpret_cast<const PM4CmdWriteData*>(task.packet);
+    const u32 count = header->type3.count.Value();
+    if (count < 3 || count > 4) return false;
+    const size_t size = (count - 2) * sizeof(u32);
+    const u64 address = write_data->Address<u64>();
+    if (!address || address > ~u64{0} - (size - 1) ||
+        (address & ~u64(4095)) != ((address + size - 1) & ~u64(4095))) return false;
+    auto& cache = rasterizer.GetBufferCache();
+    if (!cache.IsRegionCpuModified(address, size) ||
+        cache.IsRegionGpuModified(address, size)) return false;
+    std::array<u32, 2> words{};
+    std::memcpy(words.data(), write_data->data, size);
+    cache.CheckStableBindings();
+    rasterizer.CheckConstants();
+    auto landed = VideoCore::ChainedWrites::Add(address, size);
+    rasterizer.SignalAfterHostCopies(
+        [address, size, words, landed = std::move(landed), seq = task.seq] {
+            BbWriteLog::Note(address, words.data(), size, BbWriteLog::WriteData);
+            auto* mem = Core::Memory::Instance();
+            if (!mem->TryWriteBacking(reinterpret_cast<void*>(address), words.data(), size))
+                std::memcpy(reinterpret_cast<void*>(address), words.data(), size);
+            VideoCore::ChainedWrites::Landed(landed);
+            FenceWritten(seq); // only after the guest bytes land
+        }, VideoCore::LandingGate::Pending());
+    return true;
+}
+
 void RunWriteDataSeq(Vulkan::Rasterizer& rasterizer, const u8* data) {
     const auto& task = *reinterpret_cast<const WriteDataTask*>(data);
+    if (TryChainWriteDataSeq(rasterizer, task)) return;
     RunWriteData(rasterizer, reinterpret_cast<const u8*>(task.packet));
     FenceWritten(task.seq);
 }

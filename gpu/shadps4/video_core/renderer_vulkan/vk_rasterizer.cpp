@@ -6,6 +6,7 @@
 #include "core/libraries/videoout/driver.h"
 #include <xxhash.h>
 #include "video_core/renderer_vulkan/ui_composition.h"
+#include "video_core/chained_writes.h"
 #include "bbport_owner_wait.h"
 #include "bbport_toggles.h"
 #include "video_core/renderer_vulkan/vk_frame_capture.h"
@@ -745,6 +746,7 @@ void Rasterizer::NotePendingGpuWrite(VAddr address, u64 size) {
 }
 
 bool Rasterizer::PendingWriteOverlaps(VAddr address, u64 size) {
+    if (VideoCore::ChainedWrites::Overlaps(address, size)) return true;
     if (pending_writes.empty() || address >= pending_max || address + size <= pending_min) {
         return false;
     }
