@@ -40,6 +40,9 @@ void Swapchain::Create(u32 width_, u32 height_) {
     needs_recreation = false;
 
     Destroy();
+    // PC 0.3.14 / BilalReloaded: swapchain recreation can shrink the image
+    // count; a previous frame_index then indexes past the refreshed semaphores.
+    image_index = frame_index = 0;
 
     if (!SetSurfaceProperties()) {
         surface_lost = true;
