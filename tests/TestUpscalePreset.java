@@ -8,8 +8,15 @@ public final class TestUpscalePreset {
   }
   if(!UpscalePreset.label(3).equals("FSR Balanced"))throw new AssertionError("balanced label");
   if(!UpscalePreset.label(4).equals("FSR Performance"))throw new AssertionError("performance label");
-  if(!UpscalePreset.label(5).equals("FSR Performance"))throw new AssertionError("legacy preset migration");
-  for(int mode=0;mode<=4;++mode)for(boolean saved:new boolean[]{false,true}) {
+  if(!UpscalePreset.label(5).equals("GSR 2 Native AA"))throw new AssertionError("GSR native");
+  if(!UpscalePreset.label(8).equals("GSR 2 Performance"))throw new AssertionError("GSR performance");
+  for(int mode=5;mode<=8;mode++) {
+   if(!UpscalePreset.input(mode,"1920x1080").equals(expected[mode-4]))throw new AssertionError("GSR input "+mode);
+   if(!UpscalePreset.provider(mode).equals("gsr2"))throw new AssertionError("GSR provider "+mode);
+   if(UpscalePreset.preset(mode)!=mode-4)throw new AssertionError("GSR preset "+mode);
+  }
+  if(!UpscalePreset.provider(4).equals("fsr3"))throw new AssertionError("FSR provider");
+  for(int mode=0;mode<=8;++mode)for(boolean saved:new boolean[]{false,true}) {
    boolean effective=UpscalePreset.disableNativeAa(mode,saved);
    if(effective!=(mode==0 && saved))throw new AssertionError("native AA conflict mode="+mode);
   }

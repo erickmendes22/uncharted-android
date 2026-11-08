@@ -161,7 +161,13 @@ public class Launcher extends Activity {
             prefs.edit().putBoolean("ui_v028",true).apply();
             iniPut("hud_position","0");iniPut("hud_scale","1.0");
         }
-        if(prefs.getInt("mobile_upscale",0)==5)prefs.edit().putInt("mobile_upscale",4).apply();
+        // Mode 5 in legacy releases was a malformed FSR entry. Migrate it ONCE
+        // before assigning 5..8 to genuine Snapdragon GSR 2 presets.
+        if(!prefs.getBoolean("ui_gsr2_v1",false)){
+            SharedPreferences.Editor edit=prefs.edit().putBoolean("ui_gsr2_v1",true);
+            if(prefs.getInt("mobile_upscale",0)==5)edit.putInt("mobile_upscale",4);
+            edit.apply();
+        }
         if("fsr3".equals(iniGet("frame_gen")) || "dlss".equals(iniGet("frame_gen")))iniPut("frame_gen","off");
         if(savedInstanceState!=null)selectedPage=savedInstanceState.getInt("selected_page",0);
         if(savedInstanceState!=null){
@@ -547,7 +553,7 @@ public class Launcher extends Activity {
         LinearLayout page = root;
         // Manual resolution is only selectable without FSR; FSR's own presets define input size.
         LinearLayout displayCard = card(home, "DISPLAY & PERFORMANCE");
-        text(displayCard, "Internal resolution (FSR off):", 14, false);
+        text(displayCard, "Internal resolution (upscaler off):", 14, false);
         resolution = new RadioGroup(this);
         Button resolutionChoice = button(displayCard, "Internal resolution · " + chosenResolution(), null);
         Runnable updateManualResolution = () -> {
@@ -572,8 +578,8 @@ public class Launcher extends Activity {
                     dialog.dismiss();
                 }).setNegativeButton("Cancel", null).show();
         });
-        note(displayCard, "Manual resolution is available only with FSR disabled. "
-            + "FSR modes set their own input resolution; changes apply on the next game start.");
+        note(displayCard, "Manual resolution is available only with temporal upscaling disabled. "
+            + "FSR 3.1 and Snapdragon GSR 2 set their own input resolution; changes apply on the next game start.");
         buildPatchOptions(patches);
         android.widget.Switch fullscreen=new android.widget.Switch(this);
         fullscreen.setText(AppLanguage.text("Fullscreen"));fullscreen.setTextColor(0xFFF4EFDF);fullscreen.setMinHeight(dp(54));
@@ -582,8 +588,9 @@ public class Launcher extends Activity {
         note(displayCard,"Off: original aspect ratio. On: fill the screen.");
         Button upscaleChoice=button(displayCard,"Upscale · "+upscaleLabel(prefs.getInt("mobile_upscale",0)),null);
         upscaleChoice.setOnClickListener(v->{
-            String[] labels={"Off · manual resolution","FSR 3.1 Native AA · 720p","FSR 3.1 Quality · 540p → 720p","FSR 3.1 Balanced · 468p → 720p","FSR 3.1 Performance · 360p → 720p"};
-            int[] values={0,1,2,3,4};int selected=0;
+            String[] labels={"Off · manual resolution","FSR 3.1 Native AA · 720p","FSR 3.1 Quality · 540p → 720p","FSR 3.1 Balanced · 468p → 720p","FSR 3.1 Performance · 360p → 720p",
+                "Snapdragon GSR 2 Native AA · 720p","Snapdragon GSR 2 Quality · 540p → 720p","Snapdragon GSR 2 Balanced · 468p → 720p","Snapdragon GSR 2 Performance · 360p → 720p"};
+            int[] values={0,1,2,3,4,5,6,7,8};int selected=0;
             for(int n=0;n<values.length;n++)if(values[n]==prefs.getInt("mobile_upscale",0))selected=n;
             new ExpeditionDialog(this).setTitle(AppLanguage.text("Upscale")).setSingleChoiceItems(labels,selected,(dialog,which)->{
                 prefs.edit().putInt("mobile_upscale",values[which]).apply();
@@ -1488,7 +1495,7 @@ public class Launcher extends Activity {
         }
         StringBuilder e = new StringBuilder();
         e.append("BB_MOBILE_UPSCALE=0\n");
-        if(upscale>0){iniPut("output_res","1280x720");iniPut("upscaler","fsr3");iniPut("preset",Integer.toString(upscale-1));}
+        if(upscale>0){iniPut("output_res","1280x720");iniPut("upscaler",UpscalePreset.provider(upscale));iniPut("preset",Integer.toString(UpscalePreset.preset(upscale)-1));}
         else {iniPut("preset","0");iniPut("upscaler","off");}
         e.append("# Written by the launcher on every start; edit the settings there.\n");
         e.append("BB_FULLSCREEN=1\nBB_FPS_LOG=0\nBB_THERMAL_LOG=0\nBB_MIDFRAME_FLUSH=10\nBB_DEFERRED_SUBMIT=1\nBB_SKIN_BATCH=1\n");
