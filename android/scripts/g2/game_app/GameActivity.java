@@ -29,6 +29,9 @@ public class GameActivity extends SDLActivity {
     private PadBridge androidPad;
     private TouchControllerOverlay androidPadView;
     private File touchEditRequest;
+    private File touchStyleRequest;
+    private File touchStyleState;
+    private String lastTouchStyle="";
     private final android.os.Handler padHandler =
         new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable padVisibilityPoll = new Runnable() {
@@ -38,6 +41,20 @@ public class GameActivity extends SDLActivity {
             // Polling this private one-shot file avoids touching SDL input mappings.
             if (touchEditRequest != null && touchEditRequest.exists() && touchEditRequest.delete()) {
                 if (!androidPadView.isEditing()) androidPadView.edit(null);
+            }
+            androidPadView.syncStyle();
+            if (touchStyleRequest != null && touchStyleRequest.exists() && touchStyleRequest.delete()) {
+                androidPadView.toggleStyle();
+            }
+            // The native Controls tab can read which style is active. Write
+            // only on changes; no per-frame storage or changes to SDL input.
+            String currentStyle=androidPadView.getStyle();
+            if (touchStyleState != null && !currentStyle.equals(lastTouchStyle)) {
+                try(FileWriter writer=new FileWriter(touchStyleState,false)) {
+                    writer.write(currentStyle);
+                    writer.write("\n");
+                    lastTouchStyle=currentStyle;
+                } catch(IOException error) { android.util.Log.w("UnchartedTouch","Cannot save style",error); }
             }
             boolean nativeMenu = false;
             try { nativeMenu = nativeOverlayCapturing(); }
@@ -223,6 +240,12 @@ public class GameActivity extends SDLActivity {
             touchEditRequest = new File(d, "touch-edit-request");
             touchEditRequest.delete();
             Os.setenv("BB_TOUCH_EDIT_REQUEST", touchEditRequest.getAbsolutePath(), true);
+            touchStyleRequest = new File(d,"touch-style-request");
+            touchStyleState = new File(d,"touch-style-state");
+            touchStyleRequest.delete();
+            touchStyleState.delete();
+            Os.setenv("BB_TOUCH_STYLE_REQUEST",touchStyleRequest.getAbsolutePath(),true);
+            Os.setenv("BB_TOUCH_STYLE_STATE",touchStyleState.getAbsolutePath(),true);
             Os.setenv("BB_UI_LANGUAGE",AppLanguage.code(),true);
             // The collection's shaders the upscaler hooks (docs/upscaler.md; run.py sets the same
             // on a PC): the camera velocity pass, the first compute after the lit scene, the

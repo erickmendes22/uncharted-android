@@ -231,6 +231,27 @@ void AndroidMenu(float base_scale, float frame_ms, bool& keep_open) {
             Toggle("Swipe camera (instead of analog)",s.touch_mobile);
             Slider("Camera drag sensitivity",s.touch_pad_look,.25f,4.f);
             Note("Left: movement. Right: camera.");
+            Section("Android touch layout");
+            // The View owns the real virtual controller; use a one-shot request
+            // to switch its persistent style instead of creating a second pad.
+            bool action_layout=true;
+            if(const char* state_path=std::getenv("BB_TOUCH_STYLE_STATE")) {
+                if(FILE* file=std::fopen(state_path,"rb")) {
+                    char mode[24]={};
+                    if(std::fgets(mode,sizeof(mode),file) && mode[0]=='c')
+                        action_layout=false;
+                    std::fclose(file);
+                }
+            }
+            Note(action_layout?"Current: Uncharted (GoW3 action icons)":"Current: Classic PlayStation");
+            if(ImGui::Button(action_layout?"Switch to Classic PlayStation":"Switch to Uncharted action icons",{-1,0})) {
+                if(const char* request=std::getenv("BB_TOUCH_STYLE_REQUEST")) {
+                    if(FILE* file=std::fopen(request,"wb")) {
+                        std::fputc('1',file);std::fclose(file);
+                    }
+                }
+                keep_open=false;
+            }
             // The Android View has the touch layout and its editor, not SDL/ImGui.
             // Close the native panel before the Java controller receives the request.
             if(ImGui::Button("Edit touch layout (move, resize, icons)",{-1,0})) {

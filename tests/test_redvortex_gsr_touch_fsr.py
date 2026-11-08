@@ -22,11 +22,16 @@ assert 'w.write("/app0/eboot.bin' not in game
 assert 'Collection menu: not found, the menu stays' in f('src/probe.c')
 assert "touchEditRequest.exists()" in game
 assert "BB_TOUCH_EDIT_REQUEST" in overlay and "keep_open=false" in overlay
-assert 'putFloat("overlay_size"' in touch
-assert 'putBoolean("overlay_action_icons"' in touch
+assert 'putFloat(sizeKey()' in touch
+assert 'putString("overlay_style"' in touch
 assert "actionLabel(" in touch and "drawActionGlyph(" in touch and "isEditing()" in touch
+assert 'ACTION_DEFAULT' in touch and 'DEFAULT' in touch
+assert 'TouchControllerOverlay.UNCHARTED_STYLE' in launcher
+assert 'TouchControllerOverlay.CLASSIC_STYLE' in launcher
+assert 'BB_TOUCH_STYLE_REQUEST' in game and 'BB_TOUCH_STYLE_STATE' in game
+assert 'BB_TOUCH_STYLE_REQUEST' in overlay and 'BB_TOUCH_STYLE_STATE' in overlay
 assert "✋" not in touch and "✊" not in touch and "⬡" not in touch
-assert "Edit control layout (drag and resize)" in launcher
+assert "Editar posicao e tamanho dos botoes" in launcher
 assert "GSR 2 Native AA" in preset and 'return normalize(mode)>=5?"gsr2":"fsr3";' in preset
 assert 'iniPut("upscaler",UpscalePreset.provider(upscale))' in launcher
 assert "UpscalerGsr2" in header or "UseGsr2" in header

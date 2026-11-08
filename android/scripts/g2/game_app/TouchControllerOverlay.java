@@ -27,11 +27,20 @@ final class TouchControllerOverlay extends View {
         {1120,405},{1190,475},{1120,545},{1050,475},
         {320,612},{420,614},{860,614},{960,612}
     };
+    // The approved Uncharted action layout follows the GoW III geometry.
+    // Positions are independent of the original PlayStation layout.
+    private static final float[][] ACTION_DEFAULT={
+        {292,120},{98,120},{572,95},{710,95},{987,120},{1181,120},
+        {171,288},{113,346},{229,346},{171,404},
+        {1090,292},{1192,400},{1090,512},{986,400},
+        {162,591},{344,634},{1004,634},{822,591}
+    };
     private final PadBridge pad;
     private final SharedPreferences preferences;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private float sizeMultiplier;
-    private boolean actionIcons;
+    private float surfaceOpacity;
+    private boolean unchartedStyle;
     private final Map<String,PointF> centers=new LinkedHashMap<>();
     private final SparseArray<String> controls=new SparseArray<>();
     private final SparseArray<PointF> positions=new SparseArray<>();
@@ -47,26 +56,49 @@ final class TouchControllerOverlay extends View {
     TouchControllerOverlay(Context context,PadBridge pad) {
         super(context); this.pad=pad;
         preferences=context.getSharedPreferences("uncharted_touch",Context.MODE_PRIVATE);
-        sizeMultiplier=preferences.getFloat("overlay_size",1.20f);
-        actionIcons=preferences.getBoolean("overlay_action_icons",true);
-        for (int i=0;i<NAMES.length;i++) {
-            String name=NAMES[i];
-            centers.put(name,new PointF(preferences.getFloat("overlay_x_"+name,DEFAULT[i][0]),
-                                        preferences.getFloat("overlay_y_"+name,DEFAULT[i][1])));
-        }
+        loadStyle();
         setContentDescription("On-screen PlayStation controller, GoW III / inFAMOUS layout");
     }
+    static final String CLASSIC_STYLE="classic";
+    static final String UNCHARTED_STYLE="uncharted";
     boolean isEditing() { return editing; }
-    float buttonSize() { return sizeMultiplier; }
-    boolean usesActionIcons() { return actionIcons; }
+    boolean isUnchartedStyle() { return unchartedStyle; }
+    String getStyle() { return unchartedStyle ? UNCHARTED_STYLE : CLASSIC_STYLE; }
+    private String positionPrefix() { return unchartedStyle ? "overlay_uncharted_" : "overlay_"; }
+    private String sizeKey() { return unchartedStyle ? "overlay_uncharted_size" : "overlay_size"; }
+    private String opacityKey() { return unchartedStyle ? "overlay_uncharted_opacity" : "overlay_opacity"; }
+    private void loadStyle() {
+        unchartedStyle=UNCHARTED_STYLE.equals(preferences.getString("overlay_style",UNCHARTED_STYLE));
+        sizeMultiplier=Math.max(.75f,Math.min(1.65f,preferences.getFloat(sizeKey(),unchartedStyle?1f:1.20f)));
+        surfaceOpacity=Math.max(.10f,Math.min(.9f,preferences.getFloat(opacityKey(),unchartedStyle?.15f:.40f)));
+        float[][] defaults=unchartedStyle?ACTION_DEFAULT:DEFAULT;
+        centers.clear();
+        for (int i=0;i<NAMES.length;i++) {
+            String name=NAMES[i],prefix=positionPrefix();
+            centers.put(name,new PointF(preferences.getFloat(prefix+"x_"+name,defaults[i][0]),
+                                        preferences.getFloat(prefix+"y_"+name,defaults[i][1])));
+        }
+    }
+    void syncStyle() {
+        String saved=preferences.getString("overlay_style",UNCHARTED_STYLE);
+        if (!saved.equals(getStyle())) { release(); loadStyle(); invalidate(); }
+    }
+    void setStyle(String style) {
+        if (!CLASSIC_STYLE.equals(style) && !UNCHARTED_STYLE.equals(style)) return;
+        if (style.equals(getStyle())) return;
+        release();
+        preferences.edit().putString("overlay_style",style).apply();
+        loadStyle(); invalidate();
+    }
+    void toggleStyle() { setStyle(unchartedStyle?CLASSIC_STYLE:UNCHARTED_STYLE); }
     void setSize(float size) {
-        sizeMultiplier=Math.max(.8f,Math.min(1.65f,size));
-        preferences.edit().putFloat("overlay_size",sizeMultiplier).apply();
+        sizeMultiplier=Math.max(.75f,Math.min(unchartedStyle?1.3f:1.65f,size));
+        preferences.edit().putFloat(sizeKey(),sizeMultiplier).apply();
         release();invalidate();
     }
-    void setActionIcons(boolean on) {
-        actionIcons=on;
-        preferences.edit().putBoolean("overlay_action_icons",on).apply();
+    void setOpacity(float opacity) {
+        surfaceOpacity=Math.max(.1f,Math.min(.9f,opacity));
+        preferences.edit().putFloat(opacityKey(),surfaceOpacity).apply();
         invalidate();
     }
     private PointF center(String name) { return centers.get(name); }
@@ -89,16 +121,27 @@ final class TouchControllerOverlay extends View {
     }
     private String hit(float x,float y) {
         PointF dpad=dpadCenter();
-        if (!editing && distance(x,y,dpad)<112*sizeMultiplier && distance(center("up").x,center("up").y,dpad)<115*sizeMultiplier &&
+        if (unchartedStyle && distance(x,y,dpad)<75*sizeMultiplier) return "dpad";
+        if (!unchartedStyle && !editing && distance(x,y,dpad)<112*sizeMultiplier &&
+            distance(center("up").x,center("up").y,dpad)<115*sizeMultiplier &&
             distance(center("left").x,center("left").y,dpad)<115*sizeMultiplier &&
             distance(center("right").x,center("right").y,dpad)<115*sizeMultiplier &&
             distance(center("down").x,center("down").y,dpad)<115*sizeMultiplier) return "dpad";
         String winner=null; float best=Float.MAX_VALUE;
         for (String name:NAMES) {
+            if (unchartedStyle && (name.equals("up") || name.equals("down") ||
+                                    name.equals("left") || name.equals("right"))) continue;
             PointF p=center(name);
             float dx=Math.abs(x-p.x),dy=Math.abs(y-p.y);
-            boolean inside=rectangle(name) ? dx<(name.equals("touchpad") ? 72 : 62)*sizeMultiplier && dy<38*sizeMultiplier
+            boolean inside;
+            if (unchartedStyle) {
+                float radius=stick(name)?99:name.equals("l3")||name.equals("r3")?35:
+                             name.equals("touchpad")||name.equals("options")?44:59;
+                inside=distance(x,y,p)<radius*sizeMultiplier;
+            } else {
+                inside=rectangle(name) ? dx<(name.equals("touchpad") ? 72 : 62)*sizeMultiplier && dy<38*sizeMultiplier
                     : distance(x,y,p)<(stick(name) ? 70 : name.equals("l3") || name.equals("r3") ? 39 : 48)*sizeMultiplier;
+            }
             if (inside && distance(x,y,p)<best) { best=distance(x,y,p); winner=name; }
         }
         return winner;
@@ -145,8 +188,9 @@ final class TouchControllerOverlay extends View {
     void resetLayout() {
         SharedPreferences.Editor editor=preferences.edit();
         for (int i=0;i<NAMES.length;i++) {
-            String name=NAMES[i]; centers.get(name).set(DEFAULT[i][0],DEFAULT[i][1]);
-            editor.remove("overlay_x_"+name).remove("overlay_y_"+name);
+            String name=NAMES[i]; float[][] defaults=unchartedStyle?ACTION_DEFAULT:DEFAULT;
+            centers.get(name).set(defaults[i][0],defaults[i][1]);
+            editor.remove(positionPrefix()+"x_"+name).remove(positionPrefix()+"y_"+name);
         }
         editor.apply(); release(); invalidate();
     }
@@ -161,22 +205,38 @@ final class TouchControllerOverlay extends View {
                     if (x>548 && x<732) { finishEdit(); return true; }
                     if (x>325 && x<430) { setSize(sizeMultiplier-.10f); return true; }
                     if (x>432 && x<540) { setSize(sizeMultiplier+.10f); return true; }
-                    if (x>745 && x<945) { setActionIcons(!actionIcons); return true; }
+                    if (x>745 && x<945) { toggleStyle(); return true; }
                     if (x>951 && x<1124) { resetLayout(); return true; }
                 }
                 dragged=hit(x,y); editPointer=dragged==null ? -1 : id;
             } else if (action==MotionEvent.ACTION_MOVE && editPointer>=0 && dragged!=null) {
                 int index=e.findPointerIndex(editPointer);
                 float barX=offsetX()/scale(),barY=offsetY()/scale();
-                if (index>=0) center(dragged).set(
-                    Math.max(36-barX,Math.min(1244+barX,layoutX(e,index))),
-                    Math.max(36-barY,Math.min(684+barY,layoutY(e,index))));
+                if (index>=0) {
+                    float tx=Math.max(36-barX,Math.min(1244+barX,layoutX(e,index)));
+                    float ty=Math.max(36-barY,Math.min(684+barY,layoutY(e,index)));
+                    if (unchartedStyle && dragged.equals("dpad")) {
+                        PointF c=dpadCenter();float dx=tx-c.x,dy=ty-c.y;
+                        for(String dir:new String[]{"up","down","left","right"})
+                            centers.get(dir).offset(dx,dy);
+                    } else center(dragged).set(tx,ty);
+                }
                 invalidate();
             } else if ((action==MotionEvent.ACTION_UP || action==MotionEvent.ACTION_POINTER_UP)
                        && id==editPointer && dragged!=null) {
-                PointF p=center(dragged);
-                preferences.edit().putFloat("overlay_x_"+dragged,p.x)
-                    .putFloat("overlay_y_"+dragged,p.y).apply();
+                SharedPreferences.Editor editor=preferences.edit();
+                if (unchartedStyle && dragged.equals("dpad")) {
+                    for(String dir:new String[]{"up","down","left","right"}) {
+                        PointF p=center(dir);
+                        editor.putFloat(positionPrefix()+"x_"+dir,p.x)
+                              .putFloat(positionPrefix()+"y_"+dir,p.y);
+                    }
+                } else {
+                    PointF p=center(dragged);
+                    editor.putFloat(positionPrefix()+"x_"+dragged,p.x)
+                          .putFloat(positionPrefix()+"y_"+dragged,p.y);
+                }
+                editor.apply();
                 editPointer=-1; dragged=null;
             }
             return true;
@@ -311,56 +371,36 @@ final class TouchControllerOverlay extends View {
         paint.setStrokeJoin(Paint.Join.MITER);
     }
 
+    // Identical labels and hitboxes as the original PlayStation layout.
     private void circle(Canvas c,String name,float r,String label,int accent) {
         PointF p=center(name);
         r*=sizeMultiplier;
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : pressed.contains(name) ? 0xaae8dfc9 : 0x6630394c);
+        paint.setColor(name.equals(dragged)?0xffe8dfc9:classicFill(pressed.contains(name)));
         c.drawCircle(p.x,p.y,r,paint);
         paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(3); paint.setColor(accent);
         c.drawCircle(p.x,p.y,r,paint);
         paint.setStyle(Paint.Style.FILL); paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setTextSize((label.length()>2 ? 19 : 33)*sizeMultiplier);
         paint.setTextAlign(Paint.Align.CENTER);
-        String action=actionIcons?actionLabel(name):null;
-        if(action!=null){
-            drawActionGlyph(c,name,p.x,p.y-r*.16f,r*.54f);
-            paint.setTypeface(Typeface.DEFAULT_BOLD);
-            paint.setColor(0xfff2ead9);paint.setTextSize(10*sizeMultiplier);
-            c.drawText(action,p.x,p.y+r*.70f,paint);
-            paint.setColor(accent);paint.setTextSize(15*sizeMultiplier);
-            c.drawText(label,p.x+r*.74f,p.y-r*.66f,paint);
-        } else {
-            paint.setTextSize((label.length()>2 ? 19 : 33)*sizeMultiplier);
-            c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
-        }
+        c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2f,paint);
     }
     private void rectangle(Canvas c,String name,float width,String label) {
         PointF p=center(name);
         width*=sizeMultiplier;
-        // The touchpad button presses "touchpad_right" (right-side click, opens the pause menu),
-        // not "touchpad", so highlight it from that signal too.
-        boolean lit=pressed.contains(name) ||
-            (name.equals("touchpad") && pressed.contains("touchpad_right"));
+        boolean lit=pressed.contains(name)||(name.equals("touchpad")&&pressed.contains("touchpad_right"));
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : lit ? 0xaae8dfc9 : 0x6630394c);
+        paint.setColor(name.equals(dragged)?0xffe8dfc9:classicFill(lit));
         c.drawRoundRect(p.x-width/2,p.y-25*sizeMultiplier,p.x+width/2,p.y+25*sizeMultiplier,14,14,paint);
         paint.setStyle(Paint.Style.STROKE); paint.setColor(0xbbc6ad76); paint.setStrokeWidth(2);
         c.drawRoundRect(p.x-width/2,p.y-25*sizeMultiplier,p.x+width/2,p.y+25*sizeMultiplier,14,14,paint);
         paint.setStyle(Paint.Style.FILL); paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setTextSize(19*sizeMultiplier); paint.setTextAlign(Paint.Align.CENTER);
-        String action=actionIcons?actionLabel(name):null;
-        if(action!=null) {
-            drawActionGlyph(c,name,p.x+width*.20f,p.y,16*sizeMultiplier);
-            paint.setTypeface(Typeface.DEFAULT_BOLD);paint.setColor(0xfff2ead9);
-            paint.setTextSize(13*sizeMultiplier);
-            c.drawText(label,p.x-width*.29f,p.y-(paint.ascent()+paint.descent())/2,paint);
-        } else {
-            c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
-        }
+        c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2f,paint);
     }
     private void drawStick(Canvas c,String name) {
         PointF center=center(name);
-        paint.setStyle(Paint.Style.FILL); paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : 0x6630394c);
+        paint.setStyle(Paint.Style.FILL); paint.setColor(name.equals(dragged)?0xffe8dfc9:classicFill(false));
         c.drawCircle(center.x,center.y,57*sizeMultiplier,paint);
         paint.setStyle(Paint.Style.STROKE); paint.setColor(0xffa0aec0); paint.setStrokeWidth(3);
         c.drawCircle(center.x,center.y,57*sizeMultiplier,paint);
@@ -382,34 +422,124 @@ final class TouchControllerOverlay extends View {
         c.drawText(name.equals("leftstick") ? "L" : "R",knobX,
                    knobY-(paint.ascent()+paint.descent())/2,paint);
     }
+    private int actionFill(boolean down) {
+        float a=Math.min(.95f,surfaceOpacity+(down?.25f:0f));
+        return (Math.round(a*255f)<<24)|0x000c0b09;
+    }
+    private int classicFill(boolean down) {
+        float a=Math.min(.95f,surfaceOpacity+(down?.25f:0f));
+        return (Math.round(a*255f)<<24)|(down?0x00e8dfc9:0x0030394c);
+    }
+    private void actionButton(Canvas c,String name,float radius,String label) {
+        PointF p=center(name);
+        final float r=radius*sizeMultiplier;
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(actionFill(pressed.contains(name)));
+        c.drawCircle(p.x,p.y,r,paint);
+        paint.setColor(0xffcfaa70);paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(2.3f);c.drawCircle(p.x,p.y,r,paint);
+        if (name.equals("touchpad")) {
+            c.drawRoundRect(p.x-r*.49f,p.y-r*.22f,p.x+r*.26f,p.y+r*.36f,
+                            5f,5f,paint);
+            c.drawRoundRect(p.x-r*.26f,p.y-r*.40f,p.x+r*.50f,p.y+r*.18f,
+                            5f,5f,paint);
+        } else if (name.equals("options")) {
+            paint.setStrokeWidth(4.6f);
+            c.drawLine(p.x-r*.22f,p.y-r*.46f,p.x-r*.22f,p.y+r*.46f,paint);
+            c.drawLine(p.x+r*.22f,p.y-r*.46f,p.x+r*.22f,p.y+r*.46f,paint);
+        } else {
+            drawActionGlyph(c,name,p.x,p.y,r*.67f);
+        }
+        paint.setStyle(Paint.Style.FILL);
+        if(label!=null&&!label.isEmpty()) {
+            paint.setColor(0xffede2c6);paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTypeface(Typeface.DEFAULT_BOLD);
+            paint.setTextSize(18*sizeMultiplier);
+            c.drawText(label,p.x,p.y+r+22*sizeMultiplier,paint);
+        }
+    }
+    private void actionDpad(Canvas c) {
+        PointF p=dpadCenter(); float r=58*sizeMultiplier;
+        paint.setStyle(Paint.Style.FILL);paint.setColor(actionFill(false));
+        c.drawCircle(p.x,p.y,r,paint);
+        paint.setStyle(Paint.Style.STROKE);paint.setColor(0xffcfaa70);
+        paint.setStrokeWidth(2.4f);c.drawCircle(p.x,p.y,r,paint);
+        paint.setStrokeWidth(6*sizeMultiplier);paint.setStrokeCap(Paint.Cap.ROUND);
+        c.drawLine(p.x-r*.58f,p.y,p.x+r*.58f,p.y,paint);
+        c.drawLine(p.x,p.y-r*.58f,p.x,p.y+r*.58f,paint);
+        paint.setStrokeCap(Paint.Cap.BUTT);paint.setStyle(Paint.Style.FILL);
+    }
+    private void actionStick(Canvas c,String name) {
+        PointF p=center(name);
+        float r=92*sizeMultiplier;
+        paint.setStyle(Paint.Style.FILL);paint.setColor(actionFill(false));
+        c.drawCircle(p.x,p.y,r,paint);
+        paint.setStyle(Paint.Style.STROKE);paint.setColor(0xffcfaa70);
+        paint.setStrokeWidth(2.5f);c.drawCircle(p.x,p.y,r,paint);
+        float kx=p.x,ky=p.y;
+        for(int i=0;i<controls.size();i++) {
+            if(name.equals(controls.valueAt(i))) {
+                PointF q=positions.get(controls.keyAt(i));
+                if(q!=null) {
+                    kx=p.x+Math.max(-r*.36f,Math.min(r*.36f,q.x-p.x));
+                    ky=p.y+Math.max(-r*.36f,Math.min(r*.36f,q.y-p.y));
+                }
+                break;
+            }
+        }
+        paint.setStyle(Paint.Style.FILL);paint.setColor(0x77a14231);
+        c.drawCircle(kx,ky,31*sizeMultiplier,paint);
+    }
+    private void actionClickStick(Canvas c,String name) {
+        PointF p=center(name);float r=25*sizeMultiplier;
+        paint.setStyle(Paint.Style.FILL);paint.setColor(actionFill(pressed.contains(name)));
+        c.drawCircle(p.x,p.y,r,paint);
+        paint.setStyle(Paint.Style.STROKE);paint.setColor(0xffcfaa70);
+        paint.setStrokeWidth(2);c.drawCircle(p.x,p.y,r,paint);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(0xffede2c6);
+        paint.setTypeface(Typeface.DEFAULT_BOLD);paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(16*sizeMultiplier);
+        c.drawText(name.toUpperCase(),p.x,p.y-(paint.ascent()+paint.descent())/2f,paint);
+    }
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c); c.save(); c.translate(offsetX(),offsetY()); c.scale(scale(),scale());
-        rectangle(c,"l2",108,"L2"); rectangle(c,"l1",108,"L1");
-        rectangle(c,"r1",108,"R1"); rectangle(c,"r2",108,"R2");
-        rectangle(c,"touchpad",126,"TOUCH"); rectangle(c,"options",108,"OPTIONS");
-        circle(c,"up",39,"▲",0xffc6ad76); circle(c,"left",39,"◀",0xffc6ad76);
-        circle(c,"right",39,"▶",0xffc6ad76); circle(c,"down",39,"▼",0xffc6ad76);
-        circle(c,"triangle",39,"△",0xff83cdaa); circle(c,"circle",39,"○",0xffe38288);
-        circle(c,"cross",39,"×",0xff88aaff); circle(c,"square",39,"□",0xffd6a0ce);
-        drawStick(c,"leftstick"); drawStick(c,"rightstick");
-        circle(c,"l3",29,"L3",0xffa0aec0); circle(c,"r3",29,"R3",0xffa0aec0);
+        if (unchartedStyle) {
+            actionButton(c,"l1",48,"L1");actionButton(c,"l2",48,"L2");
+            actionButton(c,"r1",48,"R1");actionButton(c,"r2",48,"R2");
+            actionButton(c,"touchpad",34,"");actionButton(c,"options",34,"");
+            actionDpad(c);
+            actionButton(c,"triangle",48,"△");actionButton(c,"square",48,"□");
+            actionButton(c,"circle",48,"○");actionButton(c,"cross",48,"×");
+            actionStick(c,"leftstick");actionStick(c,"rightstick");
+            actionClickStick(c,"l3");actionClickStick(c,"r3");
+        } else {
+            rectangle(c,"l2",108,"L2");rectangle(c,"l1",108,"L1");
+            rectangle(c,"r1",108,"R1");rectangle(c,"r2",108,"R2");
+            rectangle(c,"touchpad",126,"TOUCH");rectangle(c,"options",108,"OPTIONS");
+            circle(c,"up",39,"▲",0xffc6ad76);circle(c,"left",39,"◀",0xffc6ad76);
+            circle(c,"right",39,"▶",0xffc6ad76);circle(c,"down",39,"▼",0xffc6ad76);
+            circle(c,"triangle",39,"△",0xff83cdaa);circle(c,"circle",39,"○",0xffe38288);
+            circle(c,"cross",39,"×",0xff88aaff);circle(c,"square",39,"□",0xffd6a0ce);
+            drawStick(c,"leftstick");drawStick(c,"rightstick");
+            circle(c,"l3",29,"L3",0xffa0aec0);circle(c,"r3",29,"R3",0xffa0aec0);
+        }
         if (editing) {
-            paint.setStyle(Paint.Style.FILL); paint.setColor(0xdd15171d);
+            paint.setStyle(Paint.Style.FILL);paint.setColor(0xdd15171d);
             c.drawRoundRect(325,9,540,62,12,12,paint);
             c.drawRoundRect(745,9,945,62,12,12,paint);
             c.drawRoundRect(951,9,1124,62,12,12,paint);
-            paint.setColor(0xfff1e7ca); paint.setTypeface(Typeface.DEFAULT_BOLD);
+            paint.setColor(0xfff1e7ca);paint.setTypeface(Typeface.DEFAULT_BOLD);
             paint.setTextAlign(Paint.Align.CENTER);paint.setTextSize(18);
             c.drawText("- SIZE",379,43,paint);c.drawText("+ SIZE",486,43,paint);
-            c.drawText(actionIcons?"ACOES":"PLAYSTATION",845,43,paint);
+            c.drawText(unchartedStyle?"UNCHARTED / ACOES":"CLASSICO / PS",845,43,paint);
             c.drawText("RESET",1037,43,paint);
-            paint.setStyle(Paint.Style.FILL); paint.setColor(0xcc15171d);
+            paint.setStyle(Paint.Style.FILL);paint.setColor(0xcc15171d);
             c.drawRoundRect(548,9,732,62,13,13,paint);
-            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2); paint.setColor(0xffc6ad76);
-            c.drawRoundRect(548,9,732,62,13,13,paint);
-            paint.setStyle(Paint.Style.FILL); paint.setTextSize(20);
+            paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(2);
+            paint.setColor(0xffc6ad76);c.drawRoundRect(548,9,732,62,13,13,paint);
+            paint.setStyle(Paint.Style.FILL);paint.setTextSize(20);
             paint.setTextAlign(Paint.Align.CENTER);
-            c.drawText("DONE",640,36-(paint.ascent()+paint.descent())/2,paint);
+            c.drawText("DONE",640,36-(paint.ascent()+paint.descent())/2f,paint);
         }
         c.restore();
     }

@@ -680,29 +680,82 @@ public class Launcher extends Activity {
         text(root, "Auto: show touch controls when no controller is connected.", 14, false);
         note(root, "Open the in-game menu by swiping from left to right.");
         android.content.SharedPreferences touchPrefs=getSharedPreferences("uncharted_touch", MODE_PRIVATE);
-        TextView touchSize=text(root,"Touch button size · "+Math.round(touchPrefs.getFloat("overlay_size",1.20f)*100)+"%",14,false);
+        // Both layouts have independent size and position preferences.
+        // The old PlayStation touch control layout is never overwritten.
+        String chosenStyle=touchPrefs.getString("overlay_style",TouchControllerOverlay.UNCHARTED_STYLE);
+        RadioGroup touchStyles=new RadioGroup(this);
+        touchStyles.setOrientation(RadioGroup.VERTICAL);
+        for(String[] choice:new String[][]{
+            {TouchControllerOverlay.UNCHARTED_STYLE,"Uncharted · icones de acoes (GoW 3)"},
+            {TouchControllerOverlay.CLASSIC_STYLE,"Classico · botoes PlayStation anteriores"}
+        }) {
+            RadioButton option=new RadioButton(this);
+            option.setText(choice[1]);option.setTag(choice[0]);option.setId(View.generateViewId());
+            touchStyles.addView(option);
+            if(choice[0].equals(chosenStyle))touchStyles.check(option.getId());
+        }
+        root.addView(touchStyles);
+        final String[] selectedTouchStyle={chosenStyle};
+        final TextView touchSize=text(root,"Tamanho dos controles: "+
+            Math.round(touchPrefs.getFloat(chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?
+                   "overlay_uncharted_size":"overlay_size",
+                   chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?1f:1.2f)*100f)+"%",14,false);
         android.widget.SeekBar touchScale=new android.widget.SeekBar(this);
-        touchScale.setMax(85);touchScale.setProgress(Math.round((touchPrefs.getFloat("overlay_size",1.20f)-.8f)*100f));
+        touchScale.setMax(chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?50:85);
+        touchScale.setProgress(Math.round((touchPrefs.getFloat(
+            chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?"overlay_uncharted_size":"overlay_size",
+            chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?1f:1.2f)-.8f)*100f));
         touchScale.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){
             @Override public void onProgressChanged(android.widget.SeekBar bar,int progress,boolean user){
-                if(user) {
+                if(user){
                     float value=.8f+progress/100f;
-                    touchPrefs.edit().putFloat("overlay_size",value).apply();
-                    touchSize.setText("Touch button size · "+Math.round(value*100)+"%");
+                    String key=selectedTouchStyle[0].equals(TouchControllerOverlay.UNCHARTED_STYLE)?
+                               "overlay_uncharted_size":"overlay_size";
+                    touchPrefs.edit().putFloat(key,value).apply();
+                    touchSize.setText("Tamanho dos controles: "+Math.round(value*100f)+"%");
                 }
             }
             @Override public void onStartTrackingTouch(android.widget.SeekBar bar){}
             @Override public void onStopTrackingTouch(android.widget.SeekBar bar){}
         });
         root.addView(touchScale);
-        CheckBox iconControls=new CheckBox(this);
-        iconControls.setText("GoW3 style · gameplay action icons");
-        iconControls.setTextColor(0xffeee2cc);
-        iconControls.setChecked(touchPrefs.getBoolean("overlay_action_icons",true));
-        iconControls.setOnCheckedChangeListener((button,on)->touchPrefs.edit()
-            .putBoolean("overlay_action_icons",on).apply());
-        root.addView(iconControls);
-        button(root,"Edit control layout (drag and resize)",v->editTouchLayout());
+        final TextView touchOpacity=text(root,"Opacidade: "+
+            Math.round(touchPrefs.getFloat(chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?
+                "overlay_uncharted_opacity":"overlay_opacity",
+                chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?.15f:.40f)*100f)+"%",14,false);
+        android.widget.SeekBar alphaScale=new android.widget.SeekBar(this);
+        alphaScale.setMax(80);
+        alphaScale.setProgress(Math.round((touchPrefs.getFloat(
+            chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?"overlay_uncharted_opacity":"overlay_opacity",
+            chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?.15f:.40f)-.1f)*100f));
+        alphaScale.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){
+            @Override public void onProgressChanged(android.widget.SeekBar bar,int progress,boolean user){
+                if(!user)return;
+                float opacity=.1f+progress/100f;
+                touchPrefs.edit().putFloat(selectedTouchStyle[0].equals(TouchControllerOverlay.UNCHARTED_STYLE)?
+                    "overlay_uncharted_opacity":"overlay_opacity",opacity).apply();
+                touchOpacity.setText("Opacidade: "+Math.round(opacity*100f)+"%");
+            }
+            @Override public void onStartTrackingTouch(android.widget.SeekBar bar){}
+            @Override public void onStopTrackingTouch(android.widget.SeekBar bar){}
+        });
+        root.addView(alphaScale);
+        touchStyles.setOnCheckedChangeListener((group,id)->{
+            RadioButton option=group.findViewById(id);
+            if(option==null)return;
+            String style=(String)option.getTag();
+            selectedTouchStyle[0]=style;
+            touchPrefs.edit().putString("overlay_style",style).apply();
+            boolean action=TouchControllerOverlay.UNCHARTED_STYLE.equals(style);
+            float size=touchPrefs.getFloat(action?"overlay_uncharted_size":"overlay_size",action?1f:1.2f);
+            float opacity=touchPrefs.getFloat(action?"overlay_uncharted_opacity":"overlay_opacity",action?.15f:.4f);
+            touchScale.setMax(action?50:85);
+            touchScale.setProgress(Math.round((size-.8f)*100f));
+            touchSize.setText("Tamanho dos controles: "+Math.round(size*100f)+"%");
+            alphaScale.setProgress(Math.round((opacity-.1f)*100f));
+            touchOpacity.setText("Opacidade: "+Math.round(opacity*100f)+"%");
+        });
+        button(root,"Editar posicao e tamanho dos botoes",v->editTouchLayout());
         root = card(home, "FRAME GENERATION");
         text(root, "LSFG requires your own Lossless.dll.", 14, false);
         button(root, "Import Lossless.dll", v -> {
