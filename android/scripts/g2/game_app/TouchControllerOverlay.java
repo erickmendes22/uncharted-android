@@ -30,6 +30,8 @@ final class TouchControllerOverlay extends View {
     private final PadBridge pad;
     private final SharedPreferences preferences;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+    private float sizeMultiplier;
+    private boolean actionIcons;
     private final Map<String,PointF> centers=new LinkedHashMap<>();
     private final SparseArray<String> controls=new SparseArray<>();
     private final SparseArray<PointF> positions=new SparseArray<>();
@@ -45,12 +47,27 @@ final class TouchControllerOverlay extends View {
     TouchControllerOverlay(Context context,PadBridge pad) {
         super(context); this.pad=pad;
         preferences=context.getSharedPreferences("uncharted_touch",Context.MODE_PRIVATE);
+        sizeMultiplier=preferences.getFloat("overlay_size",1.20f);
+        actionIcons=preferences.getBoolean("overlay_action_icons",true);
         for (int i=0;i<NAMES.length;i++) {
             String name=NAMES[i];
             centers.put(name,new PointF(preferences.getFloat("overlay_x_"+name,DEFAULT[i][0]),
                                         preferences.getFloat("overlay_y_"+name,DEFAULT[i][1])));
         }
         setContentDescription("On-screen PlayStation controller");
+    }
+    boolean isEditing() { return editing; }
+    float buttonSize() { return sizeMultiplier; }
+    boolean usesActionIcons() { return actionIcons; }
+    void setSize(float size) {
+        sizeMultiplier=Math.max(.8f,Math.min(1.65f,size));
+        preferences.edit().putFloat("overlay_size",sizeMultiplier).apply();
+        release();invalidate();
+    }
+    void setActionIcons(boolean on) {
+        actionIcons=on;
+        preferences.edit().putBoolean("overlay_action_icons",on).apply();
+        invalidate();
     }
     private PointF center(String name) { return centers.get(name); }
     // The 1280x720 layout drawn at one scale in the centred 16:9 area, as the game (MainActivity):
@@ -72,16 +89,16 @@ final class TouchControllerOverlay extends View {
     }
     private String hit(float x,float y) {
         PointF dpad=dpadCenter();
-        if (!editing && distance(x,y,dpad)<112 && distance(center("up").x,center("up").y,dpad)<115 &&
-            distance(center("left").x,center("left").y,dpad)<115 &&
-            distance(center("right").x,center("right").y,dpad)<115 &&
-            distance(center("down").x,center("down").y,dpad)<115) return "dpad";
+        if (!editing && distance(x,y,dpad)<112*sizeMultiplier && distance(center("up").x,center("up").y,dpad)<115*sizeMultiplier &&
+            distance(center("left").x,center("left").y,dpad)<115*sizeMultiplier &&
+            distance(center("right").x,center("right").y,dpad)<115*sizeMultiplier &&
+            distance(center("down").x,center("down").y,dpad)<115*sizeMultiplier) return "dpad";
         String winner=null; float best=Float.MAX_VALUE;
         for (String name:NAMES) {
             PointF p=center(name);
             float dx=Math.abs(x-p.x),dy=Math.abs(y-p.y);
-            boolean inside=rectangle(name) ? dx<(name.equals("touchpad") ? 72 : 62) && dy<38
-                    : distance(x,y,p)<(stick(name) ? 70 : name.equals("l3") || name.equals("r3") ? 39 : 48);
+            boolean inside=rectangle(name) ? dx<(name.equals("touchpad") ? 72 : 62)*sizeMultiplier && dy<38*sizeMultiplier
+                    : distance(x,y,p)<(stick(name) ? 70 : name.equals("l3") || name.equals("r3") ? 39 : 48)*sizeMultiplier;
             if (inside && distance(x,y,p)<best) { best=distance(x,y,p); winner=name; }
         }
         return winner;
@@ -104,12 +121,12 @@ final class TouchControllerOverlay extends View {
                 if (p.y>c.y+22) pressed.add("down");
             } else if (control.equals("leftstick")) {
                 left=true; PointF c=center(control);
-                lx=axis(Math.max(-1f,Math.min(1f,(p.x-c.x)/56f)));
-                ly=axis(Math.max(-1f,Math.min(1f,(p.y-c.y)/56f)));
+                lx=axis(Math.max(-1f,Math.min(1f,(p.x-c.x)/(56f*sizeMultiplier))));
+                ly=axis(Math.max(-1f,Math.min(1f,(p.y-c.y)/(56f*sizeMultiplier))));
             } else if (control.equals("rightstick")) {
                 right=true; PointF c=center(control);
-                rx=axis(Math.max(-1f,Math.min(1f,(p.x-c.x)/56f)));
-                ry=axis(Math.max(-1f,Math.min(1f,(p.y-c.y)/56f)));
+                rx=axis(Math.max(-1f,Math.min(1f,(p.x-c.x)/(56f*sizeMultiplier))));
+                ry=axis(Math.max(-1f,Math.min(1f,(p.y-c.y)/(56f*sizeMultiplier))));
             } else if (control.equals("l2")) { l2=255; pressed.add(control); }
             else if (control.equals("r2")) { r2=255; pressed.add(control); }
             else if (control.equals("touchpad")) pressed.add("touchpad_right"); /* 右侧点击:打开游戏暂停菜单,进而可进存档列表 */
