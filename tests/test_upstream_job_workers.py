@@ -39,8 +39,8 @@ assert sleep.index("if (i<3)") < sleep.index("for (i=0;i<3;++i) {\n            m
 assert sleep.count("find_unique_pattern(image_size,builds[b][i].pattern)") == 1
 assert '"worker loop"' in sleep and '"re-check before waiting"' in sleep
 assert '"job submission wakes them"' in sleep and "static const struct Patch builds[][3]" in sleep
-assert '"498b4500 80785900"' in sleep  # retail 1.02
-assert '"498b07 80785900"' in sleep    # 1.00
+assert "498b4500 80785900" in sleep  # retail 1.02
+assert "498b07 80785900" in sleep    # 1.00
 assert 'BB_JOB_SLEEP' in sleep and "if (env && env[0]=='0')" in sleep
 assert "find_unique_pattern(image_size,\"4d8d7001 807f5900 9090 4981f802000000" in sleep  # existing U2 recipe
 
