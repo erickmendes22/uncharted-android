@@ -157,7 +157,13 @@ final class TouchControllerOverlay extends View {
             if (action==MotionEvent.ACTION_CANCEL) { editPointer=-1; dragged=null; return true; }
             if (action==MotionEvent.ACTION_DOWN) {
                 float x=layoutX(e,at),y=layoutY(e,at);
-                if (x>548 && x<732 && y<72) { finishEdit(); return true; }
+                if (y<75f) {
+                    if (x>548 && x<732) { finishEdit(); return true; }
+                    if (x>325 && x<430) { setSize(sizeMultiplier-.10f); return true; }
+                    if (x>432 && x<540) { setSize(sizeMultiplier+.10f); return true; }
+                    if (x>745 && x<945) { setActionIcons(!actionIcons); return true; }
+                    if (x>951 && x<1124) { resetLayout(); return true; }
+                }
                 dragged=hit(x,y); editPointer=dragged==null ? -1 : id;
             } else if (action==MotionEvent.ACTION_MOVE && editPointer>=0 && dragged!=null) {
                 int index=e.findPointerIndex(editPointer);
@@ -220,53 +226,77 @@ final class TouchControllerOverlay extends View {
         publish(); return true;
     }
 
+    private static String actionLabel(String name) {
+        switch(name) {
+            case "triangle": return "✋"; // interact / pick up
+            case "square": return "✊"; // melee
+            case "cross": return "↑"; // jump / climb
+            case "circle": return "⬡"; // cover / dodge
+            case "l2": return "⌖"; // aim
+            case "r2": return "●"; // fire
+            case "l1": return "✹"; // grenade
+            case "r1": return "↻"; // reload
+            default: return null;
+        }
+    }
+
     private void circle(Canvas c,String name,float r,String label,int accent) {
         PointF p=center(name);
+        r*=sizeMultiplier;
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : pressed.contains(name) ? 0xaae8dfc9 : 0x6630394c);
         c.drawCircle(p.x,p.y,r,paint);
         paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(3); paint.setColor(accent);
         c.drawCircle(p.x,p.y,r,paint);
         paint.setStyle(Paint.Style.FILL); paint.setTypeface(Typeface.DEFAULT_BOLD);
-        paint.setTextSize(label.length()>2 ? 19 : 33); paint.setTextAlign(Paint.Align.CENTER);
-        c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
+        paint.setTextAlign(Paint.Align.CENTER);
+        String icon=actionIcons?actionLabel(name):null;
+        paint.setTextSize((label.length()>2 ? 19 : 33)*sizeMultiplier);
+        c.drawText(icon==null?label:icon,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
+        // In GoW3 style the PlayStation symbol remains visible at the edge.
+        if (icon!=null) {
+            paint.setColor(accent);paint.setTextSize(15*sizeMultiplier);
+            c.drawText(label,p.x+r*.77f,p.y+r*.79f,paint);
+        }
     }
     private void rectangle(Canvas c,String name,float width,String label) {
         PointF p=center(name);
+        width*=sizeMultiplier;
         // The touchpad button presses "touchpad_right" (right-side click, opens the pause menu),
         // not "touchpad", so highlight it from that signal too.
         boolean lit=pressed.contains(name) ||
             (name.equals("touchpad") && pressed.contains("touchpad_right"));
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : lit ? 0xaae8dfc9 : 0x6630394c);
-        c.drawRoundRect(p.x-width/2,p.y-25,p.x+width/2,p.y+25,14,14,paint);
+        c.drawRoundRect(p.x-width/2,p.y-25*sizeMultiplier,p.x+width/2,p.y+25*sizeMultiplier,14,14,paint);
         paint.setStyle(Paint.Style.STROKE); paint.setColor(0xbbc6ad76); paint.setStrokeWidth(2);
-        c.drawRoundRect(p.x-width/2,p.y-25,p.x+width/2,p.y+25,14,14,paint);
+        c.drawRoundRect(p.x-width/2,p.y-25*sizeMultiplier,p.x+width/2,p.y+25*sizeMultiplier,14,14,paint);
         paint.setStyle(Paint.Style.FILL); paint.setTypeface(Typeface.DEFAULT_BOLD);
-        paint.setTextSize(19); paint.setTextAlign(Paint.Align.CENTER);
-        c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
+        paint.setTextSize(19*sizeMultiplier); paint.setTextAlign(Paint.Align.CENTER);
+        String icon=actionIcons?actionLabel(name):null;
+        c.drawText(icon==null?label:label+"  "+icon,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
     }
     private void drawStick(Canvas c,String name) {
         PointF center=center(name);
         paint.setStyle(Paint.Style.FILL); paint.setColor(name.equals(dragged) ? 0xffe8dfc9 : 0x6630394c);
-        c.drawCircle(center.x,center.y,57,paint);
+        c.drawCircle(center.x,center.y,57*sizeMultiplier,paint);
         paint.setStyle(Paint.Style.STROKE); paint.setColor(0xffa0aec0); paint.setStrokeWidth(3);
-        c.drawCircle(center.x,center.y,57,paint);
+        c.drawCircle(center.x,center.y,57*sizeMultiplier,paint);
         float knobX=center.x,knobY=center.y;
         for (int i=0;i<controls.size();i++) {
             if (name.equals(controls.valueAt(i))) {
                 PointF p=positions.get(controls.keyAt(i));
                 if (p!=null) {
-                    knobX=center.x+Math.max(-27,Math.min(27,p.x-center.x));
-                    knobY=center.y+Math.max(-27,Math.min(27,p.y-center.y));
+                    knobX=center.x+Math.max(-27*sizeMultiplier,Math.min(27*sizeMultiplier,p.x-center.x));
+                    knobY=center.y+Math.max(-27*sizeMultiplier,Math.min(27*sizeMultiplier,p.y-center.y));
                 }
                 break;
             }
         }
         paint.setStyle(Paint.Style.FILL); paint.setColor(0xbba0aec0);
-        c.drawCircle(knobX,knobY,28,paint);
+        c.drawCircle(knobX,knobY,28*sizeMultiplier,paint);
         paint.setColor(0xff15202c); paint.setTypeface(Typeface.DEFAULT_BOLD);
-        paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(22);
+        paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(22*sizeMultiplier);
         c.drawText(name.equals("leftstick") ? "L" : "R",knobX,
                    knobY-(paint.ascent()+paint.descent())/2,paint);
     }
@@ -282,6 +312,15 @@ final class TouchControllerOverlay extends View {
         drawStick(c,"leftstick"); drawStick(c,"rightstick");
         circle(c,"l3",29,"L3",0xffa0aec0); circle(c,"r3",29,"R3",0xffa0aec0);
         if (editing) {
+            paint.setStyle(Paint.Style.FILL); paint.setColor(0xdd15171d);
+            c.drawRoundRect(325,9,540,62,12,12,paint);
+            c.drawRoundRect(745,9,945,62,12,12,paint);
+            c.drawRoundRect(951,9,1124,62,12,12,paint);
+            paint.setColor(0xfff1e7ca); paint.setTypeface(Typeface.DEFAULT_BOLD);
+            paint.setTextAlign(Paint.Align.CENTER);paint.setTextSize(18);
+            c.drawText("- SIZE",379,43,paint);c.drawText("+ SIZE",486,43,paint);
+            c.drawText(actionIcons?"ICON: ACTION":"ICON: PS",845,43,paint);
+            c.drawText("RESET",1037,43,paint);
             paint.setStyle(Paint.Style.FILL); paint.setColor(0xcc15171d);
             c.drawRoundRect(548,9,732,62,13,13,paint);
             paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(2); paint.setColor(0xffc6ad76);
