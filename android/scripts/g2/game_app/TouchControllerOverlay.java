@@ -54,7 +54,7 @@ final class TouchControllerOverlay extends View {
             centers.put(name,new PointF(preferences.getFloat("overlay_x_"+name,DEFAULT[i][0]),
                                         preferences.getFloat("overlay_y_"+name,DEFAULT[i][1])));
         }
-        setContentDescription("On-screen PlayStation controller");
+        setContentDescription("On-screen PlayStation controller, GoW III / inFAMOUS layout");
     }
     boolean isEditing() { return editing; }
     float buttonSize() { return sizeMultiplier; }
@@ -226,18 +226,89 @@ final class TouchControllerOverlay extends View {
         publish(); return true;
     }
 
+    // GoW III and inFAMOUS use the original translucent PlayStation controls.
+    // The optional action overlay draws native Canvas vectors, not OS-dependent
+    // emoji (the previous font glyphs rendered inconsistently on Android).
     private static String actionLabel(String name) {
         switch(name) {
-            case "triangle": return "✋"; // interact / pick up
-            case "square": return "✊"; // melee
-            case "cross": return "↑"; // jump / climb
-            case "circle": return "⬡"; // cover / dodge
-            case "l2": return "⌖"; // aim
-            case "r2": return "●"; // fire
-            case "l1": return "✹"; // grenade
-            case "r1": return "↻"; // reload
+            case "triangle": return "PEGAR";
+            case "square": return "SOCO";
+            case "cross": return "PULAR";
+            case "circle": return "COBERT.";
+            case "l2": return "MIRAR";
+            case "r2": return "ATIRAR";
+            case "l1": return "GRANADA";
+            case "r1": return "RECAR.";
             default: return null;
         }
+    }
+    private void drawActionGlyph(Canvas c,String name,float x,float y,float size) {
+        c.save(); c.translate(x,y); c.scale(size,size);
+        paint.setColor(0xfff2ead9);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(.12f);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStrokeJoin(Paint.Join.ROUND);
+        android.graphics.Path glyph=new android.graphics.Path();
+        switch (name) {
+            case "cross": // climb/jump, not a replacement for the X button
+                c.drawLine(0,.61f,0,-.65f,paint);
+                c.drawLine(-.48f,-.20f,0,-.68f,paint);
+                c.drawLine(.48f,-.20f,0,-.68f,paint);
+                break;
+            case "square": // melee fist
+                c.drawRoundRect(-.58f,-.25f,.58f,.45f,.16f,.16f,paint);
+                for(int i=-1;i<=1;i++)c.drawLine(i*.28f,-.25f,i*.28f,.07f,paint);
+                break;
+            case "triangle": // interact hand
+                c.drawRoundRect(-.39f,-.12f,.39f,.56f,.16f,.16f,paint);
+                c.drawLine(-.24f,-.10f,-.24f,-.56f,paint);
+                c.drawLine(0,-.10f,0,-.68f,paint);
+                c.drawLine(.24f,-.10f,.24f,-.54f,paint);
+                break;
+            case "circle": // take cover shield
+                glyph.moveTo(0,-.73f);
+                glyph.lineTo(.59f,-.38f);
+                glyph.lineTo(.45f,.35f);
+                glyph.lineTo(0,.73f);
+                glyph.lineTo(-.45f,.35f);
+                glyph.lineTo(-.59f,-.38f);
+                glyph.close();
+                c.drawPath(glyph,paint);
+                break;
+            case "l2": // sight / aim reticle
+                c.drawCircle(0,0,.40f,paint);
+                c.drawLine(-.76f,0,-.46f,0,paint);
+                c.drawLine(.46f,0,.76f,0,paint);
+                c.drawLine(0,-.76f,0,-.46f,paint);
+                c.drawLine(0,.46f,0,.76f,paint);
+                break;
+            case "r2": // fire muzzle
+                c.drawCircle(0,0,.20f,paint);
+                for(int i=0;i<8;i++){
+                    double a=i*Math.PI/4;
+                    c.drawLine((float)(.36f*Math.cos(a)),(float)(.36f*Math.sin(a)),
+                               (float)(.77f*Math.cos(a)),(float)(.77f*Math.sin(a)),paint);
+                }
+                break;
+            case "l1": // grenade + fuse pin
+                c.drawOval(-.45f,-.22f,.45f,.65f,paint);
+                c.drawLine(0,-.22f,.20f,-.63f,paint);
+                c.drawCircle(.33f,-.65f,.15f,paint);
+                break;
+            case "r1": // reload arrow
+                c.drawArc(-.60f,-.60f,.60f,.60f,35f,278f,false,paint);
+                glyph.moveTo(.56f,-.05f);
+                glyph.lineTo(.65f,.42f);
+                glyph.lineTo(.19f,.25f);
+                c.drawPath(glyph,paint);
+                break;
+            default: break;
+        }
+        c.restore();
+        paint.setStyle(Paint.Style.FILL);
+        paint.setStrokeCap(Paint.Cap.BUTT);
+        paint.setStrokeJoin(Paint.Join.MITER);
     }
 
     private void circle(Canvas c,String name,float r,String label,int accent) {
@@ -250,13 +321,17 @@ final class TouchControllerOverlay extends View {
         c.drawCircle(p.x,p.y,r,paint);
         paint.setStyle(Paint.Style.FILL); paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setTextAlign(Paint.Align.CENTER);
-        String icon=actionIcons?actionLabel(name):null;
-        paint.setTextSize((label.length()>2 ? 19 : 33)*sizeMultiplier);
-        c.drawText(icon==null?label:icon,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
-        // In GoW3 style the PlayStation symbol remains visible at the edge.
-        if (icon!=null) {
+        String action=actionIcons?actionLabel(name):null;
+        if(action!=null){
+            drawActionGlyph(c,name,p.x,p.y-r*.16f,r*.54f);
+            paint.setTypeface(Typeface.DEFAULT_BOLD);
+            paint.setColor(0xfff2ead9);paint.setTextSize(10*sizeMultiplier);
+            c.drawText(action,p.x,p.y+r*.70f,paint);
             paint.setColor(accent);paint.setTextSize(15*sizeMultiplier);
-            c.drawText(label,p.x+r*.77f,p.y+r*.79f,paint);
+            c.drawText(label,p.x+r*.74f,p.y-r*.66f,paint);
+        } else {
+            paint.setTextSize((label.length()>2 ? 19 : 33)*sizeMultiplier);
+            c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
         }
     }
     private void rectangle(Canvas c,String name,float width,String label) {
@@ -273,8 +348,15 @@ final class TouchControllerOverlay extends View {
         c.drawRoundRect(p.x-width/2,p.y-25*sizeMultiplier,p.x+width/2,p.y+25*sizeMultiplier,14,14,paint);
         paint.setStyle(Paint.Style.FILL); paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setTextSize(19*sizeMultiplier); paint.setTextAlign(Paint.Align.CENTER);
-        String icon=actionIcons?actionLabel(name):null;
-        c.drawText(icon==null?label:label+"  "+icon,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
+        String action=actionIcons?actionLabel(name):null;
+        if(action!=null) {
+            drawActionGlyph(c,name,p.x+width*.20f,p.y,16*sizeMultiplier);
+            paint.setTypeface(Typeface.DEFAULT_BOLD);paint.setColor(0xfff2ead9);
+            paint.setTextSize(13*sizeMultiplier);
+            c.drawText(label,p.x-width*.29f,p.y-(paint.ascent()+paint.descent())/2,paint);
+        } else {
+            c.drawText(label,p.x,p.y-(paint.ascent()+paint.descent())/2,paint);
+        }
     }
     private void drawStick(Canvas c,String name) {
         PointF center=center(name);
@@ -319,7 +401,7 @@ final class TouchControllerOverlay extends View {
             paint.setColor(0xfff1e7ca); paint.setTypeface(Typeface.DEFAULT_BOLD);
             paint.setTextAlign(Paint.Align.CENTER);paint.setTextSize(18);
             c.drawText("- SIZE",379,43,paint);c.drawText("+ SIZE",486,43,paint);
-            c.drawText(actionIcons?"ICON: ACTION":"ICON: PS",845,43,paint);
+            c.drawText(actionIcons?"ACOES":"PLAYSTATION",845,43,paint);
             c.drawText("RESET",1037,43,paint);
             paint.setStyle(Paint.Style.FILL); paint.setColor(0xcc15171d);
             c.drawRoundRect(548,9,732,62,13,13,paint);
