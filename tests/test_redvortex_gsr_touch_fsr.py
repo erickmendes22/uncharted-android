@@ -17,12 +17,15 @@ assert 'Async GPU label writes' not in launcher
 assert 'BB_CHAIN_WRITEDATA' not in game
 assert 'BB_CHAIN_WRITEDATA' not in f("gpu/shadps4/video_core/amdgpu/liverpool.cpp")
 assert "patch_job_sleep(" not in f("src/probe.c")
-assert "ispartofuccollection" in game and 'guest.isEmpty()' in game
+assert 'BB_SKIP_COLLECTION_MENU' in game and 'patch_collection_skip(image_end)' in f('src/probe.c')
+assert 'w.write("/app0/eboot.bin' not in game
+assert 'Collection menu: not found, the menu stays' in f('src/probe.c')
 assert "touchEditRequest.exists()" in game
 assert "BB_TOUCH_EDIT_REQUEST" in overlay and "keep_open=false" in overlay
 assert 'putFloat("overlay_size"' in touch
 assert 'putBoolean("overlay_action_icons"' in touch
-assert "actionLabel(" in touch and "isEditing()" in touch
+assert "actionLabel(" in touch and "drawActionGlyph(" in touch and "isEditing()" in touch
+assert "✋" not in touch and "✊" not in touch and "⬡" not in touch
 assert "Edit control layout (drag and resize)" in launcher
 assert "GSR 2 Native AA" in preset and 'return normalize(mode)>=5?"gsr2":"fsr3";' in preset
 assert 'iniPut("upscaler",UpscalePreset.provider(upscale))' in launcher
@@ -36,5 +39,6 @@ assert "gsr_history" in temporal and "resources_gsr2" in header
 assert "BB_U2_MOVIE_FSR_BYPASS" in temporal and "UpscalerGsr2" in temporal
 assert "0xf614041eu" in raster and "0xb2a42acfu" in raster and "0x1a08df2du" in raster
 assert "BB_JITTER_SMALL" in raster and "BB_JITTER_RECONSTRUCTION" in raster
+assert "return env && env[0] == '1';" in raster
 assert "disableNativeAa(" in launcher and "disableMotionBlur(" in launcher
-print("PASS: unchanged pre-regression job/WriteData, U1 direct boot, Android control editing, real GSR2, FSR jitter + AA/blur")
+print("PASS: original worker, U1 signature-skip, Canvas controls, GSR2 and last-visible FSR AA policy")
