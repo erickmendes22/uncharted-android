@@ -1193,6 +1193,105 @@ static void patch_job_lock_wait(uint64_t image_size) {
            job_lock_wait_ms,(uint64_t)at);
 }
 
+/* Source: revvv991/uncharted-android 0.3.0 (retained standalone guards).
+ * Protect unfinished/late render jobs while worker sleep is enabled.
+ * Exact byte signatures and a null data pointer are checked before patching;
+ * each guard may be independently disabled for A/B validation. */
+static volatile uint32_t u1_set_job_skips, u1_set_maker_null, u3_particle_job_skips;
+static void install_u1_set_job_guard(uint64_t image_size) {
+    const char *env = getenv("BB_U1_SET_GUARD");
+    if (env && env[0] == '0') return;
+    const uint64_t base = 0x400000, cave = 0xd20000, job = 0xa16aa0, load_at = 0xa16b00,
+                   store_at = 0xa1f12e;
+    static const unsigned char job_old[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55,
+                                            0x41, 0x54, 0x53, 0x48, 0x81, 0xec, 0x18, 0x01, 0x00, 0x00};
+    static const unsigned char load_old[] = {0x49, 0x8b, 0x42, 0x08, 0x48, 0x8b, 0x48, 0x20};
+    static const unsigned char store_old[] = {0x49, 0x89, 0x5c, 0x24, 0x78, 0x49, 0xc7, 0x84, 0x24,
+                                              0x88, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00};
+    if (cave - base + 128 > image_size) return;
+    if (memcmp(image + job - base, job_old, sizeof(job_old)) ||
+        memcmp(image + load_at - base, load_old, sizeof(load_old)) ||
+        memcmp(image + store_at - base, store_old, sizeof(store_old)))
+        return; /* not U1 */
+    for (size_t i = 0; i < 128; ++i)
+        if (image[cave - base + i]) { printf("Set job guard: the code cave is not empty, off\n"); return; }
+    unsigned char *t = image + cave - base;
+    size_t k = 0;
+    const uint64_t skips = (uint64_t)(uintptr_t)&u1_set_job_skips;
+#define B(...) do { const unsigned char b_[] = {__VA_ARGS__}; memcpy(t + k, b_, sizeof(b_)); k += sizeof(b_); } while (0)
+    B(0x48, 0x83, 0x7f, 0x08, 0x00);                        /* cmp qword [rdi+8], 0: the set */
+    B(0x74); const size_t skip = k; B(0x00);                /* je skip */
+    B(0x55);                                                /* push rbp (the moved prologue) */
+    B(0x48, 0x89, 0xe5);                                    /* mov rbp, rsp */
+    B(0x41, 0x57);                                          /* push r15 */
+    B(0xe9);                                                /* jmp job + 6 */
+    { const int32_t rel = (int32_t)((int64_t)(job + 6) - (int64_t)(cave + k + 4)); memcpy(t + k, &rel, 4); k += 4; }
+    t[skip] = (unsigned char)(k - (skip + 1));
+    B(0x48, 0xb8); memcpy(t + k, &skips, 8); k += 8;        /* skip: movabs rax, &skips */
+    B(0xf0, 0xff, 0x00);                                    /* lock inc dword [rax] */
+    B(0xc3);                                                /* ret */
+    /* The maker's store of the set, at +64 (rax is dead there: the next load overwrites it). */
+    const size_t m = 64;
+    k = m;
+    const uint64_t nulls = (uint64_t)(uintptr_t)&u1_set_maker_null;
+    B(0x49, 0x89, 0x5c, 0x24, 0x78);                        /* mov [r12+0x78], rbx: the set */
+    B(0x48, 0x85, 0xdb);                                    /* test rbx, rbx */
+    B(0x75); const size_t made = k; B(0x00);                /* jne made */
+    B(0x48, 0xb8); memcpy(t + k, &nulls, 8); k += 8;        /* movabs rax, &nulls */
+    B(0xf0, 0xff, 0x00);                                    /* lock inc dword [rax] */
+    t[made] = (unsigned char)(k - (made + 1));
+    B(0xc3);                                                /* made: ret */
+#undef B
+    unsigned char *site = image + job - base;               /* jmp the job's stub */
+    int32_t rel = (int32_t)((int64_t)cave - (int64_t)(job + 5));
+    site[0] = 0xe9;
+    memcpy(site + 1, &rel, 4);
+    site[5] = 0x90;
+    site = image + store_at - base;                         /* call the store's stub */
+    rel = (int32_t)((int64_t)(cave + m) - (int64_t)(store_at + 5));
+    site[0] = 0xe8;
+    memcpy(site + 1, &rel, 4);
+    printf("Set job guard: U1's node set job skips a null set (%zu bytes of stubs at %#" PRIx64 ")\n", k, cave);
+}
+
+
+static void install_u3_particle_job_guard(uint64_t image_size) {
+    const char *env = getenv("BB_U3_PARTICLE_GUARD");
+    if (env && env[0] == '0') return;
+    const uint64_t base = 0x400000, job = 0x1388f10, load_at = 0x1388f70;
+    static const unsigned char job_old[] = {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55,
+                                            0x41, 0x54, 0x53, 0x48, 0x81, 0xec, 0x18, 0x01, 0x00, 0x00};
+    static const unsigned char load_old[] = {0x49, 0x8b, 0x42, 0x08, 0x48, 0x8b, 0x48, 0x20};
+    if (load_at - base + sizeof(load_old) > image_size ||
+        memcmp(image + job - base, job_old, sizeof(job_old)) ||
+        memcmp(image + load_at - base, load_old, sizeof(load_old)))
+        return; /* not U3 */
+    unsigned char *t = near_image_memory(64);
+    if (!t) { printf("Particle job guard: no thunk memory, off\n"); return; }
+    unsigned char *entry = image + job - base;
+    size_t k = 0;
+    const uint64_t skips = (uint64_t)(uintptr_t)&u3_particle_job_skips;
+#define B(...) do { const unsigned char b_[] = {__VA_ARGS__}; memcpy(t + k, b_, sizeof(b_)); k += sizeof(b_); } while (0)
+    B(0x48, 0x83, 0x7f, 0x08, 0x00);                        /* cmp qword [rdi+8], 0: the data's +8 */
+    B(0x74); const size_t skip = k; B(0x00);                /* je skip */
+    B(0x55);                                                /* push rbp (the moved prologue) */
+    B(0x48, 0x89, 0xe5);                                    /* mov rbp, rsp */
+    B(0x41, 0x57);                                          /* push r15 */
+    B(0xe9);                                                /* jmp job + 6 */
+    { const int32_t rel = (int32_t)((int64_t)(uintptr_t)(entry + 6) - (int64_t)(uintptr_t)(t + k + 4)); memcpy(t + k, &rel, 4); k += 4; }
+    t[skip] = (unsigned char)(k - (skip + 1));
+    B(0x48, 0xb8); memcpy(t + k, &skips, 8); k += 8;        /* skip: movabs rax, &skips */
+    B(0xf0, 0xff, 0x00);                                    /* lock inc dword [rax] */
+    B(0xc3);                                                /* ret */
+#undef B
+    const int32_t rel = (int32_t)((int64_t)(uintptr_t)t - (int64_t)(uintptr_t)(entry + 5));
+    entry[0] = 0xe9;                                        /* jmp the stub */
+    memcpy(entry + 1, &rel, 4);
+    entry[5] = 0x90;
+    printf("Particle job guard: U3's particle draw registration job skips a null data+8 (%zu bytes of stub)\n", k);
+}
+
+
 /* Android 0.3.0 worker performance backport (revvv991/uncharted-android@181a7cc60661).
  * Signature-gated and reversible with BB_JOB_SLEEP=0 / BB_JOB_SPINS=0 /
  * BB_JOB_RESUME_WAKE=0. Other games/versions that do not match are untouched.
@@ -1838,6 +1937,10 @@ int main(int argc, char **argv) {
         install_u3_skip_logos(image_end);
         install_game_callbacks(segments, ns, image_end);
         install_ndgi_hooks(image_end);
+#ifndef _WIN32
+        install_u1_set_job_guard(image_end);
+        install_u3_particle_job_guard(image_end);
+#endif
         // Schedule ready fibers promptly without starving the Vulkan command
         // thread: backported, pattern-checked upstream worker optimizations.
         patch_job_sleep(image_end);
