@@ -26,7 +26,7 @@ assert 'paint.setColor(actionFill(' in touch and 'paint.setColor(name.equals(dra
 assert 'drawActionGlyph(c,name,p.x,p.y,r*.67f)' in touch
 for button,label in [('l1','L1'),('l2','L2'),('r1','R1'),('r2','R2'),
                      ('triangle','△'),('square','□'),('circle','○'),('cross','×')]:
-    assert 'actionButton(c,"'+button+'",43,"'+label+'")' in touch,(button,label)
+    assert 'actionButton(c,"'+button+'",46,"'+label+'")' in touch,(button,label)
 assert 'actionStick(c,"leftstick")' in touch
 assert 'actionStick(c,"rightstick")' in touch
 assert 'actionClickStick(c,"l3")' not in touch
@@ -36,12 +36,20 @@ assert 'postDelayed(clearLeftClick,135)' in touch
 assert 'postDelayed(clearRightClick,135)' in touch
 assert 'if(leftStickClicked)pressed.add("l3")' in touch
 assert 'if(rightStickClicked)pressed.add("r3")' in touch
-assert 'float r=72*sizeMultiplier;' in touch
+assert 'float r=80*sizeMultiplier;' in touch
 assert 'ACTION_LAYOUT_VERSION_KEY' in touch
+assert 'ACTION_LAYOUT_VERSION=3' in touch
+assert 'actionHorizontalScale()' in touch
+assert 'actionDisplayX(float x)' in touch
+assert 'actionLogicalX(float x)' in touch
+assert 'PointF p=actionCenter(name);' in touch
+assert 'PointF p=actionDpadCenter();' in touch
+assert 'float toolbarX=screenLayoutX(e,at);' in touch
 assert 'migration.remove("overlay_uncharted_x_"+name)' in touch
 assert 'actionDpad(c)' in touch
-assert 'float r=48*sizeMultiplier;' in touch
-assert 'float radius=stick(name)?77:' in touch
+assert 'float r=45*sizeMultiplier;' in touch
+assert 'migration.putFloat("overlay_uncharted_size",1.0f);' in touch
+assert 'float radius=stick(name)?84:' in touch
 assert 'path.lineTo(.12f,.05f)' in touch # no sunburst for R2: pistol silhouette
 assert 'c.drawLine(.40f,-.66f,.40f,.71f,paint)' in touch # cover
 assert 'c.drawLine(.14f,.13f,.60f,.47f,paint)' in touch # jump
