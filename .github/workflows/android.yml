@@ -50,6 +50,7 @@ jobs:
           python3 tests/test_redvortex_gsr_touch_fsr.py
           python3 tests/test_optional_touch_styles.py
           python3 tests/test_touch_widescreen_geometry.py
+          python3 tests/test_touch_action_graphics.py
           cc -std=c11 -Wall -Wextra -Werror -Isrc tests/test_pad_host_policy.c -o "$RUNNER_TEMP/test-pad-host-policy"
           "$RUNNER_TEMP/test-pad-host-policy"
           g++ -std=c++20 -Wall -Wextra -Werror -Igpu/shim tests/test_u2_movie_fsr_policy.cpp -o "$RUNNER_TEMP/u2-fsr-movie-test"

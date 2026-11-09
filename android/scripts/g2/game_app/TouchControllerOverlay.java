@@ -3,6 +3,8 @@ package dev.unchartedg2.game;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Canvas;
+import android.graphics.Bitmap;
+import android.graphics.RectF;
 import android.graphics.Paint;
 import android.graphics.PointF;
 import android.graphics.Typeface;
@@ -47,6 +49,11 @@ final class TouchControllerOverlay extends View {
     private final PadBridge pad;
     private final SharedPreferences preferences;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+    // Cache the detailed gold silhouettes extracted from the approved concept.
+    // This paint is separate from the circles/labels so bitmap alpha is not
+    // affected by the current stroke color or style.
+    private final Paint glyphPaint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
+    private final UnchartedActionGlyphs glyphs=new UnchartedActionGlyphs();
     private float sizeMultiplier;
     private float surfaceOpacity;
     private boolean unchartedStyle;
@@ -573,7 +580,16 @@ final class TouchControllerOverlay extends View {
             c.drawLine(p.x-r*.22f,p.y-r*.46f,p.x-r*.22f,p.y+r*.46f,paint);
             c.drawLine(p.x+r*.22f,p.y-r*.46f,p.x+r*.22f,p.y+r*.46f,paint);
         } else {
-            drawActionGlyph(c,name,p.x,p.y,r*.67f);
+            Bitmap detailed=glyphs.get(name);
+            if(detailed!=null) {
+                float iconRadius=r*.82f;
+                c.drawBitmap(detailed,null,
+                    new RectF(p.x-iconRadius,p.y-iconRadius,p.x+iconRadius,p.y+iconRadius),
+                    glyphPaint);
+            } else {
+                // Decoding errors are non-fatal and never affect control input.
+                drawActionGlyph(c,name,p.x,p.y,r*.67f);
+            }
         }
         paint.setStyle(Paint.Style.FILL);
         if(label!=null&&!label.isEmpty()) {
