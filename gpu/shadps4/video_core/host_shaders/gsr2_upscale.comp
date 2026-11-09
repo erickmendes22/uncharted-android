@@ -96,7 +96,10 @@ void main()
     Jitteruv.x = clamp(Hruv.x + (InputJitter.x * params.renderSizeRcp.x), 0.0, 1.0);
     Jitteruv.y = clamp(Hruv.y + (InputJitter.y * params.renderSizeRcp.y), 0.0, 1.0);
 
-    ivec2 InputPos = ivec2(Jitteruv * InputInfoViewportSize);
+    // Sampling exactly at UV=1 or at +1 neighbour is outside texelFetch's
+    // defined range. On Turnip this can yield undefined bright/black samples.
+    const ivec2 maxInputPos = max(ivec2(params.renderSize) - ivec2(1), ivec2(0));
+    ivec2 InputPos = clamp(ivec2(Jitteruv * InputInfoViewportSize), ivec2(0), maxInputPos);
     vec4 mda = textureLod(MotionDepthClipAlphaBuffer, Jitteruv, 0.0).xyzw;
     // The port: mda.xy is the offset to the previous frame in UV units (SGSR: NDC, 2 per
     // screen, current - previous); Motion keeps SGSR's NDC scale for its heuristics.
@@ -106,8 +109,15 @@ void main()
     float depthfactor = mda.z;
     float ColorMax = mda.w;
 
-    vec4 History = textureLod(PrevHistoryOutput, PrevUV, 0.0);
-    vec3 HistoryColor = params.historyFilter != 0u ? SampleHistoryCatmullRom(PrevUV) : History.xyz;
+    // RESET means both history images were transitioned from UNDEFINED.
+    // Never sample them before a fresh output is written. Multiplying an
+    // undefined/NaN history by alpha=0 is NOT safe: 0*NaN remains NaN.
+    vec4 History = vec4(0.0);
+    vec3 HistoryColor = vec3(0.0);
+    if (params.reset == 0u) {
+        History = textureLod(PrevHistoryOutput, PrevUV, 0.0);
+        HistoryColor = params.historyFilter != 0u ? SampleHistoryCatmullRom(PrevUV) : History.xyz;
+    }
     float Historyw = History.w;
     float Wfactor = clamp(abs(Historyw), 0.0, 1.0);
 
@@ -133,7 +143,7 @@ void main()
 
     ivec2 InputPosBtmRight = ivec2(1) + InputPos;
     vec2 gatherCoord = vec2(InputPos) * params.renderSizeRcp;
-    uint btmRight = texelFetch(YCoCgColor, InputPosBtmRight, 0).x;
+    uint btmRight = texelFetch(YCoCgColor, min(InputPosBtmRight,maxInputPos), 0).x;
     uvec4 topleft = textureGather(YCoCgColor, gatherCoord);
     uvec2 topRight;
     uvec2 bottomLeft;
@@ -295,13 +305,18 @@ void main()
         }
     }
 
-    rectboxweight = 1.0 / rectboxweight;
+    rectboxweight = 1.0 / max(rectboxweight, 1.0e-6);
     rectboxcenter *= rectboxweight;
     rectboxvar *= rectboxweight;
     rectboxvar = sqrt(abs(rectboxvar - rectboxcenter * rectboxcenter));
 
-    Upsampledcw.xyz =  clamp(Upsampledcw.xyz / Upsampledcw.w, rectboxmin-vec3(0.05), rectboxmax+vec3(0.05));
-    Upsampledcw.w = Upsampledcw.w * (1.0f / 3.0f) ;
+    // Lanczos weights can cancel around edges. Guard their denominator to
+    // avoid Inf/NaN flashes from the reconstruction kernel.
+    const float totalWeight = Upsampledcw.w;
+    const vec3 safeColor = abs(totalWeight) > 1.0e-6
+        ? Upsampledcw.xyz / totalWeight : DecodeColor(topleft.y);
+    Upsampledcw.xyz = clamp(safeColor,rectboxmin-vec3(0.05),rectboxmax+vec3(0.05));
+    Upsampledcw.w = max(totalWeight,0.0) * (1.0f / 3.0f);
 
 	float OneMinusWfactor = 1.0f - Wfactor;
 

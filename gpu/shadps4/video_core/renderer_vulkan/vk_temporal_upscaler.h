@@ -163,7 +163,10 @@ private:
     /// The scene depth and the game's motion vectors for frame generation (velocity mode).
     void CaptureFrameGen();
     void RunScaled();
-    void RunUiOnly(VideoCore::ImageId color, VideoCore::ImageId depth);
+    // scene_fallback crops the patched Uncharted 640x360 scene; menu/UI copies
+    // intentionally retain the full source dimensions.
+    void RunUiOnly(VideoCore::ImageId color, VideoCore::ImageId depth,
+                   bool scene_fallback = false);
     void EnsureUiResources(u32 width, u32 height, vk::Format color, vk::Format depth);
     void PrepareUiDepth(VideoCore::ImageId depth);
     /// Render size below the scaled-preset output size (the resolution patch is on).

@@ -1615,9 +1615,19 @@ void TemporalUpscaler::BeforeDisplay(u64 ps_hash, VideoCore::ImageId source) {
             std::printf("Upscaler: Uncharted fallback current-frame source (provider %d, active %d, ready %d, failed %d)\n",
                         requested, int(Active()), int(camera_motion.Ready()), int(failed));
         }
-        RunUiOnly(source, camera_motion.Depth());
+        RunUiOnly(source, camera_motion.Depth(), true);
         reset = true;
     }
+    // Lightweight longitudinal telemetry: the previous 12-line cap hid
+    // whether fallbacks kept happening during actual gameplay.
+    static u64 seen_frames=0, scene_fallbacks=0;
+    ++seen_frames;
+    if (!ui_phase || !ready) ++scene_fallbacks;
+    if (seen_frames % 256 == 0)
+        std::printf("Upscaler: boundary frames=%llu scene_fallbacks=%llu provider=%d camera_ready=%d\n",
+            static_cast<unsigned long long>(seen_frames),
+            static_cast<unsigned long long>(scene_fallbacks),
+            requested, int(camera_motion.Ready()));
 }
 
 void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
@@ -1802,7 +1812,8 @@ void TemporalUpscaler::PrepareUiDepth(VideoCore::ImageId depth_id) {
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier});
 }
 
-void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId depth_id) {
+void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId depth_id,
+                                 bool scene_fallback) {
     if (auto* profiler = GpuProfiler::Get()) {
         profiler->Mark(0xF5A1'0000ull, [] { return std::string{"upscaler RunUiOnly"}; });
     }
@@ -1817,6 +1828,17 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
     vk::Image source = color.GetImage();
     auto source_layout = vk::ImageLayout::eTransferSrcOptimal;
     u32 source_width = color.info.size.width, source_height = color.info.size.height;
+    // The patched Uncharted scene occupies only the top-left 640x360 of a
+    // guest target that can still be allocated as 1920x1080. Before this
+    // change the fallback blitted the ENTIRE padded guest texture, exposing
+    // stale/unwritten pixels as intermittent black/garbage frames.
+    // Never crop menu/cutscene UI backgrounds: only the explicit scene
+    // fallback from BeforeDisplay is affected.
+    if (scene_fallback && scaled_session && camera_motion.VelocityMode()) {
+        const auto visible = SceneSize(source_width, source_height);
+        source_width = visible[0];
+        source_height = visible[1];
+    }
     if (!scaled_session && camera_motion.Depth() && scene_targets.Reduced() &&
         scene_targets.EligibleScene(color)) {
         VideoCore::ImageViewInfo view;
