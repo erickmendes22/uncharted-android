@@ -28,7 +28,8 @@ assert 'camera_motion.Ready()' in before
 assert 'MovieFsrBypass()' in before
 assert 'if (ready) RunScaled();' in before
 assert 'if (!ui_phase)' in before
-assert 'RunUiOnly(source, camera_motion.Depth());' in before
+assert 'RunUiOnly(source, camera_motion.Depth(), true);' in before
+assert 'scene_fallback && scaled_session && camera_motion.VelocityMode()' in s
 assert 'reset = true;' in before
 assert 'UpscalerGsr2' in before and 'UpscalerFsr3' in before
 print('PASS: LDR view normalization and conservative current-frame fallback wired for FSR3/GSR2')
