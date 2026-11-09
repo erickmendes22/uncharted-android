@@ -40,6 +40,8 @@ assert 'float r=80*sizeMultiplier;' in touch
 assert 'ACTION_LAYOUT_VERSION_KEY' in touch
 assert 'ACTION_LAYOUT_VERSION=3' in touch
 assert 'actionHorizontalScale()' in touch
+assert 'actionDistance(x,y,p)<radius*sizeMultiplier' in touch
+assert 'actionDistance(last.x,last.y,start)>18*sizeMultiplier' in touch
 assert 'actionDisplayX(float x)' in touch
 assert 'actionLogicalX(float x)' in touch
 assert 'PointF p=actionCenter(name);' in touch

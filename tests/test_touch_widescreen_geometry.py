@@ -17,6 +17,8 @@ assert '640f+(x-640f)*actionHorizontalScale()' in s
 assert '640f+(x-640f)/actionHorizontalScale()' in s
 assert 'return unchartedStyle?actionLogicalX(x):x;' in s
 assert 'PointF p=actionCenter(name)' in s
+assert 'actionDistance(x,y,p)<radius*sizeMultiplier' in s
+assert 'actionDistance(x,y,dpad)<58*sizeMultiplier' in s
 assert 'PointF p=actionDpadCenter()' in s
 assert 'float toolbarX=screenLayoutX(e,at);' in s
 assert 'float dx=actionDisplayX(q.x)-p.x;' in s

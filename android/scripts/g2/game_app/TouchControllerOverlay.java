@@ -172,9 +172,15 @@ final class TouchControllerOverlay extends View {
         PointF u=center("up"),l=center("left"),r=center("right"),d=center("down");
         return new PointF((u.x+l.x+r.x+d.x)/4f,(u.y+l.y+r.y+d.y)/4f);
     }
+    private float actionDistance(float x,float y,PointF logicalCenter) {
+        // Hit detection measures actual screen distance, not the unwarped
+        // logical X axis: round drawings must also have round tap targets.
+        return (float)Math.hypot((x-logicalCenter.x)*actionHorizontalScale(),
+                                 y-logicalCenter.y);
+    }
     private String hit(float x,float y) {
         PointF dpad=dpadCenter();
-        if (unchartedStyle && distance(x,y,dpad)<58*sizeMultiplier) return "dpad";
+        if (unchartedStyle && actionDistance(x,y,dpad)<58*sizeMultiplier) return "dpad";
         if (!unchartedStyle && !editing && distance(x,y,dpad)<112*sizeMultiplier &&
             distance(center("up").x,center("up").y,dpad)<115*sizeMultiplier &&
             distance(center("left").x,center("left").y,dpad)<115*sizeMultiplier &&
@@ -191,12 +197,13 @@ final class TouchControllerOverlay extends View {
             if (unchartedStyle) {
                 float radius=stick(name)?84:
                              name.equals("touchpad")||name.equals("options")?38:49;
-                inside=distance(x,y,p)<radius*sizeMultiplier;
+                inside=actionDistance(x,y,p)<radius*sizeMultiplier;
             } else {
                 inside=rectangle(name) ? dx<(name.equals("touchpad") ? 72 : 62)*sizeMultiplier && dy<38*sizeMultiplier
                     : distance(x,y,p)<(stick(name) ? 70 : name.equals("l3") || name.equals("r3") ? 39 : 48)*sizeMultiplier;
             }
-            if (inside && distance(x,y,p)<best) { best=distance(x,y,p); winner=name; }
+            float visibleDistance=unchartedStyle?actionDistance(x,y,p):distance(x,y,p);
+            if (inside && visibleDistance<best) { best=visibleDistance; winner=name; }
         }
         return winner;
     }
@@ -255,7 +262,7 @@ final class TouchControllerOverlay extends View {
         PointF start=touchDownPositions.get(id),last=positions.get(id);
         Long begin=touchDownTimes.get(id);
         if(start==null||last==null||begin==null||when-begin>230 ||
-           distance(last.x,last.y,start)>18*sizeMultiplier)return;
+           actionDistance(last.x,last.y,start)>18*sizeMultiplier)return;
         if("leftstick".equals(target)){
             if(lastLeftTapMs>0&&when-lastLeftTapMs<=365){
                 leftStickClicked=true;lastLeftTapMs=0;
