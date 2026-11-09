@@ -68,6 +68,7 @@ jobs:
           python3 tests/test_speculative_fault_dispatch.py
           python3 tests/test_shader_selection_recovery.py
           python3 tests/test_fsr_native_aa_policy.py
+          python3 tests/test_temporal_flicker_guard.py
           python3 tests/test_u3_skip_logos.py
           python3 tests/test_u3_patch_install.py
           python3 tests/test_u3_resolution_dimensions.py

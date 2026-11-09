@@ -11,7 +11,7 @@ from pathlib import Path
 
 root=Path(__file__).resolve().parents[1]
 s=(root/"android/scripts/g2/game_app/TouchControllerOverlay.java").read_text()
-assert 'ACTION_LAYOUT_VERSION=3' in s
+assert 'ACTION_LAYOUT_VERSION=4' in s
 assert 'getWidth()/(1280f*scale())' in s
 assert '640f+(x-640f)*actionHorizontalScale()' in s
 assert '640f+(x-640f)/actionHorizontalScale()' in s
@@ -40,6 +40,12 @@ xy=dict(zip(names,nums))
 assert xy['leftstick'][0] < 0.15*1280
 assert 0.62*1280 < xy['rightstick'][0] < 0.74*1280
 assert xy['triangle'][0] > 0.80*1280
+# Actual in-game action grouping: deliberately NOT the gamepad's fixed diamond.
+assert xy['triangle'][1] < xy['square'][1] < xy['circle'][1] < xy['cross'][1]
+assert xy['square'][0] < xy['cross'][0] < xy['triangle'][0] < xy['circle'][0]
+assert xy['rightstick'][0] < xy['square'][0]
+assert xy['rightstick'][1] > xy['square'][1]
+assert xy['circle'][0] - xy['square'][0] > 160
 assert xy['circle'][0] > 0.89*1280
 assert xy['leftstick'][1] > 0.7*720
 assert xy['rightstick'][1] > 0.7*720

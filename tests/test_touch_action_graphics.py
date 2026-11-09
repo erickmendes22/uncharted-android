@@ -25,6 +25,10 @@ for key,enc in assets.items():
 assert 'Bitmap.createBitmap(SIZE,SIZE,Bitmap.Config.ARGB_8888)' in source
 assert 'if(detailed!=null)' in view
 assert 'Bitmap detailed=glyphs.get(name);' in view
+assert 'drawFirePistol(c,p.x,p.y,r*.77f)' in view
+assert 'drawInteractHand(c,p.x,p.y,r*.76f)' in view
+assert 'p.lineTo(1.19f,.04f);' in view # distinct muzzle flash
+assert 'c.drawRoundRect(-.15f,-.86f,.08f,.13f,.11f,.11f,paint);' in view # extended palm/finger
 assert 'new RectF(p.x-iconRadius,p.y-iconRadius,p.x+iconRadius,p.y+iconRadius)' in view
 assert 'drawActionGlyph(c,name,p.x,p.y,r*.67f)' in view  # fallback
 assert 'if (unchartedStyle) {' in view

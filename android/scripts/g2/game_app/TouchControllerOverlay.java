@@ -32,20 +32,20 @@ final class TouchControllerOverlay extends View {
     // The approved Uncharted action layout follows the GoW III geometry.
     // Positions are independent of the original PlayStation layout.
     private static final float[][] ACTION_DEFAULT={
-        // GoW 3 reference ratios; horizontal placement uses the ENTIRE
-        // landscape screen, not the centred 16:9 game viewport.
-        // Top shoulders (L2,L1,TOUCH,OPTIONS,R1,R2).
+        // Unlike the physical PlayStation diamond, these are practical mobile
+        // gameplay zones: interact top-right, melee on the inner right column,
+        // cover outer right, jump low-right, camera stick free below them.
+        // Shoulder shortcuts remain high at the edges.
         {260,108},{112,108},{585,65},{690,65},{1016,108},{1166,108},
-        // Compact D-pad centred at x=165/y=310, reachable with left thumb.
-        {165,250},{105,310},{225,310},{165,370},
-        // Four face buttons in the natural PS diamond, at the right edge.
-        {1078,282},{1175,396},{1078,501},{981,396},
-        // Thumb zones: lower left and lower ~67% of screen for right camera.
-        // L3/R3 remain virtual stick-clicks; these coordinates are not drawn.
-        {136,565},{204,525},{919,525},{860,565}
+        // D-pad is secondary; well above the movement thumb.
+        {145,242},{85,302},{205,302},{145,362},
+        // Interact (triangle), cover (circle), jump (cross), melee (square).
+        {1125,285},{1190,455},{1050,565},{980,402},
+        // Independent movement/camera zones; L3/R3 are stick double-taps.
+        {142,570},{210,535},{905,535},{825,575}
     };
     private static final String ACTION_LAYOUT_VERSION_KEY="overlay_uncharted_layout_version";
-    private static final int ACTION_LAYOUT_VERSION=3;
+    private static final int ACTION_LAYOUT_VERSION=4;
     private final PadBridge pad;
     private final SharedPreferences preferences;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -562,6 +562,60 @@ final class TouchControllerOverlay extends View {
         float a=Math.min(.95f,surfaceOpacity+(down?.25f:0f));
         return (Math.round(a*255f)<<24)|(down?0x00e8dfc9:0x0030394c);
     }
+    // Large, immediately recognisable pictograms for the two controls that
+    // were unreadable in the real RedMagic screenshot. Both use the same gold
+    // palette as GoW III, and are actually rendered in Android Canvas.
+    private void drawFirePistol(Canvas c,float x,float y,float size) {
+        c.save();c.translate(x,y);c.scale(size,size);
+        android.graphics.Path p=new android.graphics.Path();
+        paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff4d293);
+        // A horizontal pistol slide/barrel pointed right, with a proper grip.
+        p.moveTo(-.78f,-.28f);p.lineTo(.53f,-.28f);
+        p.lineTo(.68f,-.14f);p.lineTo(.66f,.04f);
+        p.lineTo(.15f,.09f);p.lineTo(-.06f,.68f);
+        p.lineTo(-.46f,.68f);p.lineTo(-.41f,.07f);
+        p.lineTo(-.78f,.05f);p.close();c.drawPath(p,paint);
+        // Slide and trigger cutout give the small silhouette its gun profile.
+        paint.setColor(0xff513820);paint.setStrokeWidth(.07f);
+        c.drawRect(-.64f,-.13f,.30f,-.05f,paint);
+        c.drawOval(-.30f,.02f,.03f,.27f,paint);
+        paint.setStyle(Paint.Style.STROKE);paint.setColor(0xfff4d293);
+        paint.setStrokeWidth(.09f);
+        c.drawLine(-.43f,.17f,-.37f,.52f,paint);
+        // Small muzzle flash is explicitly attached to the barrel's tip.
+        paint.setStyle(Paint.Style.FILL);paint.setColor(0xffffe6a7);
+        p.reset();p.moveTo(.71f,-.26f);
+        p.lineTo(1.07f,-.37f);p.lineTo(.92f,-.07f);
+        p.lineTo(1.19f,.04f);p.lineTo(.88f,.12f);
+        p.lineTo(.94f,.38f);p.lineTo(.68f,.14f);p.close();
+        c.drawPath(p,paint);
+        c.restore();paint.setStyle(Paint.Style.FILL);
+    }
+    private void drawInteractHand(Canvas c,float x,float y,float size) {
+        c.save();c.translate(x,y);c.scale(size,size);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff5d7a1);
+        // Four separated fingers, a thumb, and a broad open palm; no thin
+        // line-art that disappears at a 46-unit button radius.
+        c.drawRoundRect(-.41f,-.63f,-.19f,.13f,.10f,.10f,paint);
+        c.drawRoundRect(-.15f,-.86f,.08f,.13f,.11f,.11f,paint);
+        c.drawRoundRect(.11f,-.73f,.34f,.15f,.10f,.10f,paint);
+        c.drawRoundRect(.37f,-.52f,.59f,.28f,.10f,.10f,paint);
+        android.graphics.Path palm=new android.graphics.Path();
+        palm.moveTo(-.47f,-.04f);
+        palm.cubicTo(-.56f,-.38f,-.80f,-.31f,-.77f,-.08f);
+        palm.lineTo(-.48f,.43f);
+        palm.cubicTo(-.37f,.70f,-.18f,.80f,.13f,.78f);
+        palm.cubicTo(.48f,.76f,.53f,.45f,.49f,.04f);
+        palm.lineTo(-.47f,-.04f);palm.close();
+        c.drawPath(palm,paint);
+        // Fingers remain individually readable against the gold silhouette.
+        paint.setColor(0xff5f4228);paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(.045f);
+        c.drawLine(-.18f,-.35f,-.18f,.04f,paint);
+        c.drawLine(.09f,-.42f,.09f,.04f,paint);
+        c.drawLine(.36f,-.30f,.36f,.11f,paint);
+        c.restore();paint.setStyle(Paint.Style.FILL);
+    }
     private void actionButton(Canvas c,String name,float radius,String label) {
         PointF p=actionCenter(name);
         final float r=radius*sizeMultiplier;
@@ -579,6 +633,10 @@ final class TouchControllerOverlay extends View {
             paint.setStrokeWidth(4.6f);
             c.drawLine(p.x-r*.22f,p.y-r*.46f,p.x-r*.22f,p.y+r*.46f,paint);
             c.drawLine(p.x+r*.22f,p.y-r*.46f,p.x+r*.22f,p.y+r*.46f,paint);
+        } else if ("r2".equals(name)) {
+            drawFirePistol(c,p.x,p.y,r*.77f);
+        } else if ("triangle".equals(name)) {
+            drawInteractHand(c,p.x,p.y,r*.76f);
         } else {
             Bitmap detailed=glyphs.get(name);
             if(detailed!=null) {

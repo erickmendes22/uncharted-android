@@ -38,7 +38,7 @@ assert 'if(leftStickClicked)pressed.add("l3")' in touch
 assert 'if(rightStickClicked)pressed.add("r3")' in touch
 assert 'float r=80*sizeMultiplier;' in touch
 assert 'ACTION_LAYOUT_VERSION_KEY' in touch
-assert 'ACTION_LAYOUT_VERSION=3' in touch
+assert 'ACTION_LAYOUT_VERSION=4' in touch
 assert 'actionHorizontalScale()' in touch
 assert 'actionDistance(x,y,p)<radius*sizeMultiplier' in touch
 assert 'actionDistance(last.x,last.y,start)>18*sizeMultiplier' in touch
@@ -52,7 +52,9 @@ assert 'actionDpad(c)' in touch
 assert 'float r=45*sizeMultiplier;' in touch
 assert 'migration.putFloat("overlay_uncharted_size",1.0f);' in touch
 assert 'float radius=stick(name)?84:' in touch
-assert 'path.lineTo(.12f,.05f)' in touch # no sunburst for R2: pistol silhouette
+assert 'drawFirePistol(c,p.x,p.y,r*.77f)' in touch
+assert 'drawInteractHand(c,p.x,p.y,r*.76f)' in touch
+assert 'if ("r2".equals(name))' in touch and 'if ("triangle".equals(name))' in touch
 assert 'c.drawLine(.40f,-.66f,.40f,.71f,paint)' in touch # cover
 assert 'c.drawLine(.14f,.13f,.60f,.47f,paint)' in touch # jump
 assert 'L3 + R3' not in touch and 'camera' not in touch[touch.index('private void actionStick('):touch.index('private void actionClickStick(')]

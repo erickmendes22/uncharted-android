@@ -273,6 +273,29 @@ void TemporalUpscaler::OnSceneColor(VideoCore::ImageId color) {
 }
 
 namespace {
+// RedVorteX v0.1.8 reads sRGB-encoded LDR scene bytes through UNORM views;
+// otherwise the host can silently decode gamma while the upscaler treats the
+// same data as already encoded. This helper is shared by FSR3, GSR2, and the
+// output-size UI image. Keep an opt-out for phone-driver A/B diagnostics.
+vk::Format UnchartedLdrViewFormat(vk::Format format) {
+    static const bool use_raw_ldr = [] {
+        const char* env = std::getenv("BB_UNCHARTED_SRGB_VIEW");
+        return !(env && env[0] == '0');
+    }();
+    // TAA is already stable in the user-provided gameplay. Restrict the
+    // new source-view interpretation to the two failing providers.
+    const auto provider = BbSettings::Get().upscaler.load();
+    if (!use_raw_ldr || (provider != BbSettings::UpscalerFsr3 &&
+                         provider != BbSettings::UpscalerGsr2)) return format;
+    switch (format) {
+    case vk::Format::eR8G8B8A8Srgb:
+        return vk::Format::eR8G8B8A8Unorm;
+    case vk::Format::eB8G8R8A8Srgb:
+        return vk::Format::eB8G8R8A8Unorm;
+    default:
+        return format;
+    }
+}
 float Halton(u32 index, u32 base) {
     float f = 1.0f, result = 0.0f;
     for (u32 i = index; i > 0; i /= base) {
@@ -1573,9 +1596,28 @@ bool TemporalUpscaler::MatchesSceneTarget(u32 w,u32 h) const {
 
 void TemporalUpscaler::BeforeDisplay(u64 ps_hash, VideoCore::ImageId source) {
     if(!UiComposition::UnchartedBoundary(camera_motion.VelocityMode(),scaled_session,ps_hash,hudless_hash) ||
-       done_this_frame || !Active() || !source || !camera_motion.Ready())return;
+       done_this_frame || !source || MovieFsrBypass())return;
+    const auto requested = BbSettings::Get().upscaler.load();
+    const bool temporal_selected = requested == BbSettings::UpscalerFsr3 ||
+                                   requested == BbSettings::UpscalerGsr2;
+    if (!temporal_selected) return;
     ldr_target=source;
-    RunScaled();
+    const bool ready=Active() && camera_motion.Ready();
+    if (ready) RunScaled();
+    // This boundary is where Uncharted composites the finished game frame.
+    // If either temporal provider missed the frame (or validation failed),
+    // show the *current* guest scene by spatial blit instead of leaving the
+    // previous host buffer or an uninitialised upscaled image on screen.
+    if (!ui_phase) {
+        static unsigned fallback_reports=0;
+        if (fallback_reports<12) {
+            ++fallback_reports;
+            std::printf("Upscaler: Uncharted fallback current-frame source (provider %d, active %d, ready %d, failed %d)\n",
+                        requested, int(Active()), int(camera_motion.Ready()), int(failed));
+        }
+        RunUiOnly(source, camera_motion.Depth());
+        reset = true;
+    }
 }
 
 void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
@@ -1767,7 +1809,8 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
     const auto& color = texture_cache.GetImage(color_id);
     const auto depth_format = depth_id ? texture_cache.GetImage(depth_id).info.pixel_format
                                       : vk::Format::eD32SfloatS8Uint;
-    EnsureUiResources(target_width, target_height, color.info.pixel_format, depth_format);
+    EnsureUiResources(target_width, target_height,
+                      UnchartedLdrViewFormat(color.info.pixel_format), depth_format);
     PrepareUiDepth(depth_id);
     // Copy only the background already drawn. The subsequent menu/HUD/text draws execute
     // directly at output resolution, including frames with no scene or camera at all.
@@ -1847,7 +1890,8 @@ void TemporalUpscaler::RunScaled() {
         failed = true;
         return;
     }
-    EnsureUiResources(ow, oh, color.info.pixel_format, depth.info.pixel_format);
+    EnsureUiResources(ow, oh, UnchartedLdrViewFormat(color.info.pixel_format),
+                      depth.info.pixel_format);
     PrepareUiDepth(camera_motion.Depth());
     const auto depth_format = depth.info.pixel_format;
     // Views kept across frames: FSR 4 registers images by view in a registry of eight.
@@ -1870,7 +1914,8 @@ void TemporalUpscaler::RunScaled() {
         depth_source_width=w;depth_source_height=h;
     } else {
         depth_view = CachedView(depth, depth_format, vk::ImageAspectFlagBits::eDepth);
-        color_view = CachedView(color, color.info.pixel_format, vk::ImageAspectFlagBits::eColor);
+        color_view = CachedView(color, UnchartedLdrViewFormat(color.info.pixel_format),
+                                vk::ImageAspectFlagBits::eColor);
         runtime.Transit(&depth, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader,
                         vk::AccessFlagBits2::eShaderRead);
         runtime.Transit(&color, vk::ImageLayout::eGeneral, vk::PipelineStageFlagBits2::eComputeShader,
@@ -2004,7 +2049,8 @@ void TemporalUpscaler::RunScaled() {
     FfxVkPortableUpscaleDispatchInfo info{};
     info.structSize = sizeof(info);
     info.commandBuffer = cmdbuf;
-    info.color = Describe(color_image, color.info.pixel_format, source_width, source_height,
+    info.color = Describe(color_image, UnchartedLdrViewFormat(color.info.pixel_format),
+                          source_width, source_height,
                           color.usage_flags, vk::ImageAspectFlagBits::eColor,
                           FFX_VK_PORTABLE_RESOURCE_STATE_GENERIC_READ);
     info.depth = Describe(depth_image, depth_format, depth_source_width, depth_source_height, depth.usage_flags,
