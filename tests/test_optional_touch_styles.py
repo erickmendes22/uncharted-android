@@ -26,12 +26,25 @@ assert 'paint.setColor(actionFill(' in touch and 'paint.setColor(name.equals(dra
 assert 'drawActionGlyph(c,name,p.x,p.y,r*.67f)' in touch
 for button,label in [('l1','L1'),('l2','L2'),('r1','R1'),('r2','R2'),
                      ('triangle','△'),('square','□'),('circle','○'),('cross','×')]:
-    assert 'actionButton(c,"'+button+'",48,"'+label+'")' in touch,(button,label)
+    assert 'actionButton(c,"'+button+'",43,"'+label+'")' in touch,(button,label)
 assert 'actionStick(c,"leftstick")' in touch
 assert 'actionStick(c,"rightstick")' in touch
-assert 'actionClickStick(c,"l3")' in touch
-assert 'actionClickStick(c,"r3")' in touch
+assert 'actionClickStick(c,"l3")' not in touch
+assert 'actionClickStick(c,"r3")' not in touch
+assert 'clickStickIfDoubleTapped(' in touch
+assert 'postDelayed(clearLeftClick,135)' in touch
+assert 'postDelayed(clearRightClick,135)' in touch
+assert 'if(leftStickClicked)pressed.add("l3")' in touch
+assert 'if(rightStickClicked)pressed.add("r3")' in touch
+assert 'float r=72*sizeMultiplier;' in touch
+assert 'ACTION_LAYOUT_VERSION_KEY' in touch
+assert 'migration.remove("overlay_uncharted_x_"+name)' in touch
 assert 'actionDpad(c)' in touch
+assert 'float r=48*sizeMultiplier;' in touch
+assert 'float radius=stick(name)?77:' in touch
+assert 'path.lineTo(.12f,.05f)' in touch # no sunburst for R2: pistol silhouette
+assert 'c.drawLine(.40f,-.66f,.40f,.71f,paint)' in touch # cover
+assert 'c.drawLine(.14f,.13f,.60f,.47f,paint)' in touch # jump
 assert 'L3 + R3' not in touch and 'camera' not in touch[touch.index('private void actionStick('):touch.index('private void actionClickStick(')]
 assert 'circle(c,"triangle",39,"△"' in touch # original PS layout preserved
 assert 'rectangle(c,"l2",108,"L2")' in touch
@@ -48,4 +61,4 @@ assert 'BB_TOUCH_STYLE_REQUEST' in menu and 'BB_TOUCH_STYLE_STATE' in menu
 assert 'Switch to Classic PlayStation' in menu
 assert 'Switch to Uncharted action icons' in menu
 assert 'BB_TOUCH_EDIT_REQUEST' in menu and 'BB_JAVA_TOUCH' in menu
-print("PASS: two persistent independent layouts, real action glyphs, camera stick unchanged, in-game/launcher selector, physical pad bridge intact")
+print("PASS: two independent layouts, smaller balanced sticks, readable actions, L3/R3 double-tap, classic/external controls unchanged")

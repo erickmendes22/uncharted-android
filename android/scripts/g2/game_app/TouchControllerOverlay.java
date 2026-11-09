@@ -30,11 +30,18 @@ final class TouchControllerOverlay extends View {
     // The approved Uncharted action layout follows the GoW III geometry.
     // Positions are independent of the original PlayStation layout.
     private static final float[][] ACTION_DEFAULT={
-        {292,120},{98,120},{572,95},{710,95},{987,120},{1181,120},
-        {171,288},{113,346},{229,346},{171,404},
-        {1090,292},{1192,400},{1090,512},{986,400},
-        {162,591},{344,634},{1004,634},{822,591}
+        // L2/L1 and R1/R2 retain the GoW3-style top-edge arrangement.
+        {282,95},{92,95},{577,75},{703,75},{993,95},{1183,95},
+        // A compact D-pad, away from Drake and the large movement stick.
+        {125,261},{65,319},{185,319},{125,377},
+        // Group face buttons more tightly and preserve the PlayStation order.
+        {1095,283},{1184,384},{1095,484},{1006,384},
+        // Both analogs are smaller and further toward the edges; L3/R3
+        // remain real inputs via double-tap, not two floating extra circles.
+        {133,596},{204,544},{997,544},{964,596}
     };
+    private static final String ACTION_LAYOUT_VERSION_KEY="overlay_uncharted_layout_version";
+    private static final int ACTION_LAYOUT_VERSION=2;
     private final PadBridge pad;
     private final SharedPreferences preferences;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -44,6 +51,14 @@ final class TouchControllerOverlay extends View {
     private final Map<String,PointF> centers=new LinkedHashMap<>();
     private final SparseArray<String> controls=new SparseArray<>();
     private final SparseArray<PointF> positions=new SparseArray<>();
+    // Virtual L3/R3 are activated by a deliberate double-tap on their own
+    // sticks in the Uncharted style. No invented L3+R3 combined button.
+    private final SparseArray<PointF> touchDownPositions=new SparseArray<>();
+    private final SparseArray<Long> touchDownTimes=new SparseArray<>();
+    private long lastLeftTapMs,lastRightTapMs;
+    private boolean leftStickClicked,rightStickClicked;
+    private final Runnable clearLeftClick=()->{leftStickClicked=false;publish();};
+    private final Runnable clearRightClick=()->{rightStickClicked=false;publish();};
     private final Set<String> pressed=new LinkedHashSet<>();
     private boolean editing;
     private int editPointer=-1;
@@ -69,7 +84,18 @@ final class TouchControllerOverlay extends View {
     private String opacityKey() { return unchartedStyle ? "overlay_uncharted_opacity" : "overlay_opacity"; }
     private void loadStyle() {
         unchartedStyle=UNCHARTED_STYLE.equals(preferences.getString("overlay_style",UNCHARTED_STYLE));
-        sizeMultiplier=Math.max(.75f,Math.min(1.65f,preferences.getFloat(sizeKey(),unchartedStyle?1f:1.20f)));
+        if(unchartedStyle && preferences.getInt(ACTION_LAYOUT_VERSION_KEY,0)<ACTION_LAYOUT_VERSION) {
+            // Bad first-generation positions could persist after an APK update.
+            // Migrate only the Uncharted layout. The classic PS pad is untouched.
+            SharedPreferences.Editor migration=preferences.edit();
+            for(String name:NAMES)
+                migration.remove("overlay_uncharted_x_"+name)
+                         .remove("overlay_uncharted_y_"+name);
+            migration.putFloat("overlay_uncharted_size",.90f);
+            migration.putInt(ACTION_LAYOUT_VERSION_KEY,ACTION_LAYOUT_VERSION).apply();
+        }
+        sizeMultiplier=Math.max(.75f,Math.min(unchartedStyle?1.30f:1.65f,
+            preferences.getFloat(sizeKey(),unchartedStyle?.90f:1.20f)));
         surfaceOpacity=Math.max(.10f,Math.min(.9f,preferences.getFloat(opacityKey(),unchartedStyle?.15f:.40f)));
         float[][] defaults=unchartedStyle?ACTION_DEFAULT:DEFAULT;
         centers.clear();
@@ -121,7 +147,7 @@ final class TouchControllerOverlay extends View {
     }
     private String hit(float x,float y) {
         PointF dpad=dpadCenter();
-        if (unchartedStyle && distance(x,y,dpad)<75*sizeMultiplier) return "dpad";
+        if (unchartedStyle && distance(x,y,dpad)<58*sizeMultiplier) return "dpad";
         if (!unchartedStyle && !editing && distance(x,y,dpad)<112*sizeMultiplier &&
             distance(center("up").x,center("up").y,dpad)<115*sizeMultiplier &&
             distance(center("left").x,center("left").y,dpad)<115*sizeMultiplier &&
@@ -130,13 +156,14 @@ final class TouchControllerOverlay extends View {
         String winner=null; float best=Float.MAX_VALUE;
         for (String name:NAMES) {
             if (unchartedStyle && (name.equals("up") || name.equals("down") ||
-                                    name.equals("left") || name.equals("right"))) continue;
+                                    name.equals("left") || name.equals("right") ||
+                                    name.equals("l3") || name.equals("r3"))) continue;
             PointF p=center(name);
             float dx=Math.abs(x-p.x),dy=Math.abs(y-p.y);
             boolean inside;
             if (unchartedStyle) {
-                float radius=stick(name)?99:name.equals("l3")||name.equals("r3")?35:
-                             name.equals("touchpad")||name.equals("options")?44:59;
+                float radius=stick(name)?77:
+                             name.equals("touchpad")||name.equals("options")?38:49;
                 inside=distance(x,y,p)<radius*sizeMultiplier;
             } else {
                 inside=rectangle(name) ? dx<(name.equals("touchpad") ? 72 : 62)*sizeMultiplier && dy<38*sizeMultiplier
@@ -175,10 +202,41 @@ final class TouchControllerOverlay extends View {
             else if (control.equals("touchpad")) pressed.add("touchpad_right"); /* 右侧点击:打开游戏暂停菜单,进而可进存档列表 */
             else pressed.add(control);
         }
+        if (unchartedStyle) {
+            if(leftStickClicked)pressed.add("l3");
+            if(rightStickClicked)pressed.add("r3");
+        }
         pad.virtual(pressed,lx,ly,rx,ry,left,right,l2,r2);
         invalidate();
     }
-    void release() { menuSwipePointer=-1; controls.clear(); positions.clear(); publish(); }
+    void release() {
+        menuSwipePointer=-1; controls.clear(); positions.clear();
+        touchDownPositions.clear(); touchDownTimes.clear();
+        lastLeftTapMs=lastRightTapMs=0;
+        leftStickClicked=rightStickClicked=false;
+        removeCallbacks(clearLeftClick);removeCallbacks(clearRightClick);
+        publish();
+    }
+    private void clickStickIfDoubleTapped(int id,long when) {
+        if(!unchartedStyle)return;
+        String target=controls.get(id);
+        if(!"leftstick".equals(target)&&!"rightstick".equals(target))return;
+        PointF start=touchDownPositions.get(id),last=positions.get(id);
+        Long begin=touchDownTimes.get(id);
+        if(start==null||last==null||begin==null||when-begin>230 ||
+           distance(last.x,last.y,start)>18*sizeMultiplier)return;
+        if("leftstick".equals(target)){
+            if(lastLeftTapMs>0&&when-lastLeftTapMs<=365){
+                leftStickClicked=true;lastLeftTapMs=0;
+                removeCallbacks(clearLeftClick);postDelayed(clearLeftClick,135);
+            }else lastLeftTapMs=when;
+        }else{
+            if(lastRightTapMs>0&&when-lastRightTapMs<=365){
+                rightStickClicked=true;lastRightTapMs=0;
+                removeCallbacks(clearRightClick);postDelayed(clearRightClick,135);
+            }else lastRightTapMs=when;
+        }
+    }
     void edit(Runnable done) { release(); editing=true; onEditDone=done; invalidate(); }
     private void finishEdit() {
         editPointer=-1; dragged=null; editing=false; invalidate();
@@ -258,9 +316,13 @@ final class TouchControllerOverlay extends View {
             if (name==null) return true;
             controls.put(id,name);
             positions.put(id,new PointF(x,y));
+            touchDownPositions.put(id,new PointF(x,y));
+            touchDownTimes.put(id,e.getEventTime());
         } else if (action==MotionEvent.ACTION_UP || action==MotionEvent.ACTION_POINTER_UP) {
             if (id==menuSwipePointer) menuSwipePointer=-1;
+            clickStickIfDoubleTapped(id,e.getEventTime());
             controls.remove(id); positions.remove(id);
+            touchDownPositions.remove(id);touchDownTimes.remove(id);
         }
         if (action==MotionEvent.ACTION_MOVE) {
             if (menuSwipePointer>=0) {
@@ -302,73 +364,95 @@ final class TouchControllerOverlay extends View {
             default: return null;
         }
     }
+    // Compact action pictograms, not emoji or generic shapes.
     private void drawActionGlyph(Canvas c,String name,float x,float y,float size) {
         c.save(); c.translate(x,y); c.scale(size,size);
-        paint.setColor(0xfff2ead9);
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(.12f);
-        paint.setStrokeCap(Paint.Cap.ROUND);
-        paint.setStrokeJoin(Paint.Join.ROUND);
-        android.graphics.Path glyph=new android.graphics.Path();
-        switch (name) {
-            case "cross": // climb/jump, not a replacement for the X button
-                c.drawLine(0,.61f,0,-.65f,paint);
-                c.drawLine(-.48f,-.20f,0,-.68f,paint);
-                c.drawLine(.48f,-.20f,0,-.68f,paint);
+        paint.setColor(0xfff2d59a);
+        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(.13f);
+        paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeJoin(Paint.Join.ROUND);
+        android.graphics.Path path=new android.graphics.Path();
+        switch(name) {
+            case "l1": // recognisable grenade with pin and grooves
+                paint.setStyle(Paint.Style.FILL);
+                c.drawOval(-.43f,-.27f,.43f,.72f,paint);
+                paint.setColor(0xff493322);paint.setStyle(Paint.Style.STROKE);
+                c.drawLine(-.33f,.03f,.33f,.03f,paint);
+                c.drawLine(-.30f,.32f,.30f,.32f,paint);
+                paint.setColor(0xfff2d59a);
+                c.drawRoundRect(-.17f,-.49f,.17f,-.23f,.05f,.05f,paint);
+                c.drawCircle(.31f,-.55f,.17f,paint);
                 break;
-            case "square": // melee fist
-                c.drawRoundRect(-.58f,-.25f,.58f,.45f,.16f,.16f,paint);
-                for(int i=-1;i<=1;i++)c.drawLine(i*.28f,-.25f,i*.28f,.07f,paint);
+            case "l2": // aim sight
+                c.drawCircle(0,0,.36f,paint);
+                c.drawLine(-.75f,0,-.41f,0,paint);c.drawLine(.41f,0,.75f,0,paint);
+                c.drawLine(0,-.75f,0,-.41f,paint);c.drawLine(0,.41f,0,.75f,paint);
+                c.drawCircle(0,0,.055f,paint);
                 break;
-            case "triangle": // interact hand
-                c.drawRoundRect(-.39f,-.12f,.39f,.56f,.16f,.16f,paint);
-                c.drawLine(-.24f,-.10f,-.24f,-.56f,paint);
-                c.drawLine(0,-.10f,0,-.68f,paint);
-                c.drawLine(.24f,-.10f,.24f,-.54f,paint);
+            case "r1": // reload: bullets and directional arrow
+                paint.setStyle(Paint.Style.FILL);
+                for(int i=-1;i<=1;i++)c.drawRoundRect(i*.25f-.07f,-.22f,
+                    i*.25f+.07f,.43f,.045f,.045f,paint);
+                paint.setStyle(Paint.Style.STROKE);
+                c.drawArc(-.66f,-.70f,.66f,.70f,-140f,235f,false,paint);
+                path.moveTo(.52f,-.04f);path.lineTo(.69f,.30f);
+                path.lineTo(.28f,.20f);c.drawPath(path,paint);
                 break;
-            case "circle": // take cover shield
-                glyph.moveTo(0,-.73f);
-                glyph.lineTo(.59f,-.38f);
-                glyph.lineTo(.45f,.35f);
-                glyph.lineTo(0,.73f);
-                glyph.lineTo(-.45f,.35f);
-                glyph.lineTo(-.59f,-.38f);
-                glyph.close();
-                c.drawPath(glyph,paint);
+            case "r2": // pistol silhouette, rather than an ambiguous sunburst
+                paint.setStyle(Paint.Style.FILL);
+                path.moveTo(-.74f,-.23f);path.lineTo(.63f,-.23f);
+                path.lineTo(.70f,.05f);path.lineTo(.12f,.05f);
+                path.lineTo(-.10f,.65f);path.lineTo(-.49f,.65f);
+                path.lineTo(-.36f,.06f);path.lineTo(-.74f,.06f);
+                path.close();c.drawPath(path,paint);
+                paint.setColor(0xff493322);paint.setStyle(Paint.Style.STROKE);
+                c.drawLine(-.41f,-.08f,.33f,-.08f,paint);
                 break;
-            case "l2": // sight / aim reticle
-                c.drawCircle(0,0,.40f,paint);
-                c.drawLine(-.76f,0,-.46f,0,paint);
-                c.drawLine(.46f,0,.76f,0,paint);
-                c.drawLine(0,-.76f,0,-.46f,paint);
-                c.drawLine(0,.46f,0,.76f,paint);
+            case "triangle": // open palm reaching for an object
+                paint.setStyle(Paint.Style.FILL);
+                path.moveTo(-.48f,-.16f);path.lineTo(-.47f,-.57f);
+                path.quadTo(-.42f,-.75f,-.28f,-.62f);
+                path.lineTo(-.19f,-.32f);path.lineTo(-.17f,-.75f);
+                path.quadTo(-.13f,-.89f,.02f,-.80f);
+                path.lineTo(.08f,-.38f);
+                path.quadTo(.38f,-.70f,.49f,-.51f);
+                path.quadTo(.57f,-.39f,.45f,-.20f);
+                path.lineTo(.20f,.15f);path.lineTo(.20f,.70f);
+                path.lineTo(-.31f,.70f);path.close();
+                c.drawPath(path,paint);
                 break;
-            case "r2": // fire muzzle
-                c.drawCircle(0,0,.20f,paint);
-                for(int i=0;i<8;i++){
-                    double a=i*Math.PI/4;
-                    c.drawLine((float)(.36f*Math.cos(a)),(float)(.36f*Math.sin(a)),
-                               (float)(.77f*Math.cos(a)),(float)(.77f*Math.sin(a)),paint);
-                }
+            case "square": // solid clenched fist with visible knuckles
+                paint.setStyle(Paint.Style.FILL);
+                c.drawRoundRect(-.66f,-.32f,.61f,.31f,.16f,.16f,paint);
+                c.drawRoundRect(-.41f,.13f,.40f,.68f,.13f,.13f,paint);
+                paint.setStyle(Paint.Style.STROKE);paint.setColor(0xff493322);
+                for(int i=-1;i<=1;i++)c.drawLine(i*.29f,-.24f,i*.29f,.10f,paint);
                 break;
-            case "l1": // grenade + fuse pin
-                c.drawOval(-.45f,-.22f,.45f,.65f,paint);
-                c.drawLine(0,-.22f,.20f,-.63f,paint);
-                c.drawCircle(.33f,-.65f,.15f,paint);
+            case "circle": // crouching figure behind cover
+                paint.setStyle(Paint.Style.FILL);
+                c.drawCircle(-.33f,-.39f,.18f,paint);
+                paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(.21f);
+                c.drawLine(-.24f,-.15f,-.10f,.20f,paint);
+                c.drawLine(-.11f,.20f,-.51f,.50f,paint);
+                c.drawLine(-.07f,.21f,.30f,.55f,paint);
+                c.drawLine(-.23f,-.07f,.19f,.04f,paint);
+                paint.setStrokeWidth(.12f);
+                c.drawLine(.40f,-.66f,.40f,.71f,paint);
+                c.drawLine(.40f,.12f,.78f,.12f,paint);
                 break;
-            case "r1": // reload arrow
-                c.drawArc(-.60f,-.60f,.60f,.60f,35f,278f,false,paint);
-                glyph.moveTo(.56f,-.05f);
-                glyph.lineTo(.65f,.42f);
-                glyph.lineTo(.19f,.25f);
-                c.drawPath(glyph,paint);
+            case "cross": // jumping/climbing figure
+                paint.setStyle(Paint.Style.FILL);
+                c.drawCircle(-.07f,-.56f,.16f,paint);
+                paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(.21f);
+                c.drawLine(-.04f,-.28f,.14f,.13f,paint);
+                c.drawLine(.02f,-.16f,-.47f,-.27f,paint);
+                c.drawLine(.02f,-.16f,.48f,-.54f,paint);
+                c.drawLine(.14f,.13f,-.42f,.60f,paint);
+                c.drawLine(.14f,.13f,.60f,.47f,paint);
                 break;
             default: break;
         }
-        c.restore();
-        paint.setStyle(Paint.Style.FILL);
-        paint.setStrokeCap(Paint.Cap.BUTT);
-        paint.setStrokeJoin(Paint.Join.MITER);
+        c.restore();paint.setStyle(Paint.Style.FILL);
+        paint.setStrokeCap(Paint.Cap.BUTT);paint.setStrokeJoin(Paint.Join.MITER);
     }
 
     // Identical labels and hitboxes as the original PlayStation layout.
@@ -459,7 +543,7 @@ final class TouchControllerOverlay extends View {
         }
     }
     private void actionDpad(Canvas c) {
-        PointF p=dpadCenter(); float r=58*sizeMultiplier;
+        PointF p=dpadCenter(); float r=48*sizeMultiplier;
         paint.setStyle(Paint.Style.FILL);paint.setColor(actionFill(false));
         c.drawCircle(p.x,p.y,r,paint);
         paint.setStyle(Paint.Style.STROKE);paint.setColor(0xffcfaa70);
@@ -471,7 +555,7 @@ final class TouchControllerOverlay extends View {
     }
     private void actionStick(Canvas c,String name) {
         PointF p=center(name);
-        float r=92*sizeMultiplier;
+        float r=72*sizeMultiplier;
         paint.setStyle(Paint.Style.FILL);paint.setColor(actionFill(false));
         c.drawCircle(p.x,p.y,r,paint);
         paint.setStyle(Paint.Style.STROKE);paint.setColor(0xffcfaa70);
@@ -488,7 +572,7 @@ final class TouchControllerOverlay extends View {
             }
         }
         paint.setStyle(Paint.Style.FILL);paint.setColor(0x77a14231);
-        c.drawCircle(kx,ky,31*sizeMultiplier,paint);
+        c.drawCircle(kx,ky,25*sizeMultiplier,paint);
     }
     private void actionClickStick(Canvas c,String name) {
         PointF p=center(name);float r=25*sizeMultiplier;
@@ -504,14 +588,15 @@ final class TouchControllerOverlay extends View {
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c); c.save(); c.translate(offsetX(),offsetY()); c.scale(scale(),scale());
         if (unchartedStyle) {
-            actionButton(c,"l1",48,"L1");actionButton(c,"l2",48,"L2");
-            actionButton(c,"r1",48,"R1");actionButton(c,"r2",48,"R2");
+            actionButton(c,"l1",43,"L1");actionButton(c,"l2",43,"L2");
+            actionButton(c,"r1",43,"R1");actionButton(c,"r2",43,"R2");
             actionButton(c,"touchpad",34,"");actionButton(c,"options",34,"");
             actionDpad(c);
-            actionButton(c,"triangle",48,"△");actionButton(c,"square",48,"□");
-            actionButton(c,"circle",48,"○");actionButton(c,"cross",48,"×");
+            actionButton(c,"triangle",43,"△");actionButton(c,"square",43,"□");
+            actionButton(c,"circle",43,"○");actionButton(c,"cross",43,"×");
             actionStick(c,"leftstick");actionStick(c,"rightstick");
-            actionClickStick(c,"l3");actionClickStick(c,"r3");
+            // No independent L3/R3 bubbles. Double-tap the corresponding
+            // analog in this style, with a dedicated pulse of its PS button.
         } else {
             rectangle(c,"l2",108,"L2");rectangle(c,"l1",108,"L1");
             rectangle(c,"r1",108,"R1");rectangle(c,"r2",108,"R2");
