@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106, fix/u2-freeze-touch-upstream-20261106, fix/u2-eop-recorder-freeze-20261106, fix/u2-touch-video-20261106, fix/u2-native-android-touch-20261107, fix/u2-video-native-swipe-20261107, fix/u2-fsr-cutscene-display-20261107, fix/external-gamepad-upstream-20261108, perf/redvortex-018-baseline-20261108, fix/uncharted-gsr-fsr-touch-20261108, fix/restore-render-u1-touch-20261108, feat/uncharted-touch-style-optional-20261108]
+    branches: [main, android-ui-runtime-pending-xml, integrate/redvortex-release025, fix/uncharted2-crash, improve/u2-performance-install, integrate/six-renderer-options, fix/u3-geometry-readback-20261106, fix/u2-freeze-touch-upstream-20261106, fix/u2-eop-recorder-freeze-20261106, fix/u2-touch-video-20261106, fix/u2-native-android-touch-20261107, fix/u2-video-native-swipe-20261107, fix/u2-fsr-cutscene-display-20261107, fix/external-gamepad-upstream-20261108, perf/redvortex-018-baseline-20261108, fix/uncharted-gsr-fsr-touch-20261108, fix/restore-render-u1-touch-20261108, feat/uncharted-touch-style-optional-20261108, fix/uncharted-action-layout-screenshot-20261108]
     paths-ignore: ['**/*.md']
   workflow_dispatch:
 
@@ -177,13 +177,13 @@ jobs:
           grep -q "targetSdkVersion:'28'" dist/package.txt
           grep -q "uses-permission: name='android.permission.WRITE_EXTERNAL_STORAGE'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.9-DualLayout.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.2.9-ControlsV2.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.9-DualLayout
+          name: Uncharted-Daedalus-0.2.9-ControlsV2
           path: dist/
           if-no-files-found: error
           retention-days: 30
