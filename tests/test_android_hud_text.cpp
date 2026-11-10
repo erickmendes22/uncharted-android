@@ -16,9 +16,11 @@ int main() {
         BbOverlay::FpsMeter meter;meter.real_fps=240;meter.output_fps=240*mult;meter.generated_fps=mult>1?240*(mult-1):0;
         char fps[96];meter.Format(fps,sizeof(fps),mult);
         BbHudText::Lines lines={{{fps,ImVec4(1,1,1,1)}}};
-        if(mode>1)lines[0].push_back({" · 1000.0 ms",ImVec4(1,1,1,1)});
-        if(mode>0)lines.push_back({{"GPU 100% · CPU 100%",ImVec4(1,1,1,1)}});
-        if(mode>1)lines.push_back({{"FSR Desempenho · RAM 15.99 GB",ImVec4(1,1,1,1)}});
+        if(mode>0){
+            lines[0].push_back({" · GPU 100% · CPU 100%",ImVec4(1,1,1,1)});
+            lines.push_back({{"GSR 2 Desempenho",ImVec4(1,1,1,1)}});
+        }
+        if(mode>1)lines.push_back({{"1000.0 ms · RAM 15.99 GB",ImVec4(1,1,1,1)}});
         const float base=std::max(size.y/1080.f,.75f),pad=14*base;
         const ImVec2 padding(12*base,7*base);
         auto layout=BbHudText::Measure(lines,21*base*scale,size.x-2*pad,padding);

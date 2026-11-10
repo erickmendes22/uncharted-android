@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Daedalus / Uncharted compass: slate blue and weathered brass. No game art. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#0B1D2B" android:pathData="M0,0h108v108h-108z"/>
+    <path android:fillColor="#162F40" android:pathData="M7,7h94v94h-94z"/>
+    <path android:fillColor="#0E2332" android:pathData="M54,14A40,40 0,1 1,54 94A40,40 0,1 1,54 14Z"/>
+    <path android:fillColor="@android:color/transparent"
+        android:strokeColor="#C9A66A" android:strokeWidth="2.8"
+        android:pathData="M54,13A41,41 0,1 1,54 95A41,41 0,1 1,54 13Z"/>
+    <path android:fillColor="@android:color/transparent"
+        android:strokeColor="#526F7E" android:strokeWidth="1.2"
+        android:pathData="M54,21A33,33 0,1 1,54 87A33,33 0,1 1,54 21Z"/>
+    <path android:fillColor="#BE9660"
+        android:pathData="M54,19L60,47L54,43L48,47Z M54,89L48,61L54,65L60,61Z M19,54L47,48L43,54L47,60Z M89,54L61,60L65,54L61,48Z"/>
+    <path android:fillColor="#8095A0"
+        android:pathData="M29,29L49,45L44,49Z M79,29L64,49L59,45Z M79,79L59,63L64,59Z M29,79L44,59L49,63Z"/>
+    <path android:fillColor="#E5C88E"
+        android:pathData="M54,29L59,49L54,45L49,49Z M54,79L49,59L54,63L59,59Z"/>
+    <path android:fillColor="#0B1D2B" android:pathData="M36,38h36v34h-36z"/>
+    <path android:fillColor="#EED8A9"
+        android:pathData="M39,39h8v22c0,5 2.5,7 7,7s7,-2 7,-7V39h8v23c0,10 -6,15 -15,15s-15,-5 -15,-15z"/>
+    <path android:fillColor="@android:color/transparent"
+        android:strokeColor="#C9A66A" android:strokeWidth="1.4"
+        android:pathData="M14,14h12 M14,14v12 M94,14h-12 M94,14v12 M14,94h12 M14,94v-12 M94,94h-12 M94,94v-12"/>
+</vector>

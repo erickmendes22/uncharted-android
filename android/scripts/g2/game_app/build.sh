@@ -42,7 +42,10 @@ mkdir -p "$W/res/drawable"
 cp -r "$HERE/res/". "$W/res/"
 if [ -n "$ASSETS_DIR" ]; then cp -r "$ASSETS_DIR"/. "$W/assets/"; fi
 if [ ! -f "$W/assets/art/collection.png" ]; then bash "$HERE/../../fetch_art.sh" "$W/assets"; fi
-cp "$W/assets/art/collection.png" "$W/res/drawable/collection.jpg"
+# The app icon is the scalable slate/brass compass vector, not collection cover art.
+if [ ! -f "$HERE/res/drawable/collection.xml" ]; then
+    echo "Missing Uncharted app icon resource" >&2; exit 1
+fi
 "$BT/aapt2" compile --dir "$W/res" -o "$W/resources.zip"
 LINK_EXTRA+=(-A "$W/assets")
 cd "$W"

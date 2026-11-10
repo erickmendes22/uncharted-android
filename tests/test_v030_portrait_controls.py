@@ -10,8 +10,8 @@ native=(root/"gpu/shim/bbport_overlay_android.cpp").read_text()
 strings=json.loads((root/"android/localization/strings.json").read_text())
 
 assert 'gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);' in launcher
-assert 'new LinearLayout.LayoutParams(-1,dp(146))' in launcher
-assert 'new LinearLayout.LayoutParams(0,dp(194),1f)' in launcher
+assert 'new LinearLayout.LayoutParams(-1,dp(138))' in launcher
+assert 'new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f)' in launcher
 assert 'gameCardAction(actions,"Play",true' in launcher
 assert 'gameCardAction(actions,"Configure",false' not in launcher
 assert 'item.setSingleLine(true)' in launcher
@@ -20,10 +20,10 @@ assert 'android.widget.HorizontalScrollView categoryScroll=' in launcher
 assert 'tabLayout.width=portrait?dp(132):0' in launcher
 assert 'tabLayout.weight=portrait?0f:1f' in launcher
 assert 'The collection hero repeated the header' in launcher
-assert 'nav.addView(item, new LinearLayout.LayoutParams(0, dp(portrait?42:38), 1))' in launcher
-assert 'new LinearLayout.LayoutParams(-1,dp(72))' in launcher
+assert 'nav.addView(item, new LinearLayout.LayoutParams(0, dp(portrait?42:34), 1))' in launcher
+assert 'new LinearLayout.LayoutParams(-1,dp(68))' in launcher
 assert 'poster.addView(name,new android.widget.FrameLayout.LayoutParams(' in launcher
-assert 'selectedConfigSection=4;selectedPage=2;buildViews();refresh();' in launcher
+assert 'selectedConfigSection=4;selectedPage=2;buildViews();refresh();' not in launcher
 assert 'container.setOnClickListener(v->chooseGame(game,0))' in launcher
 assert 'enterImmersiveMode()' in launcher
 assert 'View.SYSTEM_UI_FLAG_HIDE_NAVIGATION' in launcher

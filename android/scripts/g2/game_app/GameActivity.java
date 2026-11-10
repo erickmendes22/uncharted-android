@@ -233,7 +233,16 @@ public class GameActivity extends SDLActivity {
                 throw new RuntimeException(e);
             }
         }
-        if (bootArgs.isEmpty()) bootArgs.addAll(lines(new File(d, "args.txt"), true));
+        final String requested=getIntent().getStringExtra("launch_game");
+        if (guest.isEmpty() && SelectedGameArgs.valid(requested)) {
+            // A card launch is authoritative. The fallback args.txt used to
+            // contain U3 because the last profile in the generation loop won.
+            bootArgs.clear();
+            bootArgs.addAll(lines(new File(d,SelectedGameArgs.filename(requested)),true));
+            if(!bootArgs.isEmpty())game=requested;
+        }
+        if (bootArgs.isEmpty() && !SelectedGameArgs.valid(requested))
+            bootArgs.addAll(lines(new File(d,"args.txt"),true));
         if (bootArgs.isEmpty()) {
             // Never configured: the launcher finds the game, prepares its files and writes the
             // arguments. SDL starts the game only once the activity resumes, which it will not.

@@ -68,6 +68,8 @@ jobs:
         run: |
           python3 tests/test_renderer_options.py
           python3 tests/test_launcher_localization.py
+          javac -d "$RUNNER_TEMP/game-select-test" android/scripts/g2/game_app/SelectedGameArgs.java tests/TestSelectedGameArgs.java
+          java -cp "$RUNNER_TEMP/game-select-test" dev.unchartedg2.game.TestSelectedGameArgs
           python3 tests/test_v030_game_ui.py
           python3 tests/test_v030_portrait_controls.py
           python3 tests/test_upstream_high_priority.py

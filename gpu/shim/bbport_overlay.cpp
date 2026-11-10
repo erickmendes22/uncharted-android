@@ -375,18 +375,16 @@ void FpsCounter() {
     const ImVec4 normal=ImGui::GetStyle().Colors[ImGuiCol_Text],muted=ImGui::GetStyle().Colors[ImGuiCol_TextDisabled];
     char fps_text[96],temp[128];
     presented_fps.Format(fps_text,sizeof(fps_text),settings.frame_gen==BbSettings::FrameGenLsfg?settings.frame_gen_multiplier.load():1);
+    // Compact: FPS, GPU and CPU on one row. Upscaler + preset lives below.
     BbHudText::Lines lines={{{fps_text,green}}};
-    if(settings.hud_mode>1) {
-        const float real_ms=presented_fps.real_fps>0?1000.f/presented_fps.real_fps:0.f;
-        std::snprintf(temp,sizeof(temp)," · %.1f ms",real_ms);lines[0].push_back({temp,normal});
-    }
     if(settings.hud_mode>0) {
+        lines[0].push_back({" · ",muted});
         if(sample.gpu>=0)std::snprintf(temp,sizeof(temp),"GPU %d%%",sample.gpu);
         else std::snprintf(temp,sizeof(temp),"GPU --");
-        BbHudText::Line utilization={{temp,purple},{" · ",muted}};
-        std::snprintf(temp,sizeof(temp),"CPU %.0f%%",sample.cpu_percent);utilization.push_back({temp,cyan});
-        lines.push_back(std::move(utilization));
-        BbHudText::Line detail;
+        lines[0].push_back({temp,purple});
+        lines[0].push_back({" · ",muted});
+        std::snprintf(temp,sizeof(temp),"CPU %.0f%%",sample.cpu_percent);
+        lines[0].push_back({temp,cyan});
         if(settings.upscaler!=BbSettings::UpscalerOff) {
             const char* res=std::getenv("BB_RENDER_RES");
             const char* mode=res && std::strcmp(res,"960x540")==0 ? "Quality"
@@ -397,12 +395,13 @@ void FpsCounter() {
                 :settings.upscaler==BbSettings::UpscalerGsr2
                     ?std::string("GSR 2 ")+BbLocale::Text(mode)
                     :std::string("TAA");
-            detail.push_back({upscaler,normal});
+            lines.push_back({{upscaler,normal}}); // never share the metrics row
         }
-        if(settings.hud_mode>1) {
-            std::snprintf(temp,sizeof(temp),"%sRAM %.2f GB",detail.empty()?"":" · ",sample.ram_mib/1024.f);detail.push_back({temp,normal});
-        }
-        if(!detail.empty())lines.push_back(std::move(detail));
+    }
+    if(settings.hud_mode>1) {
+        const float real_ms=presented_fps.real_fps>0?1000.f/presented_fps.real_fps:0.f;
+        std::snprintf(temp,sizeof(temp),"%.1f ms · RAM %.2f GB",real_ms,sample.ram_mib/1024.f);
+        lines.push_back({{temp,normal}});
     }
     const ImVec2 padding(12*base_scale,7*base_scale);
     const auto layout=BbHudText::Measure(lines,21*base_scale*settings.hud_scale.load(),viewport->WorkSize.x-2*pad,padding);

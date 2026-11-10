@@ -21,20 +21,32 @@ assert "Uncharted-Daedalus-0.3.0.apk" in flow
 assert 'gameCard(gallery,g[0])' in launcher
 assert 'gameCardAction(actions,"Play",true' in launcher
 assert 'gamePlayButtons.add(gameCardAction(actions,"Play",true' in launcher
+assert 'v->playGame(game)' in launcher
+assert 'SelectedGameArgs.isSelected(g[0],selected)' in launcher
+assert 'i.putExtra("launch_game",selected)' in launcher
+assert 'SelectedGameArgs.filename(requested)' in activity
+assert 'if (bootArgs.isEmpty() && !SelectedGameArgs.valid(requested))' in activity
+assert 'img.setScaleType(portrait?android.widget.ImageView.ScaleType.CENTER_CROP:' in launcher
+assert 'android.widget.ImageView.ScaleType.FIT_CENTER' in launcher
+assert 'Math.round(coverWidth*9f/16f)' in launcher
+assert src("android/scripts/g2/game_app/res/drawable/collection.xml").startswith('<?xml')
+assert 'not collection cover art' in src("android/scripts/g2/game_app/build.sh")
 assert 'for(Button play:gamePlayButtons)play.setEnabled(problem == null && !busy);' in launcher
 assert 'gamePlayButtons.clear();' in launcher
 assert 'primaryButton(games,"Play selected game"' not in launcher
 assert 'note(games,"Select a game to play.")' not in launcher
-# Regression: both install actions must be visible in Games and Settings / Games-Files.
-assert 'LinearLayout pkgQuickActions=row(games);' in launcher
-assert 'button(pkgQuickActions,"Install game PKG",v->installPkg(false));' in launcher
-assert 'button(pkgQuickActions,"Install update PKG",v->installPkg(true));' in launcher
+# One installation location only: Config > Games / Files, never duplicated in Games.
+assert 'LinearLayout pkgQuickActions=row(games);' not in launcher
+assert 'button(pkgQuickActions,"Install game PKG"' not in launcher
+assert 'button(pkgQuickActions,"Install update PKG"' not in launcher
 assert 'LinearLayout pkgActions=row(folder);' in launcher
 assert 'button(pkgActions,"Install game PKG",v->installPkg(false));' in launcher
 assert 'button(pkgActions,"Install update PKG",v->installPkg(true));' in launcher
 assert 'case SetupFlow.PKG:pkgInstaller.pick(false)' in launcher
 assert 'case SetupFlow.UPDATE:pkgInstaller.pick(true)' in launcher
-assert 'selectedConfigSection=4;selectedPage=2;buildViews();refresh();' in launcher
+assert 'selectedConfigSection=4;selectedPage=2;buildViews();refresh();' not in launcher
+assert launcher.count('button(pkgActions,"Install game PKG"')==1
+assert launcher.count('button(pkgActions,"Install update PKG"')==1
 assert 'gameCardAction(actions,"Configure",false' not in launcher
 assert 'gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL)' in launcher
 assert 'categoryScroll.setHorizontalScrollBarEnabled(false)' in launcher
@@ -71,6 +83,9 @@ assert 'down_outside = open && event.tfinger.x > panel_left_norm.load()' in menu
 assert 'x<=Math.min(getWidth()*.10f' in touch
 assert 'getWidth()*.065f' in touch
 assert '"GSR 2 "' in hud
+assert 'lines[0].push_back({temp,purple})' in hud
+assert 'lines[0].push_back({temp,cyan})' in hud
+assert 'lines.push_back({{upscaler,normal}})' in hud
 assert '"TAA",normal});' not in hud
 assert 'Turnip_Gen8_V39_Patched.zip' in driver and 'Turnip_v27.0.0-R2.zip' in driver
 assert 'bd457b30f195cf93a334b5302c221b1b5cb59c79c485935decf95d560a38c8a2' in driver

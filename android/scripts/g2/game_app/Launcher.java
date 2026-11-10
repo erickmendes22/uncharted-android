@@ -280,6 +280,12 @@ public class Launcher extends Activity {
         item.setOnClickListener(click);
         return item;
     }
+    /** The Play button always boots its own card, never a prior visual selection. */
+    private void playGame(String game) {
+        if(!SelectedGameArgs.valid(game))return;
+        chooseGame(game,0);
+        play();
+    }
     private LinearLayout gameCard(LinearLayout parent,String game) {
         final boolean portrait=portraitLayout();
         LinearLayout container=new LinearLayout(this);
@@ -290,14 +296,16 @@ public class Launcher extends Activity {
         bg.setCornerRadius(dp(13));
         container.setBackground(bg);
         LinearLayout.LayoutParams panel=portrait?
-            new LinearLayout.LayoutParams(-1,dp(146)):
-            new LinearLayout.LayoutParams(0,dp(194),1f);
+            new LinearLayout.LayoutParams(-1,dp(138)):
+            new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f);
         panel.setMargins(dp(5),dp(7),dp(5),dp(7));
         parent.addView(container,panel);
 
         android.widget.FrameLayout poster=new android.widget.FrameLayout(this);
         android.widget.ImageView img=new android.widget.ImageView(this);
-        img.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        img.setScaleType(portrait?android.widget.ImageView.ScaleType.CENTER_CROP:
+            android.widget.ImageView.ScaleType.FIT_CENTER);
+        poster.setBackgroundColor(0xff0b1d2b);
         for(String path:new String[]{"art/"+game+".jpg","art/"+game+".png","art/collection.png"}) {
             try(InputStream in=getAssets().open(path)){
                 img.setImageBitmap(android.graphics.BitmapFactory.decodeStream(in));
@@ -305,15 +313,17 @@ public class Launcher extends Activity {
             }catch(Exception ignored){}
         }
         poster.addView(img,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        int coverWidth=Math.max(dp(96),(getResources().getDisplayMetrics().widthPixels-dp(95))/3);
+        int coverHeight=Math.round(coverWidth*9f/16f);
         container.addView(poster,portrait?
             new LinearLayout.LayoutParams(0,-1,.40f):
-            new LinearLayout.LayoutParams(-1,0,1f));
+            new LinearLayout.LayoutParams(-1,coverHeight));
 
         LinearLayout details=new LinearLayout(this);
         details.setOrientation(LinearLayout.VERTICAL);
         details.setPadding(dp(8),dp(6),dp(8),dp(8));
         if(portrait)container.addView(details,new LinearLayout.LayoutParams(0,-1,.60f));
-        else container.addView(details,new LinearLayout.LayoutParams(-1,dp(72)));
+        else container.addView(details,new LinearLayout.LayoutParams(-1,dp(68)));
         if(portrait) {
             TextView name=text(details,gameName(game),15,true);
             name.setTextColor(0xfff0debc);
@@ -336,7 +346,7 @@ public class Launcher extends Activity {
         LinearLayout actions=new LinearLayout(this);
         actions.setOrientation(portrait?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         details.addView(actions,new LinearLayout.LayoutParams(-1,-2));
-        gamePlayButtons.add(gameCardAction(actions,"Play",true,v->{chooseGame(game,0);play();}));
+        gamePlayButtons.add(gameCardAction(actions,"Play",true,v->playGame(game)));
         // A card selects a game without unexpectedly entering global settings.
         container.setOnClickListener(v->chooseGame(game,0));
         return container;
@@ -718,10 +728,10 @@ public class Launcher extends Activity {
         shell.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
             new int[] {0xFF142A3B, 0xFF091421, 0xFF2D261D}));
         final boolean portrait=portraitLayout();
-        TextView brand = text(shell, "Uncharted Daedalus", portrait?22:19, true);
+        TextView brand = text(shell, "Uncharted Daedalus", portrait?21:17, true);
         brand.setTypeface(Typeface.create("serif", Typeface.BOLD));
         brand.setLetterSpacing(0.025f);
-        brand.setPadding(dp(portrait?15:12),dp(portrait?4:2),dp(12),0);
+        brand.setPadding(dp(portrait?14:10),dp(portrait?3:0),dp(12),0);
         TextView subtitle = note(shell, "THE NATHAN DRAKE COLLECTION");
         subtitle.setTextSize(11);
         subtitle.setPadding(dp(15),0,dp(12),dp(2));
@@ -785,20 +795,14 @@ public class Launcher extends Activity {
         gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         games.addView(gallery);
         for(String[] g:GAMES)gameCard(gallery,g[0]);
-        // Keep installation visible on the home page, not hidden behind a generic file action.
-        LinearLayout pkgQuickActions=row(games);
-        button(pkgQuickActions,"Install game PKG",v->installPkg(false));
-        button(pkgQuickActions,"Install update PKG",v->installPkg(true));
-        button(games,"Choose folder",v->{
-            selectedConfigSection=4;selectedPage=2;buildViews();refresh();
-        });
+        // PKG installation and folder management live only in Config > Games / Files.
         statusText = note(shell, "");
         statusText.setPadding(dp(22), 0, dp(22), dp(4));
         root = home;
         LinearLayout folder = card(configSections[4], "GAME INSTALLATION");
         folderText = text(folder, "", 15, false);
         folderInfo = note(folder, "");
-        // Same direct PKG and update actions as 0.2.9, retaining existing extraction logic.
+        // Sole installation location: direct PKG/update and extracted folder from 0.2.9.
         LinearLayout pkgActions=row(folder);
         button(pkgActions,"Install game PKG",v->installPkg(false));
         button(pkgActions,"Install update PKG",v->installPkg(true));
@@ -1131,7 +1135,7 @@ public class Launcher extends Activity {
                 scroll.scrollTo(0, 0);
             });
             navButtons[n] = item;
-            nav.addView(item, new LinearLayout.LayoutParams(0, dp(portrait?42:38), 1));
+            nav.addView(item, new LinearLayout.LayoutParams(0, dp(portrait?42:34), 1));
         }
         shell.addView(nav);
         styleChildren(shell);
@@ -1825,7 +1829,8 @@ public class Launcher extends Activity {
                 .append("--timeout\n0\n--log\n").append(d).append("/uncharted-daedalus.log\n");
             if (preset != null) args.append("--patches\n").append(preset).append('\n');
             writeText(new File(files, "args-" + g[0] + ".txt"), args.toString());
-            if (g[0].equals(prefs.getString("selected_game", "u1"))) writeText(new File(files, "args.txt"), args.toString());
+            if (SelectedGameArgs.isSelected(g[0],selected))
+                writeText(new File(files,"args.txt"),args.toString());
             // U2's movie player still uses its 1920x1080 video texture even
             // when scene rendering is 640x360 and FSR output is 1280x720.
             // Shrinking only the decoded picture (while keeping the 1920x1080
@@ -1903,6 +1908,7 @@ public class Launcher extends Activity {
         enterImmersiveMode();
         Intent i = new Intent(this, GameActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        i.putExtra("launch_game",selected); // independent of transient profile-generation state
         startActivity(i);
         finish();
     }
