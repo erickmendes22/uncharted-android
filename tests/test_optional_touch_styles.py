@@ -49,7 +49,9 @@ assert 'PointF p=actionDpadCenter();' in touch
 assert 'float toolbarX=screenLayoutX(e,at);' in touch
 assert 'migration.remove("overlay_uncharted_x_"+name)' in touch
 assert 'actionDpad(c)' in touch
-assert 'float r=45*sizeMultiplier;' in touch
+assert 'private static final float[][] DPAD_ARMS=' in touch
+assert 'pressed.contains(DPAD_DIRECTIONS[i])' in touch
+assert 'c.drawRoundRect(x0,y0,x1,y1' in touch
 assert 'migration.putFloat("overlay_uncharted_size",1.0f);' in touch
 assert 'float radius=stick(name)?84:' in touch
 assert 'drawFirePistol(c,p.x,p.y,r*.77f)' in touch
