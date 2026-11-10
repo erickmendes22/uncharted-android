@@ -2562,15 +2562,20 @@ void Rasterizer::NoteSmallWrittenBuffers(const Shader::Info& stage) {
 
 void Rasterizer::NoteCopy64Readback(const Shader::Info& stage) {
     if (!Copy64EopReadback() || u32(stage.pgm_hash) != u32(Copy64ShaderHash) ||
-        stage.buffers.size() != 2 || stage.buffers[1].IsSpecial()) return;
+        stage.buffers.size() != 2 || stage.buffers[0].IsSpecial() ||
+        stage.buffers[1].IsSpecial()) return;
     const auto ud = stage.UserData();
     if (ud.size() <= 6) return;
+    const auto src = stage.buffers[0].GetSharp(stage);
     const auto dst = stage.buffers[1].GetSharp(stage);
-    if (dst.GetStride() != 4 || !dst.base_address) return;
+    if (src.GetStride() != 4 || dst.GetStride() != 4 ||
+        !src.base_address || !dst.base_address) return;
     // Keep only the dwords the dispatch writes; ignore the large copies that
     // do not contain the CPU-visible 0.5-1 KiB raycaster result records.
+    // Match ExecuteScalarCopyHLE's exact copy range, including the SOURCE
+    // record count. A readback cannot contain bytes never written by the HLE.
     const u64 count = std::min<u64>({u64(CsRegs().dim_x) * 64, u64(ud[6]),
-                                    u64(dst.num_records)});
+                                    u64(src.num_records), u64(dst.num_records)});
     const u64 bytes = count * sizeof(u32);
     if (!bytes || bytes > Copy64ReadbackMax) return;
     std::scoped_lock lock{small_written_mutex};
@@ -2580,7 +2585,8 @@ void Rasterizer::NoteCopy64Readback(const Shader::Info& stage) {
 }
 
 void Rasterizer::ReadBackSmallWrittenBuffers() {
-    if (!BbRenderer::SmallReadbacks() && !Copy64EopReadback()) return;
+    const bool copy64_enabled = Copy64EopReadback();
+    if (!BbRenderer::SmallReadbacks() && !copy64_enabled) return;
     std::vector<std::pair<VAddr, u32>> ranges, copy64;
     {
         std::scoped_lock lk{small_written_mutex};
@@ -2600,17 +2606,56 @@ void Rasterizer::ReadBackSmallWrittenBuffers() {
             captured = true;
         }
     }
+    // The 0.2.9 U3 regression can come from dozens of queued GPU snapshots
+    // and the synchronous correctness fallback when the 16-slot queue fills.
+    // Count both paths, and measure only the actual blocking fallback.
+    // All counters are local to the GPU command path; print once/256 events.
+    static std::atomic<u64> events{0}, candidates{0}, queued{0}, no_gpu{0};
+    static std::atomic<u64> sync_fallbacks{0}, sync_ns{0}, max_pending{0};
+    if (copy64_enabled)
+        candidates.fetch_add(copy64.size(), std::memory_order_relaxed);
     for (const auto& [address, size] : copy64) {
-        if (!buffer_cache.IsRangeGpuWritten(address, size)) continue;
+        if (!buffer_cache.IsRangeGpuWritten(address, size)) {
+            if (copy64_enabled) no_gpu.fetch_add(1, std::memory_order_relaxed);
+            continue;
+        }
         if (buffer_cache.DeferCopy64Readback(address, size)) {
             captured = true;
+            if (copy64_enabled) queued.fetch_add(1, std::memory_order_relaxed);
         } else {
-            // Correctness fallback only if the bounded landing queue is full.
-            // Normal U3 gameplay follows the async path with no EOP GPU wait.
+            // When the 16-slot async landing queue is exhausted, this can
+            // block the guest on the GPU. Preserve U3 geometry correctness
+            // for users who explicitly enabled the raycaster fix.
+            const auto begin = std::chrono::steady_clock::now();
             buffer_cache.ReadMemory(address, size, false, true);
+            if (copy64_enabled) {
+                sync_fallbacks.fetch_add(1, std::memory_order_relaxed);
+                sync_ns.fetch_add(
+                    static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now() - begin).count()),
+                    std::memory_order_relaxed);
+            }
         }
     }
     if (captured) scheduler.Flush(); // one submission for this event, no GPU wait
+    if (copy64_enabled) {
+        const u64 pending = buffer_cache.PendingLanding();
+        u64 peak = max_pending.load(std::memory_order_relaxed);
+        while (peak < pending &&
+               !max_pending.compare_exchange_weak(peak, pending, std::memory_order_relaxed)) {}
+        const u64 event = events.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (event % 256 == 0) {
+            std::printf("COPY64EOP stats: events=%llu candidates=%llu async=%llu no_gpu=%llu "
+                        "sync_fallbacks=%llu sync_ms=%.3f pending_peak=%llu\n",
+                        static_cast<unsigned long long>(event),
+                        static_cast<unsigned long long>(candidates.load(std::memory_order_relaxed)),
+                        static_cast<unsigned long long>(queued.load(std::memory_order_relaxed)),
+                        static_cast<unsigned long long>(no_gpu.load(std::memory_order_relaxed)),
+                        static_cast<unsigned long long>(sync_fallbacks.load(std::memory_order_relaxed)),
+                        static_cast<double>(sync_ns.load(std::memory_order_relaxed)) / 1'000'000.0,
+                        static_cast<unsigned long long>(max_pending.load(std::memory_order_relaxed)));
+        }
+    }
 }
 
 void Rasterizer::DispatchDirect() {

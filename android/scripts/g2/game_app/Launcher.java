@@ -792,6 +792,14 @@ public class Launcher extends Activity {
         // Broad compute readbacks can halve FPS; keep this optional and off by default.
         // U3's targeted raycaster fix is independent of this control.
         compatibilitySwitch(root,"Small GPU result readbacks (U2/U3)","gpu_small_readbacks",false);
+        // 0.2.9 regression control: the separate U3 raycaster path was forced
+        // on even with the broad-readback switch off, and can fall back to
+        // a synchronous GPU wait when its 16-slot landing queue is full.
+        compatibilitySwitch(root,"U3 raycaster readback (geometry fix; may lower FPS)",
+                            "u3_raycaster_readback",false);
+        compatibilitySwitch(root,"Shader loop safety (avoids GPU hangs)",
+                            "gpu_shader_loop_safety",true);
+        note(root, "Turn off shader loop safety only to compare performance; unprotected shader loops can freeze the GPU.");
         root = card(config, "ADVANCED");
         text(root, "Additional environment variables (optional):", 14, false);
         extraEnv = new EditText(this);

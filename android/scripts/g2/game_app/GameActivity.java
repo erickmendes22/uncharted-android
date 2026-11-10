@@ -302,8 +302,17 @@ public class GameActivity extends SDLActivity {
             // Only this specific copy shader is synchronized; readback mode is unchanged.
             Os.setenv("BB_SCALAR_COPY64_SYNC","u2".equals(game)?"2":"0",true);
             Os.setenv("BB_SCALAR_COPY64_DEFER","u2".equals(game)?"1":"0",true);
-            // U3 raycaster: bounded async result copies, no mandatory EOP GPU wait.
-            Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game)?"1":"0",true);
+            // Not forced ON: U3 raycaster copies allocate and submit GPU snapshots
+            // even when the general readback option is OFF. In 0.2.9 this
+            // caused a plausible frame-rate regression; keep optional until
+            // device A/B tests establish that performance is acceptable.
+            Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game) &&
+                      options.getBoolean("u3_raycaster_readback",false)?"1":"0",true);
+            // Isolate the other new hot-path change without swapping APKs.
+            // Enabled by default for safety; shader cache names are selected
+            // separately for the protected vs unprotected code.
+            Os.setenv("BB_EFFECT_LOOP_CLAMP",
+                      options.getBoolean("gpu_shader_loop_safety",true)?"1":"0",true);
             // The selected locale must reach Orbis, not just Android/ImGui. Set after
             // old per-game environment files so their stale defaults cannot force English.
             Os.setenv("BB_LANGUAGE",Integer.toString(GameLanguage.id(AppLanguage.code(),android.content.res.Resources.getSystem().getConfiguration().getLocales().get(0))),true);

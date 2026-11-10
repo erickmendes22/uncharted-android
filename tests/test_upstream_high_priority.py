@@ -64,6 +64,11 @@ assert "NoteCopy64Readback(cs);" in renderer
 assert "std::min<u64>({u64(CsRegs().dim_x) * 64" in renderer
 assert "size > Copy64ReadbackMax" not in renderer  # size is named bytes
 assert "bytes > Copy64ReadbackMax" in renderer
+assert "u64(src.num_records), u64(dst.num_records)" in renderer
+assert "COPY64EOP stats: events=%llu candidates=%llu async=%llu no_gpu=%llu" in renderer
+assert "sync_fallbacks=%llu sync_ms=%.3f pending_peak=%llu" in renderer
+assert "max_pending.compare_exchange_weak" in renderer
+assert "static std::atomic<u64> sync_fallbacks" in renderer
 assert "void Rasterizer::ReadBackSmallWrittenBuffers()" in renderer
 assert "buffer_cache.DeferCopy64Readback(address, size)" in renderer
 assert "if (captured) scheduler.Flush();" in renderer
@@ -78,5 +83,7 @@ assert 'compatibilitySwitch(root,"Small GPU result readbacks (U2/U3)","gpu_small
 assert 'options.getBoolean("gpu_small_readbacks",false)' in activity
 assert '"u2".equals(game)||"u3".equals(game)' in options
 assert 'BB_READBACK_SMALL_BUFFERS="+(enabled?"1":"0")' in options
-assert 'Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game)?"1":"0",true)' in activity
+assert 'Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game) &&' in activity
+assert 'options.getBoolean("u3_raycaster_readback",false)' in activity
+assert 'options.getBoolean("gpu_shader_loop_safety",true)' in activity
 print("PASS: six high-priority upstream integration paths wired; optional broad readbacks off by default")
