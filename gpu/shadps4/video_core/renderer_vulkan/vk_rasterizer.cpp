@@ -2639,7 +2639,7 @@ void Rasterizer::ReadBackSmallWrittenBuffers() {
     }
     if (captured) scheduler.Flush(); // one submission for this event, no GPU wait
     if (copy64_enabled) {
-        const u64 pending = buffer_cache.PendingLanding();
+        const u64 pending = buffer_cache.PendingLandingCount();
         u64 peak = max_pending.load(std::memory_order_relaxed);
         while (peak < pending &&
                !max_pending.compare_exchange_weak(peak, pending, std::memory_order_relaxed)) {}

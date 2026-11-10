@@ -68,6 +68,9 @@ assert "u64(src.num_records), u64(dst.num_records)" in renderer
 assert "COPY64EOP stats: events=%llu candidates=%llu async=%llu no_gpu=%llu" in renderer
 assert "sync_fallbacks=%llu sync_ms=%.3f pending_peak=%llu" in renderer
 assert "max_pending.compare_exchange_weak" in renderer
+assert "buffer_cache.PendingLandingCount()" in renderer
+assert "u64 PendingLandingCount() const;" in bufhdr
+assert "BufferCache::PendingLandingCount() const" in bufcpp
 assert "static std::atomic<u64> sync_fallbacks" in renderer
 assert "void Rasterizer::ReadBackSmallWrittenBuffers()" in renderer
 assert "buffer_cache.DeferCopy64Readback(address, size)" in renderer

@@ -575,6 +575,12 @@ u64 BufferCache::PendingLanding() const {
     return registered > landing_done.load(std::memory_order_acquire) ? registered : 0;
 }
 
+u64 BufferCache::PendingLandingCount() const {
+    const u64 registered = landing_registered.load(std::memory_order_acquire);
+    const u64 completed = landing_done.load(std::memory_order_acquire);
+    return registered > completed ? registered - completed : 0;
+}
+
 void BufferCache::WaitLanding(u64 seq) {
     if (seq == 0 || landing_done.load(std::memory_order_acquire) >= seq) {
         return;

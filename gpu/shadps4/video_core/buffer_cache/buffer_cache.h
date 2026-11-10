@@ -73,6 +73,8 @@ public:
     // not a global precise readback or an EOP fence wait.
     bool DeferCopy64Readback(VAddr address, u64 size);
     u64 PendingLanding() const;
+    // Telemetry only: count of outstanding async snapshots, NOT the timeline seq.
+    u64 PendingLandingCount() const;
     bool LandingGateActive() const;
     void WaitLanding(u64 seq);
     void RunAfterLanding(u64 seq, std::function<void()> fn, bool off_caller = false);
