@@ -191,7 +191,11 @@ jobs:
           grep -q "versionCode='120300'" dist/package.txt
           # Resolve the new launchable ComponentName, not the old Launcher cached by
           # the Redmagic app drawer. Confirm the approved adaptive art is packaged.
-          grep -q "launchable-activity: name='dev.unchartedg2.game.UnchartedDaedalusIcon2026'" dist/package.txt
+          # aapt2 dump badging may not report LAUNCHER activity-alias entries.
+          # Inspect the compiled AndroidManifest instead (Android resolves aliases).
+          grep -q 'E: activity-alias' dist/manifest.txt
+          grep -q 'UnchartedDaedalusIcon2026' dist/manifest.txt
+          grep -q 'android.intent.category.LAUNCHER' dist/manifest.txt
           grep -q "application-icon-160:'res/mipmap-anydpi-v26/ic_launcher.xml'" dist/package.txt
           unzip -p "$apk" res/drawable-nodpi-v4/uncharted_icon_approved.webp | \
             cmp -s - android/scripts/g2/game_app/res/drawable-nodpi/uncharted_icon_approved.webp
