@@ -16,7 +16,7 @@ assert "BbSettings::IsFsr4(provider)" in u
 assert 'env[i] += "BB_U2_MOVIE_FSR_BYPASS=1\\n"' in launcher
 assert 'env[i] += "-BB_VDEC_DIAG\\n-BB_U2_MOVIE_FSR_BYPASS\\n"' in launcher
 # No movie should redirect into the previous scene's FSR display image.
-assert "display_redirect = ui_phase && !movie_bypass;" in u
+assert "display_redirect = ui_phase && !movie_bypass && !changed;" in u
 assert "return !MovieFsrBypass() && enabled && !failed" in u
 assert "if (MovieFsrBypass()) {" in u
 assert "ui_phase = display_redirect = false;" in u
