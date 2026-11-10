@@ -1627,7 +1627,7 @@ public class Launcher extends Activity {
         File target=new File(files, "bbport-"+game+".ini");
         File legacy=new File(files,"bbport.ini");
         if(!target.exists() && legacy.isFile()) {
-            try(java.io.InputStream src=new FileInputStream(legacy);
+            try(java.io.InputStream src=new java.io.FileInputStream(legacy);
                 java.io.OutputStream dst=new FileOutputStream(target)){
                 byte[] buf=new byte[8192];int count;
                 while((count=src.read(buf))>=0)dst.write(buf,0,count);
