@@ -67,7 +67,9 @@ assert 'GameActivity.nativeToggleMenu()' in touch
 assert 'touchStyles.setOnCheckedChangeListener' in launcher
 assert 'TouchControllerOverlay.CLASSIC_STYLE' in launcher
 assert 'TouchControllerOverlay.UNCHARTED_STYLE' in launcher
-assert 'Editar posicao e tamanho dos botoes' in launcher
+assert 'button(root,"Edit button position and size",v->editTouchLayout());' in launcher
+assert 'option.setText(AppLanguage.text(choice[1]))' in launcher
+assert 'Editar posicao e tamanho dos botoes' not in launcher
 assert 'androidPadView.toggleStyle()' in game
 assert 'androidPadView.syncStyle()' in game
 assert 'BB_TOUCH_STYLE_REQUEST' in game and 'BB_TOUCH_STYLE_STATE' in game
