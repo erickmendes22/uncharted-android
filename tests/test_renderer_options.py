@@ -45,7 +45,7 @@ print('PASS: invalid driver blobs rejected before Vulkan; all 24 graphics modes 
 # The screen and boot must agree, including direct entry/loadexec and old saved prefs.
 launcher=(root/'android/scripts/g2/game_app/Launcher.java').read_text()
 activity=(root/'android/scripts/g2/game_app/GameActivity.java').read_text()
-assert 'card(config, "Performance")' in launcher
+assert 'card(configSections[1], "Performance")' in launcher
 assert 'card(config, "Compatibility")' not in launcher
 assert 'card(config, "Renderer comparison")' not in launcher
 assert 'Changes apply on the next game start. Disable one option at a time to compare.' not in launcher
@@ -54,7 +54,7 @@ for key in ['arm_uma_readback','arm_flush_draws','arm_job_spin']:
  assert 'options.getBoolean(\"'+key+'\",true)' in activity,key
 assert '"gpu_small_readbacks",false)' in launcher
 assert 'options.getBoolean("gpu_small_readbacks",false)' in activity
-assert 'RendererOptions.environment(game,options.getBoolean("gpu_small_readbacks",false))' in activity
+assert 'RendererOptions.environment(game,options.getBoolean("game_"+game+"_gpu_small_readbacks"' in activity
 # Both approved fixes must run automatically even for users whose previous
 # diagnostic release stored OFF in SharedPreferences. Only broad readbacks
 # remain a user-facing, disabled-by-default option.

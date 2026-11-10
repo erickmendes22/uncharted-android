@@ -359,7 +359,10 @@ final class TouchControllerOverlay extends View {
             // This gesture is not forwarded as a PS button or camera motion.
             // L2 and draggable controls may extend into this strip. Do
             // not hijack a finger if it actually landed on a PS button.
-            if (menuSwipePointer<0 && x<=40f && hit(x,y)==null) {
+            // A full-height left-edge zone, including the lower part of
+            // landscape screens. Never steal touches from the D-pad/stick.
+            if (menuSwipePointer<0 && x<=Math.min(getWidth()*.10f,
+                    getResources().getDisplayMetrics().density*96f) && hit(x,y)==null) {
                 menuSwipePointer=id;
                 menuSwipeStartX=x;
                 menuSwipeStartY=y;
@@ -382,10 +385,13 @@ final class TouchControllerOverlay extends View {
                 int pointer=e.findPointerIndex(menuSwipePointer);
                 if (pointer>=0) {
                     float x=layoutX(e,pointer),y=layoutY(e,pointer);
-                    if (Math.abs(y-menuSwipeStartY)>65f && x-menuSwipeStartX<140f)
+                    float density=getResources().getDisplayMetrics().density;
+                    final float distance=Math.max(density*85f,getWidth()*.065f);
+                    if (Math.abs(y-menuSwipeStartY)>density*105f &&
+                        x-menuSwipeStartX<distance)
                         menuSwipePointer=-1;
-                    else if (x-menuSwipeStartX>=140f &&
-                             Math.abs(y-menuSwipeStartY)<=65f) {
+                    else if (x-menuSwipeStartX>=distance &&
+                             Math.abs(y-menuSwipeStartY)<=density*105f) {
                         menuSwipePointer=-1;
                         release();
                         GameActivity.nativeToggleMenu();

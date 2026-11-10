@@ -96,7 +96,7 @@ public class Launcher extends Activity {
     /** Where driver packages are downloaded from: the GitHub releases of the community Turnip
      *  builds (the zips the Android emulators share: meta.json and the driver library). */
     private static final String[] DRIVER_SOURCES = {
-        "K11MCH1/AdrenoToolsDrivers", "MrPurple666/purple-turnip", "StevenMXZ/Adreno-Tools-Drivers",
+        "StevenMXZ/Adreno-Tools-Drivers", "K11MCH1/AdrenoToolsDrivers", "MrPurple666/purple-turnip",
     };
 
     private SharedPreferences prefs;
@@ -114,7 +114,163 @@ public class Launcher extends Activity {
     private long gpuChip;
     private PkgInstaller pkgInstaller;
 
+
+    // Only game-specific settings are copied into each game's profile.
+    // Driver packages, language, app-wide files and touch appearance remain global.
+    private static final String[] GAME_PROFILE_KEYS={
+        "mobile_upscale","resolution","shadow_cascades","fps_limit","touch_pad",
+        "show_fps","uncapped","gpu_small_readbacks"
+    };
+    private static boolean gameScoped(String key) {
+        if(key.startsWith("patch_")) return true;
+        for(String candidate:GAME_PROFILE_KEYS) if(candidate.equals(key)) return true;
+        return false;
+    }
+    private void saveGameProfile(String game) {
+        if(game==null || !game.matches("u[123]")) return;
+        SharedPreferences.Editor editor=prefs.edit();
+        for(java.util.Map.Entry<String,?> item:prefs.getAll().entrySet()) {
+            if(!gameScoped(item.getKey())) continue;
+            String key="game_"+game+"_"+item.getKey();
+            Object value=item.getValue();
+            if(value instanceof Boolean) editor.putBoolean(key,(Boolean)value);
+            else if(value instanceof Integer) editor.putInt(key,(Integer)value);
+            else if(value instanceof String) editor.putString(key,(String)value);
+        }
+        editor.putBoolean("game_"+game+"_initialized",true).commit();
+    }
+    private void loadGameProfile(String game) {
+        if(!game.matches("u[123]")) return;
+        if(!prefs.getBoolean("game_"+game+"_initialized",false)) {
+            // First switch inherits the current valid settings, then diverges.
+            saveGameProfile(game);
+            return;
+        }
+        SharedPreferences.Editor editor=prefs.edit();
+        for(java.util.Map.Entry<String,?> item:prefs.getAll().entrySet()) {
+            if(!gameScoped(item.getKey())) continue;
+            String local="game_"+game+"_"+item.getKey();
+            if(!prefs.contains(local)) {editor.remove(item.getKey());continue;}
+            Object value=prefs.getAll().get(local);
+            if(value instanceof Boolean) editor.putBoolean(item.getKey(),(Boolean)value);
+            else if(value instanceof Integer) editor.putInt(item.getKey(),(Integer)value);
+            else if(value instanceof String) editor.putString(item.getKey(),(String)value);
+        }
+        editor.commit();
+    }
+    private void chooseGame(String game,int destination) {
+        if(!game.matches("u[123]")) return;
+        String previous=prefs.getString("selected_game","u1");
+        if(!game.equals(previous)){
+            saveGameProfile(previous);
+            loadGameProfile(game);
+            prefs.edit().putString("selected_game",game).commit();
+        }
+        selectedPage=destination;
+        buildViews();
+        if(pageScroll!=null)pageScroll.scrollTo(0,0);
+        refresh();
+    }
+
+    /** Native settings panel writes one atomic restart request. Restart's small
+     *  helper process opens the launcher only after the previous Vulkan process
+     *  exits. Here the launcher validates the requested provider and patches,
+     *  rebuilds executable recipes, then boots the same game again.
+     */
+    private boolean applyGameRequest() {
+        File request=new File(files,"game-config-request.txt");
+        if(!request.isFile())return false;
+        java.util.List<String> content;
+        try{content=java.nio.file.Files.readAllLines(request.toPath());}
+        catch(IOException error){return false;}
+        request.delete();
+        String game=prefs.getString("selected_game","u1");
+        for(String line:content)if(line.startsWith("game=")){
+            String candidate=line.substring(5).trim();
+            if(candidate.matches("u[123]"))game=candidate;
+        }
+        String previous=prefs.getString("selected_game","u1");
+        saveGameProfile(previous);
+        loadGameProfile(game);
+        prefs.edit().putString("selected_game",game).commit();
+        SharedPreferences.Editor editor=prefs.edit();
+        for(String line:content){
+            int equals=line.indexOf('=');
+            if(equals<1)continue;
+            String key=line.substring(0,equals),value=line.substring(equals+1).trim();
+            if(key.equals("upscale")){
+                try{
+                    int mode=Integer.parseInt(value);
+                    if(mode>=0 && mode<=8)editor.putInt("mobile_upscale",mode);
+                }catch(NumberFormatException ignored){}
+            }else if(key.equals("shadow_cascades")){
+                try{
+                    int n=Integer.parseInt(value);
+                    if(n>=0 && n<=2)editor.putInt(key,n);
+                }catch(NumberFormatException ignored){}
+            }else if(key.startsWith("patch_") &&
+                     key.matches("patch_[A-Za-z0-9 :()\\-]+") &&
+                     (value.equals("0")||value.equals("1"))) {
+                editor.putBoolean(key,value.equals("1"));
+            }else if(key.equals("gpu_small_readbacks") && (value.equals("0")||value.equals("1"))){
+                editor.putBoolean(key,value.equals("1"));
+            }
+        }
+        editor.commit();
+        saveGameProfile(game);
+        selectedPage=2;
+        return true;
+    }
+
+    private String gameName(String id) {
+        return "u1".equals(id)?"UNCHARTED 1 · Drake's Fortune":
+               "u2".equals(id)?"UNCHARTED 2 · Among Thieves":
+               "UNCHARTED 3 · Drake's Deception";
+    }
+    private LinearLayout gameCard(LinearLayout parent,String game) {
+        LinearLayout container=new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[]{0xF0213541,0xFF0B1926});
+        bg.setStroke(dp(2),game.equals(prefs.getString("selected_game","u1"))?accent:0xAA4D6371);
+        bg.setCornerRadius(dp(13));
+        container.setBackground(bg);
+        LinearLayout.LayoutParams panel=new LinearLayout.LayoutParams(0,dp(280),1f);
+        panel.setMargins(dp(6),dp(8),dp(6),dp(8));
+        parent.addView(container,panel);
+        android.widget.FrameLayout poster=new android.widget.FrameLayout(this);
+        android.widget.ImageView img=new android.widget.ImageView(this);
+        img.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        for(String path:new String[]{"art/"+game+".png","art/"+game+".jpg","art/collection.png"}) {
+            try(InputStream in=getAssets().open(path)){
+                img.setImageBitmap(android.graphics.BitmapFactory.decodeStream(in));
+                break;
+            }catch(Exception ignored){}
+        }
+        poster.addView(img,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        TextView name=new TextView(this);
+        name.setText(AppLanguage.text(gameName(game)));
+        name.setTextColor(0xFFFFE0A2);name.setTypeface(Typeface.create("serif",Typeface.BOLD));
+        name.setTextSize(17);name.setPadding(dp(10),dp(8),dp(10),dp(10));
+        name.setGravity(android.view.Gravity.BOTTOM);
+        name.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[]{0x00121E2B,0xED09131D}));
+        poster.addView(name,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        container.addView(poster,new LinearLayout.LayoutParams(-1,0,1));
+        TextView state=text(container,prepared()? "Prepared":"Not prepared",12,false);
+        state.setTextColor(prepared()?0xFF91CD8E:muted);
+        state.setPadding(dp(10),dp(2),dp(10),0);
+        LinearLayout actions=new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setPadding(dp(6),dp(2),dp(6),dp(8));
+        container.addView(actions);
+        button(actions,"Play",v->{chooseGame(game,0);play();});
+        button(actions,"Configure",v->chooseGame(game,2));
+        return container;
+    }
+
     private int selectedPage;
+    private boolean autoPlayConfigRequest;
     private Runnable refreshNativeAa;
     private ScrollView pageScroll;
     private android.app.AlertDialog activeDialog;
@@ -168,8 +324,12 @@ public class Launcher extends Activity {
             if(prefs.getInt("mobile_upscale",0)==5)edit.putInt("mobile_upscale",4);
             edit.apply();
         }
+        String selected=prefs.getString("selected_game","u1");
+        loadGameProfile(selected);
         if("fsr3".equals(iniGet("frame_gen")) || "dlss".equals(iniGet("frame_gen")))iniPut("frame_gen","off");
-        if(savedInstanceState!=null)selectedPage=savedInstanceState.getInt("selected_page",0);
+        autoPlayConfigRequest=getIntent().getBooleanExtra("apply_game_request",false) && applyGameRequest();
+        if(savedInstanceState!=null && !autoPlayConfigRequest)
+            selectedPage=savedInstanceState.getInt("selected_page",0);
         if(savedInstanceState!=null){
             setupFlow.pending=savedInstanceState.getInt("setup_pending",SetupFlow.NONE);
             setupFlow.requesting=savedInstanceState.getBoolean("setup_requesting",false);
@@ -177,7 +337,10 @@ public class Launcher extends Activity {
             setupFlow.offeringSettings=savedInstanceState.getBoolean("setup_offer",false);
         }
         buildViews();
-        if(storageAccess())handle(getIntent());else refresh();
+        if(storageAccess()) {
+            if(autoPlayConfigRequest)play();
+            else handle(getIntent());
+        } else refresh();
         final boolean continuing=setupFlow.busy();
         pageScroll.post(()->{
             if(isFinishing()||isDestroyed())return;
@@ -335,9 +498,9 @@ public class Launcher extends Activity {
     private void initPalette() {
         accent = 0xFFCBA66B;
         muted = 0xFFB9AC94;
-        cardColor = 0xEF191D1A;
-        getWindow().setStatusBarColor(0xFF101511);
-        getWindow().setNavigationBarColor(0xFF101511);
+        cardColor = 0xEF101D29;
+        getWindow().setStatusBarColor(0xFF091521);
+        getWindow().setNavigationBarColor(0xFF091521);
     }
 
     private TextView text(LinearLayout parent, String s, float size, boolean bold) {
@@ -363,7 +526,7 @@ public class Launcher extends Activity {
         c.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(cardColor);
-        bg.setStroke(dp(1), 0x555F553A);
+        bg.setStroke(dp(1), 0x887D6948);
         bg.setCornerRadius(dp(16));
         c.setBackground(bg);
         c.setPadding(dp(18), dp(12), dp(18), dp(16));
@@ -397,12 +560,12 @@ public class Launcher extends Activity {
         b.setAllCaps(false);
         b.setOnClickListener(l);
         b.setTextColor(new ColorStateList(new int[][] {{-android.R.attr.state_enabled}, {}},
-                                          new int[] {muted, accent}));
+                                          new int[] {muted, 0xFFF0D39D}));
         b.setMinHeight(dp(52));
         b.setMinimumHeight(dp(52));
         b.setPadding(dp(18), 0, dp(18), 0);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.TRANSPARENT);
+        bg.setColor(0xFF192D3B);
         bg.setStroke(dp(1), (accent & 0x00FFFFFF) | 0x66000000);
         bg.setCornerRadius(dp(22));
         b.setBackground(new RippleDrawable(ColorStateList.valueOf((accent & 0x00FFFFFF) | 0x33000000), bg, null));
@@ -465,13 +628,18 @@ public class Launcher extends Activity {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
+    @Override protected void onPause() {
+        if(prefs!=null) saveGameProfile(prefs.getString("selected_game","u1"));
+        super.onPause();
+    }
+
     private void buildViews() {
         refreshNativeAa=null;
         initPalette();
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-            new int[] {0xFF26342A, 0xFF111713, 0xFF1D1913}));
+            new int[] {0xFF142A3B, 0xFF091421, 0xFF2D261D}));
         TextView brand = text(shell, "Uncharted Daedalus", 26, true);
         brand.setTypeface(Typeface.create("serif", Typeface.BOLD));
         brand.setLetterSpacing(0.025f);
@@ -495,6 +663,29 @@ public class Launcher extends Activity {
             pages[n].setVisibility(n == selectedPage ? View.VISIBLE : View.GONE);
         }
         LinearLayout home = pages[0], patches = pages[1], config = pages[2], about = pages[3];
+        // Same six-section information architecture as the Android in-game
+        // left panel, but only expose options the Java launcher can configure.
+        text(config,AppLanguage.text("Configuring")+" · "+
+             AppLanguage.text(gameName(prefs.getString("selected_game","u1"))),17,true);
+        final String[] categories={"Video","Performance","Controls","Drivers","Games / Files","System"};
+        final LinearLayout[] configSections=new LinearLayout[categories.length];
+        final LinearLayout sectionPicker=new LinearLayout(this);
+        sectionPicker.setOrientation(LinearLayout.HORIZONTAL);
+        config.addView(sectionPicker);
+        for(int n=0;n<categories.length;n++){
+            configSections[n]=new LinearLayout(this);
+            configSections[n].setOrientation(LinearLayout.VERTICAL);
+            config.addView(configSections[n]);
+            configSections[n].setVisibility(n==0?View.VISIBLE:View.GONE);
+            final int section=n;
+            Button tab=button(sectionPicker,categories[n],v->{
+                for(int j=0;j<configSections.length;j++)
+                    configSections[j].setVisibility(j==section?View.VISIBLE:View.GONE);
+                if(pageScroll!=null)pageScroll.smoothScrollTo(0,0);
+            });
+            tab.setTextSize(11);
+            tab.setPadding(dp(6),0,dp(6),0);
+        }
         android.widget.FrameLayout hero = new android.widget.FrameLayout(this);
         android.widget.ImageView artwork = new android.widget.ImageView(this);
         artwork.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
@@ -510,28 +701,17 @@ public class Launcher extends Activity {
         hero.addView(heroCaption,new android.widget.FrameLayout.LayoutParams(-1,-1));
         home.addView(hero,new LinearLayout.LayoutParams(-1,dp(210)));
         LinearLayout games = card(home, "CHOOSE YOUR ADVENTURE");
-        RadioGroup gameSelect = new RadioGroup(this);
-        String[] names = {"UNCHARTED  ·  Drake's Fortune", "UNCHARTED 2  ·  Among Thieves", "UNCHARTED 3  ·  Drake's Deception"};
-        for (int n = 0; n < GAMES.length; n++) {
-            RadioButton game = new RadioButton(this);
-            game.setId(View.generateViewId()); game.setTag(GAMES[n][0]);
-            game.setText(AppLanguage.text(names[n])); game.setMinHeight(dp(56));
-            gameSelect.addView(game);
-            if (GAMES[n][0].equals(prefs.getString("selected_game", "u1"))) gameSelect.check(game.getId());
-        }
-        gameSelect.setOnCheckedChangeListener((group, id) -> {
-            RadioButton game = group.findViewById(id);
-            if (game != null) prefs.edit().putString("selected_game", (String)game.getTag()).apply();
-        });
-        games.addView(gameSelect);
-        playButton = primaryButton(games, "CONTINUE ADVENTURE", v -> play());
-        button(games,"Choose game folder",v->chooseGameFolder());
-        button(games,"Install game PKG",v->installPkg(false));
-        button(games,"Install update PKG",v->installPkg(true));
+        note(games,"Choose a game to play or configure its own video and patches.");
+        LinearLayout gallery=new LinearLayout(this);
+        gallery.setOrientation(LinearLayout.HORIZONTAL);
+        games.addView(gallery);
+        for(String[] g:GAMES)gameCard(gallery,g[0]);
+        playButton=primaryButton(games,"Play selected game",v->play());
+        button(games,"Install or update game files",v->chooseGame( prefs.getString("selected_game","u1"),2));
         statusText = note(shell, "");
         statusText.setPadding(dp(22), 0, dp(22), dp(4));
         root = home;
-        LinearLayout folder = card(config, "GAME INSTALLATION");
+        LinearLayout folder = card(configSections[4], "GAME INSTALLATION");
         folderText = text(folder, "", 15, false);
         folderInfo = note(folder, "");
         LinearLayout row = row(folder);
@@ -552,7 +732,8 @@ public class Launcher extends Activity {
 
         LinearLayout page = root;
         // Manual resolution is only selectable without FSR; FSR's own presets define input size.
-        LinearLayout displayCard = card(home, "DISPLAY & PERFORMANCE");
+        LinearLayout displayCard = card(configSections[0], "DISPLAY & PERFORMANCE");
+        // The selected game's title is shown above all configuration tabs.
         text(displayCard, "Internal resolution (upscaler off):", 14, false);
         resolution = new RadioGroup(this);
         Button resolutionChoice = button(displayCard, "Internal resolution · " + chosenResolution(), null);
@@ -604,10 +785,10 @@ public class Launcher extends Activity {
             int selected=1;try{selected=Integer.parseInt(iniGet("hud_mode"));}catch(Exception ignored){}
             new ExpeditionDialog(this).setTitle(AppLanguage.text("HUD style")).setSingleChoiceItems(labels,selected,(dialog,which)->{iniPut("hud_mode",Integer.toString(which));dialog.dismiss();}).setNegativeButton("Cancel",null).show();
         });
-        LinearLayout languageCard=card(config,"LANGUAGE");
+        LinearLayout languageCard=card(configSections[5],"LANGUAGE");
         button(languageCard,AppLanguage.summary(this),v->activeDialog=AppLanguage.show(this));
         note(languageCard,"Language changes apply on next game start.");
-        root = card(config, "GPU DRIVER");
+        root = card(configSections[3], "GPU DRIVER");
         text(root, "Vulkan driver:", 14, false);
         driverList = new LinearLayout(this);
         driverList.setOrientation(LinearLayout.VERTICAL);
@@ -655,7 +836,7 @@ public class Launcher extends Activity {
         });
         root.addView(fpsLimit);
         text(root, "Unlimited may affect game speed above 120 FPS.", 14, false);
-        root = card(config, "CONTROLS");
+        root = card(configSections[2], "CONTROLS");
         text(root, "On-screen gamepad:", 14, false);
         touchPad = new RadioGroup(this);
         touchPad.setOrientation(RadioGroup.HORIZONTAL);
@@ -756,7 +937,7 @@ public class Launcher extends Activity {
             touchOpacity.setText(AppLanguage.text("Opacity")+": "+Math.round(opacity*100f)+"%");
         });
         button(root,"Edit button position and size",v->editTouchLayout());
-        root = card(home, "FRAME GENERATION");
+        root = card(configSections[1], "FRAME GENERATION");
         text(root, "LSFG requires your own Lossless.dll.", 14, false);
         button(root, "Import Lossless.dll", v -> {
             Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -785,7 +966,7 @@ public class Launcher extends Activity {
                 }).setNegativeButton("Cancel", null).show();
         });
         text(root, "Lossless.dll is not included. Frame generation increases GPU and memory usage.", 14, false);
-        root = card(config, "Performance");
+        root = card(configSections[1], "Performance");
         compatibilitySwitch(root,"Fast GPU memory reads (U2/U3)","arm_uma_readback",true);
         compatibilitySwitch(root,"Send GPU work in small batches (U2/U3)","arm_flush_draws",true);
         compatibilitySwitch(root,"Let idle game threads sleep","arm_job_spin",true);
@@ -793,7 +974,7 @@ public class Launcher extends Activity {
         // Keep only broad GPU result readbacks optional (OFF by default).
         compatibilitySwitch(root,"Small GPU result readbacks (U2/U3)","gpu_small_readbacks",false);
         note(root,"Optional: small GPU readbacks may reduce FPS. Enable only if necessary.");
-        root = card(config, "ADVANCED");
+        root = card(configSections[5], "ADVANCED");
         text(root, "Additional environment variables (optional):", 14, false);
         extraEnv = new EditText(this);
         extraEnv.setText(prefs.getString("extra_env", ""));
@@ -804,17 +985,17 @@ public class Launcher extends Activity {
 
 
 
-        LinearLayout savesCard = card(config, "SAVES");
+        LinearLayout savesCard = card(configSections[4], "SAVES");
         note(savesCard, "Import or export saves with the game closed.");
         LinearLayout saves = row(savesCard);
         button(saves, "Export saves (ZIP)", v -> exportSaves());
         button(saves, "Import saves (ZIP)", v -> importSaves());
         button(saves, "Restore saves", v -> restoreSaves());
-        LinearLayout helpCard = card(config, "DIAGNOSTICS");
+        LinearLayout helpCard = card(configSections[5], "DIAGNOSTICS");
         note(helpCard, "Export the game log to a folder of your choice.");
         button(helpCard, "Export Uncharted log...", v -> LogExport.pick(this));
         LinearLayout aboutCard=card(about,"Uncharted Daedalus");
-        String version="0.2.9";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
+        String version="0.3.0";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
         text(aboutCard,AppLanguage.text("Version")+" "+version,20,true);
         note(aboutCard,"Android port with a Bionic runtime.");
         text(aboutCard,"Fork and modifications:",15,true);
@@ -836,8 +1017,8 @@ public class Launcher extends Activity {
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout nav = new LinearLayout(this);
         nav.setPadding(dp(8), dp(6), dp(8), dp(6));
-        nav.setBackgroundColor(0xF5101511);
-        String[] tabs = {"Home", "Patches", "Settings", "About"};
+        nav.setBackgroundColor(0xF5081624);
+        String[] tabs = {"Games", "Patches", "Settings", "About"};
         Button[] navButtons = new Button[4];
         for (int n = 0; n < tabs.length; n++) {
             final int index = n;
@@ -1442,7 +1623,17 @@ public class Launcher extends Activity {
     /** The port's settings file (bbport.ini, BB_CONFIG): the in-game panel writes it; the
      *  launcher reads and sets the keys it shares with the panel. */
     private File iniFile() {
-        return new File(files, "bbport.ini");
+        String game=prefs!=null?prefs.getString("selected_game","u1"):"u1";
+        File target=new File(files, "bbport-"+game+".ini");
+        File legacy=new File(files,"bbport.ini");
+        if(!target.exists() && legacy.isFile()) {
+            try(java.io.InputStream src=new FileInputStream(legacy);
+                java.io.OutputStream dst=new FileOutputStream(target)){
+                byte[] buf=new byte[8192];int count;
+                while((count=src.read(buf))>=0)dst.write(buf,0,count);
+            } catch(IOException err) {android.util.Log.w("UnchartedConfig","Legacy settings import",err);}
+        }
+        return target;
     }
 
     private String iniGet(String key) {
@@ -1495,16 +1686,31 @@ public class Launcher extends Activity {
         }
         prefs.edit().putString("extra_env", extraEnv.getText().toString()).apply();
         String dir = folder(), d = files.getAbsolutePath();
-        int upscale=prefs.getInt("mobile_upscale",0);
-        String[] size = UpscalePreset.input(upscale,chosenResolution()).split("x");
-        int width = Integer.parseInt(size[0]), height = Integer.parseInt(size[1]);
-        boolean below1080 = height < 1080;
+        String selected=prefs.getString("selected_game","u1");
+        saveGameProfile(selected);
         new File(files, "patches").mkdirs();
         new File(files, "user").mkdirs();
         StringBuilder report = new StringBuilder();
         String[] env = new String[GAMES.length];
         for (int i = 0; i < GAMES.length; i++) {
             String[] g = GAMES[i];
+            prefs.edit().putString("selected_game",g[0]).commit();
+            loadGameProfile(g[0]);
+            int upscale=prefs.getInt("mobile_upscale",0);
+            StringBuilder patchState=new StringBuilder("game=").append(g[0]).append('\n')
+                .append("upscale=").append(upscale).append('\n')
+                .append("shadow_cascades=").append(prefs.getInt("shadow_cascades",0)).append('\n');
+            for(java.util.Map.Entry<String,?> item:prefs.getAll().entrySet()) {
+                if(item.getKey().startsWith("patch_") && item.getValue() instanceof Boolean)
+                    patchState.append(item.getKey()).append('=')
+                        .append(Boolean.TRUE.equals(item.getValue())?"1":"0").append('\n');
+            }
+            patchState.append("gpu_small_readbacks=")
+                .append(prefs.getBoolean("gpu_small_readbacks",false)?"1":"0").append('\n');
+            writeText(new File(files,"patches-state-"+g[0]+".txt"),patchState.toString());
+            String[] scene=UpscalePreset.input(upscale,chosenResolution()).split("x");
+            int width=Integer.parseInt(scene[0]),height=Integer.parseInt(scene[1]);
+            boolean below1080=height<1080;
             String out = g[2].isEmpty() ? d : d + "/" + g[2];
             String preset = null;
             // The preset for the chosen size, made from the recipe and the prepared executable;
@@ -1554,15 +1760,23 @@ public class Launcher extends Activity {
             if(upscale>0 && made!=null)env[i]+="BB_RENDER_RES="+width+"x"+height+"\nBB_OUTPUT_RES="+UpscalePreset.OUTPUT+"\n";
             else env[i]+="-BB_RENDER_RES\n-BB_OUTPUT_RES\n";
             if(upscale>0 && made==null)env[i]+="BB_UPSCALER=none\n";
+            if(upscale>0 && made!=null){
+                iniPut("output_res",UpscalePreset.OUTPUT);
+                iniPut("upscaler",UpscalePreset.provider(upscale));
+                iniPut("preset",Integer.toString(UpscalePreset.preset(upscale)-1));
+            }else{
+                iniPut("upscaler","off");iniPut("preset","0");
+            }
             // U2's aiming autofocus reads a 1x1 render result on the CPU: copied back for U2
             // only, as upstream does (issue #7; it costs elsewhere). More environment overrides.
             if (g[0].equals("u2") && !extraEnv.getText().toString().contains("BB_TINY_READBACK"))
                 env[i] += "BB_TINY_READBACK=1\n";
         }
+        // Restore selected profile after generating three independent game configs.
+        prefs.edit().putString("selected_game",selected).commit();
+        loadGameProfile(selected);
         StringBuilder e = new StringBuilder();
         e.append("BB_MOBILE_UPSCALE=0\n");
-        if(upscale>0){iniPut("output_res","1280x720");iniPut("upscaler",UpscalePreset.provider(upscale));iniPut("preset",Integer.toString(UpscalePreset.preset(upscale)-1));}
-        else {iniPut("preset","0");iniPut("upscaler","off");}
         e.append("# Written by the launcher on every start; edit the settings there.\n");
         e.append("BB_FULLSCREEN=1\nBB_FPS_LOG=0\nBB_THERMAL_LOG=0\nBB_MIDFRAME_FLUSH=10\nBB_DEFERRED_SUBMIT=1\nBB_SKIN_BATCH=1\n");
         e.append("BB_CS_SPLIT=256:8f067540\nBB_OBJECT_MOTION=0\nBB_THREAD_NICE=0\n");
@@ -1619,22 +1833,26 @@ public class Launcher extends Activity {
     }
 
     private String automaticDriver() {
-        if ((gpuChip >>> 24) == 0x44) {
-            try {
-                File marker = new File(driversDir(), ".gen8-v38-patched");
-                String installed = marker.isFile() ? readText(marker).trim() : "";
-                if (!installed.isEmpty() && packageLibrary(new File(driversDir(), installed)) != null) return "pkg:" + installed;
-                try (InputStream in = getAssets().open("drivers/Turnip_Gen8_V38_Patched.zip")) {
-                    installed = installDriver(in, "Turnip_Gen8_V38_Patched");
-                }
-                writeText(marker, installed);
-                return "pkg:" + installed;
-            } catch (Exception ex) {
-                status(AppLanguage.format("Automatic Gen8 driver failed: %s. Using bundled Turnip.",ex.getMessage()));
-                return "turnip";
+        final boolean gen8=(gpuChip >>> 24)==0x44;
+        if (!gen8 && !new File("/dev/kgsl-3d0").exists())return "system";
+        // Packages included in the APK, retrieved by the build script from the
+        // immutable StevenMXZ v39 release with their SHA-256 digests verified.
+        final String archive=gen8?"Turnip_Gen8_V39_Patched.zip":"Turnip_v27.0.0-R2.zip";
+        final String markerName=gen8?".gen8-v39-patched":".turnip-v27-r2";
+        try {
+            File marker=new File(driversDir(),markerName);
+            String installed=marker.isFile()?readText(marker).trim():"";
+            if(!installed.isEmpty() && packageLibrary(new File(driversDir(),installed))!=null)
+                return "pkg:"+installed;
+            try(InputStream in=getAssets().open("drivers/"+archive)) {
+                installed=installDriver(in,archive.substring(0,archive.length()-4));
             }
+            writeText(marker,installed);
+            return "pkg:"+installed;
+        }catch(Exception ex){
+            android.util.Log.w("UnchartedDriver","Bundled Steven Turnip unavailable",ex);
+            return "turnip"; // Keep a working bundled Mesa fallback.
         }
-        return new File("/dev/kgsl-3d0").exists() ? "turnip" : "system";
     }
 
     private static JSONObject packageMeta(File dir) {
@@ -1658,7 +1876,7 @@ public class Launcher extends Activity {
         drivers = new RadioGroup(this);
         boolean kgsl = new File("/dev/kgsl-3d0").exists();
         List<String[]> options = new ArrayList<>();
-        options.add(new String[] {"auto", AppLanguage.text("Automatic")+": "+((gpuChip>>>24)==0x44?"Turnip Gen8 V38 Patched (Adreno 8xx)":kgsl?AppLanguage.text("Bundled Turnip")+" (Adreno)":AppLanguage.text("System Vulkan driver"))});
+        options.add(new String[] {"auto", AppLanguage.text("Automatic")+": "+((gpuChip>>>24)==0x44?"Steven Turnip Gen8 V39 Patched (Adreno 8xx)":kgsl?"Steven Turnip v27.0.0-R2 (Adreno 6xx/7xx)":AppLanguage.text("System Vulkan driver"))});
         options.add(new String[] {"turnip", AppLanguage.text("Bundled Turnip")+" · Mesa 26.2.5 · Adreno"+(kgsl?"":" · "+AppLanguage.text("Adreno GPU not detected"))});
         options.add(new String[] {"system", AppLanguage.text("System Vulkan driver")+(kgsl?" · "+AppLanguage.text("Untested with these games"):"")});
         File[] installed = driversDir().listFiles(File::isDirectory);

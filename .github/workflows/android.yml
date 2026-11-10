@@ -68,6 +68,7 @@ jobs:
         run: |
           python3 tests/test_renderer_options.py
           python3 tests/test_launcher_localization.py
+          python3 tests/test_v030_game_ui.py
           python3 tests/test_upstream_high_priority.py
           python3 tests/test_raycaster_ungated.py
           python3 tests/test_srt_speculative.py
@@ -183,18 +184,18 @@ jobs:
           grep -q "android.game_mode_config" dist/manifest.txt
           grep -q "package: name='com.daedalus.uncharted'" dist/package.txt
           grep -q "application-label:'Uncharted Daedalus'" dist/package.txt
-          grep -q "versionName='0.2.9'" dist/package.txt
-          grep -q "versionCode='100209'" dist/package.txt
+          grep -q "versionName='0.3.0'" dist/package.txt
+          grep -q "versionCode='100300'" dist/package.txt
           grep -q "targetSdkVersion:'28'" dist/package.txt
           grep -q "uses-permission: name='android.permission.WRITE_EXTERNAL_STORAGE'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt
-          cp "$apk" dist/Uncharted-Daedalus-0.2.9-GameplayFSRGSR.apk
+          cp "$apk" dist/Uncharted-Daedalus-0.3.0.apk
           git rev-parse HEAD > dist/source-commit.txt
           sha256sum dist/*.apk > dist/SHA256SUMS
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Uncharted-Daedalus-0.2.9-GameplayFSRGSR
+          name: Uncharted-Daedalus-0.3.0
           path: dist/
           if-no-files-found: error
           retention-days: 30

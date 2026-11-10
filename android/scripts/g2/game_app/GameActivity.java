@@ -226,7 +226,21 @@ public class GameActivity extends SDLActivity {
             // The renderer keeps its pipeline cache and settings under $HOME (shadPS4 path_util).
             Os.setenv("HOME", d + "/home", true);
             Os.setenv("XDG_DATA_HOME", d + "/home/.local/share", true);
-            Os.setenv("BB_CONFIG", d + "/bbport.ini", true);
+            // Each game has an independent native configuration, not a
+            // shared FSR/HUD profile overwritten by the next game.
+            File settings=new File(d,"bbport-"+game+".ini");
+            File legacy=new File(d,"bbport.ini");
+            if(!settings.isFile() && legacy.isFile()){
+                try(java.io.InputStream src=new java.io.FileInputStream(legacy);
+                    java.io.OutputStream dst=new java.io.FileOutputStream(settings)){
+                    byte[] bytes=new byte[8192];int n;
+                    while((n=src.read(bytes))!=-1)dst.write(bytes,0,n);
+                }catch(IOException error){android.util.Log.w("UnchartedSettings","Legacy ini copy",error);}
+            }
+            Os.setenv("BB_CONFIG", settings.getAbsolutePath(), true);
+            Os.setenv("BB_GAME_ID",game,true);
+            Os.setenv("BB_GAME_CONFIG_REQUEST",d+"/game-config-request.txt",true);
+            Os.setenv("BB_PATCH_STATE",d+"/patches-state-"+game+".txt",true);
             Os.setenv("BB_SKIP_COLLECTION_MENU",("u1".equals(game) && guest.isEmpty())?"1":"0",true);
             // Native GoW3/Bloodborne style controller; BB_PAD_FILE is already
             // sampled by Uncharted's runtime_pad.c and merges with SDL gamepads.
@@ -288,7 +302,8 @@ public class GameActivity extends SDLActivity {
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
             }
-            String renderer=RendererOptions.environment(game,options.getBoolean("gpu_small_readbacks",false));
+            String renderer=RendererOptions.environment(game,options.getBoolean("game_"+game+"_gpu_small_readbacks",
+                options.getBoolean("gpu_small_readbacks",false)));
             for(String line:renderer.split("\n")){
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
@@ -364,8 +379,13 @@ public class GameActivity extends SDLActivity {
                     }
                 }
             }
-            Intent i = new Intent(this, GameActivity.class);
+            File d=getExternalFilesDir(null);
+            boolean request=d!=null && new File(d,"game-config-request.txt").isFile();
+            boolean toLauncher=d!=null && new File(d,"return-to-launcher").isFile();
+            if(toLauncher)new File(d,"return-to-launcher").delete();
+            Intent i=new Intent(this,(request || toLauncher)?Launcher.class:GameActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            if(request && !toLauncher)i.putExtra("apply_game_request",true);
             startActivity(i);
             finish();
             Runtime.getRuntime().exit(0);

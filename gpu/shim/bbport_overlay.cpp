@@ -392,7 +392,12 @@ void FpsCounter() {
             const char* mode=res && std::strcmp(res,"960x540")==0 ? "Quality"
                 :res && std::strcmp(res,"832x468")==0 ? "Balanced"
                 :res && std::strcmp(res,"640x360")==0 ? "Performance" : "Native AA";
-            detail.push_back({settings.upscaler==BbSettings::UpscalerFsr3?std::string("FSR ")+BbLocale::Text(mode):"TAA",normal});
+            const std::string upscaler=settings.upscaler==BbSettings::UpscalerFsr3
+                ?std::string("FSR 3.1 ")+BbLocale::Text(mode)
+                :settings.upscaler==BbSettings::UpscalerGsr2
+                    ?std::string("GSR 2 ")+BbLocale::Text(mode)
+                    :std::string("TAA");
+            detail.push_back({upscaler,normal});
         }
         if(settings.hud_mode>1) {
             std::snprintf(temp,sizeof(temp),"%sRAM %.2f GB",detail.empty()?"":" · ",sample.ram_mib/1024.f);detail.push_back({temp,normal});
