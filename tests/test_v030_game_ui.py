@@ -55,7 +55,7 @@ assert 'apply_game_request' in activity and 'apply_game_request' in launcher
 assert 'File d=getExternalFilesDir(null)' in activity
 assert 'final String[] categories={"Video","Performance","Controls","Drivers","Games / Files","System"}' in launcher
 
-assert 'constexpr float PanelShare = 0.53f' in menu
+assert 'constexpr float PanelShare = 0.49f' in menu
 assert 'ImGui::SetNextWindowPos(viewport->WorkPos)' in menu
 assert 'Video","Performance","Patches","HUD","Controls","System' in menu
 assert 'const char* providers[]={"Off","FSR 3.1","GSR 2"}' in menu

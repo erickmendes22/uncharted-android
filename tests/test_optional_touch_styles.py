@@ -38,7 +38,7 @@ assert 'if(leftStickClicked)pressed.add("l3")' in touch
 assert 'if(rightStickClicked)pressed.add("r3")' in touch
 assert 'float r=80*sizeMultiplier;' in touch
 assert 'ACTION_LAYOUT_VERSION_KEY' in touch
-assert 'ACTION_LAYOUT_VERSION=4' in touch
+assert 'ACTION_LAYOUT_VERSION=5' in touch
 assert 'actionHorizontalScale()' in touch
 assert 'actionDistance(x,y,p)<radius*sizeMultiplier' in touch
 assert 'actionDistance(last.x,last.y,start)>18*sizeMultiplier' in touch

@@ -231,6 +231,7 @@ public class Launcher extends Activity {
 
     /** Hide both system bars on launch. Edge swipe can show them transiently. */
     private void enterImmersiveMode() {
+        if(android.os.Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         View decor=getWindow().getDecorView();
         decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
             View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
@@ -263,7 +264,7 @@ public class Launcher extends Activity {
         item.setSingleLine(true);
         item.setEllipsize(android.text.TextUtils.TruncateAt.END);
         item.setMinWidth(0);item.setMinimumWidth(0);
-        item.setMinHeight(dp(44));item.setMinimumHeight(dp(44));
+        item.setMinHeight(dp(38));item.setMinimumHeight(dp(38));
         item.setPadding(dp(9),0,dp(9),0);
         item.setTextColor(primary?0xff152737:0xffe2e9e8);
         GradientDrawable surface=new GradientDrawable();
@@ -272,9 +273,9 @@ public class Launcher extends Activity {
         surface.setStroke(dp(1),primary?0xffd4b982:0xff687e88);
         item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x44ffffff),surface,null));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
-            parent.getOrientation()==LinearLayout.HORIZONTAL?0:-1,dp(44));
+            parent.getOrientation()==LinearLayout.HORIZONTAL?0:-1,dp(38));
         if(parent.getOrientation()==LinearLayout.HORIZONTAL)lp.weight=1;
-        lp.setMargins(dp(4),dp(4),dp(4),0);
+        lp.setMargins(dp(3),dp(2),dp(3),0);
         parent.addView(item,lp);
         item.setOnClickListener(click);
         return item;
@@ -289,8 +290,8 @@ public class Launcher extends Activity {
         bg.setCornerRadius(dp(13));
         container.setBackground(bg);
         LinearLayout.LayoutParams panel=portrait?
-            new LinearLayout.LayoutParams(-1,dp(182)):
-            new LinearLayout.LayoutParams(0,dp(216),1f);
+            new LinearLayout.LayoutParams(-1,dp(146)):
+            new LinearLayout.LayoutParams(0,dp(194),1f);
         panel.setMargins(dp(5),dp(7),dp(5),dp(7));
         parent.addView(container,panel);
 
@@ -312,7 +313,7 @@ public class Launcher extends Activity {
         details.setOrientation(LinearLayout.VERTICAL);
         details.setPadding(dp(8),dp(6),dp(8),dp(8));
         if(portrait)container.addView(details,new LinearLayout.LayoutParams(0,-1,.60f));
-        else container.addView(details,new LinearLayout.LayoutParams(-1,dp(86)));
+        else container.addView(details,new LinearLayout.LayoutParams(-1,dp(72)));
         if(portrait) {
             TextView name=text(details,gameName(game),15,true);
             name.setTextColor(0xfff0debc);
@@ -604,10 +605,10 @@ public class Launcher extends Activity {
         bg.setStroke(dp(1), 0x887D6948);
         bg.setCornerRadius(dp(16));
         c.setBackground(bg);
-        c.setPadding(dp(18), dp(12), dp(18), dp(16));
+        c.setPadding(dp(12),dp(7),dp(12),dp(10));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                                                                      ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = dp(12);
+        lp.topMargin = dp(7);
         parent.addView(c, lp);
         if (title != null) {
             TextView heading=text(c,title,15,true);heading.setTextColor(accent);
@@ -636,9 +637,9 @@ public class Launcher extends Activity {
         b.setOnClickListener(l);
         b.setTextColor(new ColorStateList(new int[][] {{-android.R.attr.state_enabled}, {}},
                                           new int[] {muted, 0xFFF0D39D}));
-        b.setMinHeight(dp(52));
-        b.setMinimumHeight(dp(52));
-        b.setPadding(dp(18), 0, dp(18), 0);
+        b.setMinHeight(dp(42));
+        b.setMinimumHeight(dp(42));
+        b.setPadding(dp(12),0,dp(12),0);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(0xFF192D3B);
         bg.setStroke(dp(1), (accent & 0x00FFFFFF) | 0x66000000);
@@ -717,21 +718,21 @@ public class Launcher extends Activity {
         shell.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
             new int[] {0xFF142A3B, 0xFF091421, 0xFF2D261D}));
         final boolean portrait=portraitLayout();
-        TextView brand = text(shell, "Uncharted Daedalus", portrait?26:20, true);
+        TextView brand = text(shell, "Uncharted Daedalus", portrait?22:19, true);
         brand.setTypeface(Typeface.create("serif", Typeface.BOLD));
         brand.setLetterSpacing(0.025f);
-        brand.setPadding(dp(portrait?22:12),dp(portrait?14:2),dp(12),0);
+        brand.setPadding(dp(portrait?15:12),dp(portrait?4:2),dp(12),0);
         TextView subtitle = note(shell, "THE NATHAN DRAKE COLLECTION");
         subtitle.setTextSize(11);
-        subtitle.setPadding(dp(22), 0, dp(16), dp(8));
+        subtitle.setPadding(dp(15),0,dp(12),dp(2));
         subtitle.setVisibility(portrait?View.VISIBLE:View.GONE);
         ScrollView scroll = new ScrollView(this);
         pageScroll=scroll;
         scroll.setFillViewport(true);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(portrait?20:10),dp(portrait?20:2),
-                        dp(portrait?20:10),dp(portrait?28:8));
+        root.setPadding(dp(portrait?12:10),dp(portrait?4:2),
+                        dp(portrait?12:10),dp(portrait?10:6));
         scroll.addView(root);
 
         LinearLayout[] pages = new LinearLayout[4];
@@ -773,24 +774,12 @@ public class Launcher extends Activity {
             tab.setPadding(dp(10),0,dp(10),0);
             LinearLayout.LayoutParams tabLayout=(LinearLayout.LayoutParams)tab.getLayoutParams();
             tabLayout.width=portrait?dp(132):0;
-            tabLayout.height=dp(portrait?46:38);
+            tabLayout.height=dp(portrait?40:36);
             tabLayout.weight=portrait?0f:1f;
             tab.setLayoutParams(tabLayout);
         }
-        android.widget.FrameLayout hero = new android.widget.FrameLayout(this);
-        android.widget.ImageView artwork = new android.widget.ImageView(this);
-        artwork.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-        try(java.io.InputStream in=getAssets().open("art/hero.png")) {
-            android.graphics.BitmapFactory.Options options=new android.graphics.BitmapFactory.Options();options.inSampleSize=2;
-            artwork.setImageBitmap(android.graphics.BitmapFactory.decodeStream(in,null,options));
-        } catch(Exception ignored) {}
-        hero.addView(artwork,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        TextView heroCaption=new TextView(this);heroCaption.setText(AppLanguage.text("THE NATHAN DRAKE COLLECTION\nUNCHARTED DAEDALUS"));
-        heroCaption.setTextColor(0xFFF3DCA6);heroCaption.setTextSize(15);heroCaption.setTypeface(Typeface.DEFAULT_BOLD);
-        heroCaption.setGravity(android.view.Gravity.BOTTOM);heroCaption.setPadding(dp(18),dp(16),dp(18),dp(16));
-        heroCaption.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0x0015110C,0xE615110C}));
-        hero.addView(heroCaption,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        if(portrait)home.addView(hero,new LinearLayout.LayoutParams(-1,dp(126)));
+        // The collection hero repeated the header and concealed the third game card.
+        // Use only the three game cover artworks on the home screen.
         LinearLayout games = card(home, "CHOOSE YOUR ADVENTURE");
         LinearLayout gallery=new LinearLayout(this);
         gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
@@ -1122,12 +1111,13 @@ public class Launcher extends Activity {
         for (int n = 0; n < tabs.length; n++) {
             final int index = n;
             Button item = new Button(this, null, android.R.attr.borderlessButtonStyle);
-            item.setText(AppLanguage.text(tabs[n])); item.setAllCaps(false); item.setTextSize(11);
-            ExpeditionIcon navIcon=new ExpeditionIcon(n,n==selectedPage?accent:muted);navIcon.setBounds(0,0,dp(22),dp(22));
-            item.setCompoundDrawables(portrait?null:navIcon,portrait?navIcon:null,null,null);
+            item.setText(AppLanguage.text(tabs[n])); item.setAllCaps(false); item.setTextSize(portrait?10:12);
+            ExpeditionIcon navIcon=new ExpeditionIcon(n,n==selectedPage?accent:muted);
+            navIcon.setBounds(0,0,dp(portrait?18:19),dp(portrait?18:19));
+            item.setCompoundDrawables(navIcon,null,null,null);
             item.setCompoundDrawablePadding(dp(3));
             item.setMinWidth(0); item.setMinimumWidth(0);
-            item.setPadding(dp(portrait?0:5),dp(portrait?10:3),0,dp(portrait?10:3));
+            item.setPadding(dp(portrait?6:5),dp(2),dp(2),dp(2));
             item.setTextColor(n == selectedPage ? accent : muted);
             item.setOnClickListener(v -> {
                 selectedPage=index;
@@ -1135,19 +1125,19 @@ public class Launcher extends Activity {
                 for (int j = 0; j < pages.length; j++) {
                     pages[j].setVisibility(j == index ? View.VISIBLE : View.GONE);
                     navButtons[j].setTextColor(j == index ? accent : muted);
-                    android.graphics.drawable.Drawable activeIcon=navButtons[j].getCompoundDrawables()[1];
+                    android.graphics.drawable.Drawable activeIcon=navButtons[j].getCompoundDrawables()[0];
                     if(activeIcon!=null)activeIcon.setColorFilter(j==index?accent:muted,android.graphics.PorterDuff.Mode.SRC_IN);
                 }
                 scroll.scrollTo(0, 0);
             });
             navButtons[n] = item;
-            nav.addView(item, new LinearLayout.LayoutParams(0, dp(portrait?62:42), 1));
+            nav.addView(item, new LinearLayout.LayoutParams(0, dp(portrait?42:38), 1));
         }
         shell.addView(nav);
         styleChildren(shell);
         shell.setOnApplyWindowInsetsListener((view,insets)->{
-            android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());
-            view.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;
+            // Transient system bars must never shrink the launcher/game viewport.
+            view.setPadding(0,0,0,0);return insets;
         });
         setContentView(shell);shell.requestApplyInsets();enterImmersiveMode();
     }
@@ -1910,6 +1900,7 @@ public class Launcher extends Activity {
         RadioButton pad = touchPad.findViewById(touchPad.getCheckedRadioButtonId());
         if (pad != null) iniPut("touch_pad", (String) pad.getTag());
         if (report.length() > 0) status(report.toString());
+        enterImmersiveMode();
         Intent i = new Intent(this, GameActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(i);

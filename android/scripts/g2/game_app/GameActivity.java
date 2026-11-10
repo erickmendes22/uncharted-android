@@ -85,7 +85,9 @@ public class GameActivity extends SDLActivity {
      * window, overriding the manifest on portrait-native phones. Keep the
      * three Uncharted games in sensor landscape without fixing one rotation. */
     @Override public void setOrientationBis(int width, int height, boolean resizable, String hint) {
-        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        // Avoid resetting the SDL surface on every orientation request.
+        final int requested=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+        if(getRequestedOrientation()!=requested)setRequestedOrientation(requested);
     }
     static native boolean nativeOverlayCapturing();
     static native void nativeToggleMenu();
@@ -116,21 +118,45 @@ public class GameActivity extends SDLActivity {
         if (!LogExport.result(this,request,result,data)) super.onActivityResult(request,result,data);
     }
 
-    @Override protected void onResume() {
-        super.onResume();
-        if(androidPadView!=null){
-            padHandler.removeCallbacks(padVisibilityPoll);
-            padHandler.post(padVisibilityPoll);
-        }
-        gameState(!gameReady,android.app.GameState.MODE_GAMEPLAY_INTERRUPTIBLE);
-        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-        getWindow().getDecorView().setSystemUiVisibility(
-            android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+    private void keepGameImmersive() {
+        android.view.Window w=getWindow();
+        w.addFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        android.view.View d=w.getDecorView();
+        d.setSystemUiVisibility(android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
             android.view.View.SYSTEM_UI_FLAG_FULLSCREEN |
             android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
             android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
             android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
             android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+        if(android.os.Build.VERSION.SDK_INT>=30) {
+            // Keep the SDL framebuffer dimensions constant even when the
+            // Android gesture/navigation bars briefly reappear on startup.
+            w.setDecorFitsSystemWindows(false);
+            android.view.WindowInsetsController c=d.getWindowInsetsController();
+            if(c!=null) {
+                c.hide(android.view.WindowInsets.Type.statusBars() |
+                       android.view.WindowInsets.Type.navigationBars());
+                c.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        }
+    }
+    @Override public void onWindowFocusChanged(boolean focused) {
+        super.onWindowFocusChanged(focused);
+        if(focused)keepGameImmersive();
+    }
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        keepGameImmersive();
+    }
+    @Override protected void onResume() {
+        keepGameImmersive();
+        super.onResume();
+        keepGameImmersive();
+        if(androidPadView!=null){
+            padHandler.removeCallbacks(padVisibilityPoll);
+            padHandler.post(padVisibilityPoll);
+        }
+        gameState(!gameReady,android.app.GameState.MODE_GAMEPLAY_INTERRUPTIBLE);
     }
 
     private File dir() {
@@ -182,6 +208,7 @@ public class GameActivity extends SDLActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        keepGameImmersive();
         String d = dir().getAbsolutePath();
         new File(d, "user").mkdirs();
         new File(d, "home/.local/share").mkdirs();
@@ -330,6 +357,7 @@ public class GameActivity extends SDLActivity {
             throw new RuntimeException(e);
         }
         super.onCreate(savedInstanceState);
+        keepGameImmersive(); // SDL may reconfigure window flags during surface creation.
         // A View above the SDL surface draws and receives touches in the SAME
         // coordinates. It avoids Vulkan Rotate90 and SDL synthetic touch/mouse
         // routing entirely; native ImGui virtual buttons are disabled.

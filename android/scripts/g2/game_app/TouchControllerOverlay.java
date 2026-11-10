@@ -36,7 +36,7 @@ final class TouchControllerOverlay extends View {
         // gameplay zones: interact top-right, melee on the inner right column,
         // cover outer right, jump low-right, camera stick free below them.
         // Shoulder shortcuts remain high at the edges.
-        {260,108},{112,108},{585,65},{690,65},{1016,108},{1166,108},
+        {260,108},{112,108},{585,104},{690,104},{1016,108},{1166,108},
         // D-pad is secondary; well above the movement thumb.
         {145,242},{85,302},{205,302},{145,362},
         // Interact (triangle), cover (circle), jump (cross), melee (square).
@@ -45,7 +45,7 @@ final class TouchControllerOverlay extends View {
         {142,570},{210,535},{905,535},{825,575}
     };
     private static final String ACTION_LAYOUT_VERSION_KEY="overlay_uncharted_layout_version";
-    private static final int ACTION_LAYOUT_VERSION=4;
+    private static final int ACTION_LAYOUT_VERSION=5;
     private final PadBridge pad;
     private final SharedPreferences preferences;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -97,15 +97,19 @@ final class TouchControllerOverlay extends View {
             // Bad first-generation positions could persist after an APK update.
             // Migrate only the Uncharted layout. The classic PS pad is untouched.
             SharedPreferences.Editor migration=preferences.edit();
-            for(String name:NAMES)
-                migration.remove("overlay_uncharted_x_"+name)
-                         .remove("overlay_uncharted_y_"+name);
-            migration.putFloat("overlay_uncharted_size",1.0f);
+            if(preferences.getInt(ACTION_LAYOUT_VERSION_KEY,0)<4) {
+                // Retain user-customized 0.3.0 coordinates on the v4->v5 upgrade.
+                for(String name:NAMES)
+                    migration.remove("overlay_uncharted_x_"+name)
+                             .remove("overlay_uncharted_y_"+name);
+                migration.putFloat("overlay_uncharted_size",1.0f);
+            }
             migration.putInt(ACTION_LAYOUT_VERSION_KEY,ACTION_LAYOUT_VERSION).apply();
         }
         sizeMultiplier=Math.max(.75f,Math.min(unchartedStyle?1.30f:1.65f,
             preferences.getFloat(sizeKey(),unchartedStyle?1.0f:1.20f)));
-        surfaceOpacity=Math.max(.10f,Math.min(.9f,preferences.getFloat(opacityKey(),unchartedStyle?.15f:.40f)));
+        surfaceOpacity=Math.max(unchartedStyle?.42f:.10f,
+            Math.min(.9f,preferences.getFloat(opacityKey(),unchartedStyle?.50f:.40f)));
         float[][] defaults=unchartedStyle?ACTION_DEFAULT:DEFAULT;
         centers.clear();
         for (int i=0;i<NAMES.length;i++) {
@@ -132,7 +136,7 @@ final class TouchControllerOverlay extends View {
         release();invalidate();
     }
     void setOpacity(float opacity) {
-        surfaceOpacity=Math.max(.1f,Math.min(.9f,opacity));
+        surfaceOpacity=Math.max(unchartedStyle?.42f:.1f,Math.min(.9f,opacity));
         preferences.edit().putFloat(opacityKey(),surfaceOpacity).apply();
         invalidate();
     }
@@ -567,9 +571,9 @@ final class TouchControllerOverlay extends View {
     }
     // Uncharted: desaturated slate surfaces and weathered metallic edges.
     // Neutral steel/sandstone surfaces; pressed controls have a subtle warm highlight.
-    private static final int ACTION_EDGE=0xff8d9da2;
+    private static final int ACTION_EDGE=0xffc0d1d9;
     private static final int ACTION_EDGE_ACTIVE=0xffc8b28a;
-    private static final int ACTION_GLYPH=0xffd0d8d6;
+    private static final int ACTION_GLYPH=0xffedf4f4;
     private static final int ACTION_GLYPH_ACTIVE=0xfff1dfba;
     private int actionFill(boolean down) {
         float a=Math.min(.95f,surfaceOpacity+(down?.19f:0f));
@@ -639,8 +643,11 @@ final class TouchControllerOverlay extends View {
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(actionFill(pressed.contains(name)));
         c.drawCircle(p.x,p.y,r,paint);
-        paint.setColor(pressed.contains(name)?ACTION_EDGE_ACTIVE:ACTION_EDGE);paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(2.3f);c.drawCircle(p.x,p.y,r,paint);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setColor(0xe006111b);paint.setStrokeWidth(6f);
+        c.drawCircle(p.x,p.y,r,paint);
+        paint.setColor(pressed.contains(name)?ACTION_EDGE_ACTIVE:ACTION_EDGE);
+        paint.setStrokeWidth(2.8f);c.drawCircle(p.x,p.y,r,paint);
         if (name.equals("touchpad")) {
             c.drawRoundRect(p.x-r*.49f,p.y-r*.22f,p.x+r*.26f,p.y+r*.36f,
                             5f,5f,paint);
@@ -698,7 +705,9 @@ final class TouchControllerOverlay extends View {
             paint.setColor(selected?0xff405868:0xd91a2b38);
             c.drawRoundRect(x0,y0,x1,y1,6f*s,6f*s,paint);
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(2.1f*s);
+            paint.setStrokeWidth(4.5f*s);
+            paint.setColor(0xec06111b);c.drawRoundRect(x0,y0,x1,y1,6f*s,6f*s,paint);
+            paint.setStrokeWidth(2.3f*s);
             paint.setColor(selected?ACTION_EDGE_ACTIVE:ACTION_EDGE);
             c.drawRoundRect(x0,y0,x1,y1,6f*s,6f*s,paint);
             // Engraved directional chevrons: visible on each separate arm.
@@ -735,8 +744,9 @@ final class TouchControllerOverlay extends View {
         float r=80*sizeMultiplier;
         paint.setStyle(Paint.Style.FILL);paint.setColor(actionFill(false));
         c.drawCircle(p.x,p.y,r,paint);
-        paint.setStyle(Paint.Style.STROKE);paint.setColor(ACTION_EDGE);
-        paint.setStrokeWidth(2.5f);c.drawCircle(p.x,p.y,r,paint);
+        paint.setStyle(Paint.Style.STROKE);paint.setColor(0xe006111b);
+        paint.setStrokeWidth(6f);c.drawCircle(p.x,p.y,r,paint);
+        paint.setColor(ACTION_EDGE);paint.setStrokeWidth(2.8f);c.drawCircle(p.x,p.y,r,paint);
         float kx=p.x,ky=p.y;
         for(int i=0;i<controls.size();i++) {
             if(name.equals(controls.valueAt(i))) {

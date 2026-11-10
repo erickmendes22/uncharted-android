@@ -31,11 +31,11 @@ namespace BbOverlay {
 
 namespace {
 
-constexpr float TouchScale = 1.35f;   // on top of the display scale: 32 px text at 1080p
-constexpr float PanelShare = 0.53f;  // of the screen width
+constexpr float TouchScale = 1.18f;   // on top of the display scale: 32 px text at 1080p
+constexpr float PanelShare = 0.49f;  // of the screen width
 
 std::atomic<float> menu_x0{.52f}, menu_x1{.58f}, menu_y0{.02f}, menu_y1{.09f};
-std::atomic<float> panel_left_norm{0.53f}; // the panel's left edge, 0..1 of the screen width
+std::atomic<float> panel_left_norm{0.49f}; // the panel's left edge, 0..1 of the screen width
 std::atomic<float> pending_scroll{0.0f};  // a finger's travel inside the panel, 0..1 of the height
 
 // A change is written to bbport.ini a second after the last one, or when the panel closes
@@ -287,7 +287,7 @@ void AndroidMenu(float base_scale,float frame_ms,bool& keep_open) {
         static int tab=0;
         const char* tabs[]={"Video","Performance","Patches","HUD","Controls","System"};
         const float side=width*.26f;
-        const float area=ImGui::GetContentRegionAvail().y-ImGui::GetFrameHeightWithSpacing()*1.6f;
+        const float area=std::max(1.f,ImGui::GetContentRegionAvail().y-ImGui::GetFrameHeightWithSpacing()*1.25f);
         ImGui::BeginChild("##left-menu",{side,area},false);
         for(int i=0;i<6;++i){
             if(NavItem(i,tabs[i],tab,ImGui::GetContentRegionAvail().x)){tab=i;ImGui::SetScrollY(0);}

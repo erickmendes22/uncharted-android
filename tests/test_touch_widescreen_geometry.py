@@ -11,7 +11,7 @@ from pathlib import Path
 
 root=Path(__file__).resolve().parents[1]
 s=(root/"android/scripts/g2/game_app/TouchControllerOverlay.java").read_text()
-assert 'ACTION_LAYOUT_VERSION=4' in s
+assert 'ACTION_LAYOUT_VERSION=5' in s
 assert 'getWidth()/(1280f*scale())' in s
 assert '640f+(x-640f)*actionHorizontalScale()' in s
 assert '640f+(x-640f)/actionHorizontalScale()' in s
