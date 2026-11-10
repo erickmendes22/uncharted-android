@@ -332,9 +332,10 @@ public class Launcher extends Activity {
 
         LinearLayout details=new LinearLayout(this);
         details.setOrientation(LinearLayout.VERTICAL);
-        details.setPadding(dp(8),dp(portrait?6:2),dp(8),dp(portrait?8:3));
+        details.setPadding(dp(8),dp(portrait?6:2),dp(8),dp(portrait?8:4));
         if(portrait)container.addView(details,new LinearLayout.LayoutParams(0,-1,.60f));
-        else container.addView(details,new LinearLayout.LayoutParams(-1,dp(62)));
+        else container.addView(details,new LinearLayout.LayoutParams(
+            -1,ViewGroup.LayoutParams.WRAP_CONTENT));
         if(portrait) {
             TextView name=text(details,gameName(game),15,true);
             name.setTextColor(0xfff0debc);
@@ -739,14 +740,24 @@ public class Launcher extends Activity {
         shell.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
             new int[] {0xFF142A3B, 0xFF091421, 0xFF2D261D}));
         final boolean portrait=portraitLayout();
-        TextView brand = text(shell, "Uncharted Daedalus", portrait?21:17, true);
+        LinearLayout headingBar = new LinearLayout(this);
+        headingBar.setOrientation(portrait?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
+        headingBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        shell.addView(headingBar,new LinearLayout.LayoutParams(-1,-2));
+        TextView brand = text(headingBar, "Uncharted Daedalus", portrait?21:18, true);
         brand.setTypeface(Typeface.create("serif", Typeface.BOLD));
         brand.setLetterSpacing(0.025f);
         brand.setPadding(dp(portrait?14:10),dp(portrait?3:0),dp(12),0);
-        TextView subtitle = note(shell, "THE NATHAN DRAKE COLLECTION");
+        TextView subtitle = note(headingBar, "THE NATHAN DRAKE COLLECTION");
         subtitle.setTextSize(11);
         subtitle.setPadding(dp(15),0,dp(12),dp(2));
-        subtitle.setVisibility(portrait?View.VISIBLE:View.GONE);
+        subtitle.setVisibility(View.VISIBLE);
+        if(!portrait){
+            brand.setPadding(dp(10),0,dp(12),0);
+            subtitle.setPadding(dp(4),0,0,0);
+            subtitle.setTextSize(11);
+            subtitle.setSingleLine(true);
+        }
         ScrollView scroll = new ScrollView(this);
         pageScroll=scroll;
         scroll.setFillViewport(true);
@@ -760,14 +771,12 @@ public class Launcher extends Activity {
         for (int n = 0; n < pages.length; n++) {
             pages[n] = new LinearLayout(this);
             pages[n].setOrientation(LinearLayout.VERTICAL);
-            // Only Games fills the available viewport. Long settings/patch pages
-            // keep their natural height and remain scrollable.
-            LinearLayout.LayoutParams pageLayout=new LinearLayout.LayoutParams(-1,
-                n==0?0:ViewGroup.LayoutParams.WRAP_CONTENT);
-            if(n==0)pageLayout.weight=1f;
-            root.addView(pages[n],pageLayout);
+            if(n!=0)root.addView(pages[n],new LinearLayout.LayoutParams(
+                -1,ViewGroup.LayoutParams.WRAP_CONTENT));
             pages[n].setVisibility(n == selectedPage ? View.VISIBLE : View.GONE);
         }
+        // Games does NOT belong in ScrollView: it must fill the usable display.
+        // Only the long Settings, Patches and About pages are scrollable.
         LinearLayout home = pages[0], patches = pages[1], config = pages[2], about = pages[3];
         // Same six-section information architecture as the Android in-game
         // left panel, but only expose options the Java launcher can configure.
@@ -817,7 +826,8 @@ public class Launcher extends Activity {
         for(String[] g:GAMES)gameCard(gallery,g[0]);
         // PKG installation and folder management live only in Config > Games / Files.
         statusText = note(shell, "");
-        statusText.setPadding(dp(22), 0, dp(22), dp(4));
+        statusText.setPadding(dp(12),0,dp(12),dp(2));
+        statusText.setVisibility(View.GONE);
         root = home;
         LinearLayout folder = card(configSections[4], "GAME INSTALLATION");
         folderText = text(folder, "", 15, false);
@@ -1177,7 +1187,10 @@ public class Launcher extends Activity {
         LinearLayout help=card(about,"CONTROLS");
         note(help,"Left: movement. Right: camera.");
         note(help,"Open the in-game menu by swiping from left to right.");
-        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        shell.addView(home,new LinearLayout.LayoutParams(-1,0,1));
+        shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        home.setVisibility(selectedPage==0?View.VISIBLE:View.GONE);
+        scroll.setVisibility(selectedPage==0?View.GONE:View.VISIBLE);
         LinearLayout nav = new LinearLayout(this);
         nav.setPadding(dp(8),dp(portrait?6:1),dp(8),dp(portrait?6:1));
         nav.setBackgroundColor(0xF5081624);
@@ -1197,6 +1210,8 @@ public class Launcher extends Activity {
             item.setOnClickListener(v -> {
                 selectedPage=index;
                 prefs.edit().putString("extra_env", extraEnv.getText().toString()).apply();
+                home.setVisibility(index==0?View.VISIBLE:View.GONE);
+                scroll.setVisibility(index==0?View.GONE:View.VISIBLE);
                 for (int j = 0; j < pages.length; j++) {
                     pages[j].setVisibility(j == index ? View.VISIBLE : View.GONE);
                     navButtons[j].setTextColor(j == index ? accent : muted);
@@ -1452,7 +1467,10 @@ public class Launcher extends Activity {
     }
 
     private void status(String s) {
-        runOnUiThread(() -> statusText.setText(AppLanguage.text(s)));
+        runOnUiThread(() -> {
+            statusText.setText(AppLanguage.text(s));
+            statusText.setVisibility(s==null||s.isEmpty()?View.GONE:View.VISIBLE);
+        });
     }
 
     // ---- preparing ----

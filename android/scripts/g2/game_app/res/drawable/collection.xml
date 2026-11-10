@@ -1,29 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Uncharted Daedalus: an original expedition crest, slate and antique brass. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#0A1B2A" android:pathData="M0,0h108v108h-108z"/>
-    <path android:fillColor="#183345" android:pathData="M10,10h88v88h-88z"/>
-    <path android:fillColor="#0D2435" android:pathData="M17,18h74v72h-74z"/>
-    <path android:fillColor="@android:color/transparent"
-        android:strokeColor="#C8A570" android:strokeWidth="2.6"
-        android:pathData="M15,25v-10h78v10 M15,83v10h78v-10"/>
-    <!-- A rugged temple ridge; strong at a real 48px launcher icon size. -->
-    <path android:fillColor="#526E7C"
-        android:pathData="M18,77L35,52L46,63L64,29L91,77Z"/>
-    <path android:fillColor="#D0AB70"
-        android:pathData="M18,77L35,52L46,63L64,29L91,77L74,68L63,48L50,72L40,64L30,77Z"/>
-    <path android:fillColor="#E9D09D"
-        android:pathData="M64,29L69,50L63,45L58,52Z"/>
-    <path android:fillColor="#102839"
-        android:pathData="M31,78h46v11h-46z M42,77L52,64L59,77Z"/>
-    <!-- North-star above the ruins -->
-    <path android:fillColor="#F2D8A0"
-        android:pathData="M78,17L80.8,24.2L88,27L80.8,29.8L78,37L75.2,29.8L68,27L75.2,24.2Z"/>
-    <path android:fillColor="#0A1B2A"
-        android:pathData="M78,22L79.6,26L83,27L79.6,28L78,32L76.4,28L73,27L76.4,26Z"/>
-    <path android:fillColor="@android:color/transparent"
-        android:strokeColor="#A98350" android:strokeWidth="1.5"
-        android:pathData="M26,88h56 M24,21h36"/>
-</vector>
+<!-- Approved UNCHARTED DAEDALUS explorer icon, bitmap raster in drawable-nodpi. -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/uncharted_icon_approved"
+    android:gravity="fill" />

@@ -32,6 +32,12 @@ assert 'gamesLayout.height=0' in launcher
 assert 'gamesLayout.weight=1f' in launcher
 assert 'games.addView(gallery,new LinearLayout.LayoutParams(-1,0,1f));' in launcher
 assert 'new LinearLayout.LayoutParams(-1,0,1f)' in launcher
+assert 'shell.addView(home,new LinearLayout.LayoutParams(-1,0,1));' in launcher
+assert 'home.setVisibility(index==0?View.VISIBLE:View.GONE);' in launcher
+assert 'scroll.setVisibility(index==0?View.GONE:View.VISIBLE);' in launcher
+assert 'if(n!=0)root.addView(pages[n]' in launcher
+assert 'statusText.setVisibility(View.GONE)' in launcher
+assert 'TextView subtitle = note(headingBar, "THE NATHAN DRAKE COLLECTION")' in launcher
 assert 'new LinearLayout.LayoutParams(0,-1,1f)' in launcher
 assert 'backdrop.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(' in launcher
 assert 'int coverHeight=' not in launcher
@@ -39,7 +45,8 @@ assert 'String[] labels={"Off · manual resolution"' not in launcher
 assert 'final String[] providers={"Off","FSR 3.1","Snapdragon GSR 2"}' in launcher
 assert 'final String[] qualityLabels={"Native AA","Quality","Balanced","Performance"}' in launcher
 assert 'UpscalePreset.compose(provider,quality)' in launcher
-assert src("android/scripts/g2/game_app/res/drawable/collection.xml").startswith('<?xml')
+assert '@drawable/uncharted_icon_approved' in src("android/scripts/g2/game_app/res/drawable/collection.xml")
+assert 'drawable-nodpi/uncharted_icon_approved.webp' in src("android/scripts/g2/game_app/build.sh")
 assert 'not collection cover art' in src("android/scripts/g2/game_app/build.sh")
 assert 'for(Button play:gamePlayButtons)play.setEnabled(problem == null && !busy);' in launcher
 assert 'gamePlayButtons.clear();' in launcher

@@ -21,7 +21,9 @@ assert 'tabLayout.width=portrait?dp(132):0' in launcher
 assert 'tabLayout.weight=portrait?0f:1f' in launcher
 assert 'The collection hero repeated the header' in launcher
 assert 'nav.addView(item, new LinearLayout.LayoutParams(0, dp(portrait?42:34), 1))' in launcher
-assert 'new LinearLayout.LayoutParams(-1,dp(62))' in launcher
+assert 'new LinearLayout.LayoutParams(-1,ViewGroup.LayoutParams.WRAP_CONTENT)' in launcher or '-1,ViewGroup.LayoutParams.WRAP_CONTENT));' in launcher
+assert 'shell.addView(home,new LinearLayout.LayoutParams(-1,0,1));' in launcher
+assert 'scroll.setVisibility(selectedPage==0?View.GONE:View.VISIBLE)' in launcher
 assert 'poster.addView(name,new android.widget.FrameLayout.LayoutParams(' in launcher
 assert 'selectedConfigSection=4;selectedPage=2;buildViews();refresh();' not in launcher
 assert 'container.setOnClickListener(v->chooseGame(game,0))' in launcher
