@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Uncharted touch D-pad appearance: four independent PlayStation-style arms.
 
-The drawn control must match its 58-unit hit area and retain per-direction
+The drawn control must match its enlarged hit area and retain per-direction
 pressed feedback and the existing, optional classic-layout buttons.
 """
 from pathlib import Path
@@ -18,7 +18,13 @@ assert 'c.drawLine(29f*s,-7f*s,37f*s,0,paint)' in d
 assert 'c.drawLine(-7f*s,29f*s,0,37f*s,paint)' in d
 assert 'c.drawLine(-29f*s,-7f*s,-37f*s,0,paint)' in d
 assert 'c.drawCircle(p.x,p.y,r,paint)' not in d
-assert 'actionDistance(x,y,dpad)<58*sizeMultiplier' in s
+assert 'private static final float DPAD_VISUAL_SCALE=1.50f;' in s
+assert 'final float s=sizeMultiplier*DPAD_VISUAL_SCALE;' in d
+assert 'actionDistance(x,y,dpad)<58*sizeMultiplier*DPAD_VISUAL_SCALE' in s
+# At the default scale, the drawn arms reach radius 78, comparable to
+# the movement stick's radius 80; the hit radius is a slightly larger 87.
+assert abs(52*1.5-80)<=3
+assert 58*1.5>=52*1.5+8
 assert 'DpadResolver.resolve(dx,p.y-c.y,sizeMultiplier)' in s
 assert 'circle(c,"up",39,"▲"' in s
 print("PASS: four beveled arrow arms, independent pressed states, no circular D-pad, classic retained")

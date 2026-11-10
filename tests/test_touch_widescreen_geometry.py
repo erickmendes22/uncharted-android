@@ -18,7 +18,7 @@ assert '640f+(x-640f)/actionHorizontalScale()' in s
 assert 'return unchartedStyle?actionLogicalX(x):x;' in s
 assert 'PointF p=actionCenter(name)' in s
 assert 'actionDistance(x,y,p)<radius*sizeMultiplier' in s
-assert 'actionDistance(x,y,dpad)<58*sizeMultiplier' in s
+assert 'actionDistance(x,y,dpad)<58*sizeMultiplier*DPAD_VISUAL_SCALE' in s
 assert 'PointF p=actionDpadCenter()' in s
 assert 'float toolbarX=screenLayoutX(e,at);' in s
 assert 'float dx=actionDisplayX(q.x)-p.x;' in s
@@ -54,7 +54,7 @@ assert xy['rightstick'][1] > 0.7*720
 # hitboxes and rendering: circular hit areas should track the drawn buttons.
 buttons={'l2':46,'l1':46,'touchpad':34,'options':34,'r1':46,'r2':46,
          'triangle':46,'square':46,'circle':46,'cross':46,
-         'dpad':45,'leftstick':80,'rightstick':80}
+         'dpad':78,'leftstick':80,'rightstick':80}
 xy['dpad']=(sum(xy[n][0] for n in ('up','left','right','down'))/4,
             sum(xy[n][1] for n in ('up','left','right','down'))/4)
 for width,height in [(1280,720),(1672,941),(2048,926),(2400,1080)]:
@@ -73,6 +73,9 @@ for width,height in [(1280,720),(1672,941),(2048,926),(2400,1080)]:
         assert abs(sx-width*x/1280)<1e-5,(name,width,sx)
         assert 0 < sx < width and 0 < sy < height,(name,width,height,sx,sy)
         positions[name]=(sx,sy,radius*scale)
+    # The D-pad arms, now radius 78, remain within their dedicated region;
+    # the hit radius is 87 so taps outside the bevel are still recognized.
+    assert 58*1.5==87
     # No interactive circles overlap except at intentionally adjacent areas.
     for name,(x,y,radius) in positions.items():
         for other,(ox,oy,oradius) in positions.items():

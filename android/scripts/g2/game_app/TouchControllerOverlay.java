@@ -187,7 +187,8 @@ final class TouchControllerOverlay extends View {
     }
     private String hit(float x,float y) {
         PointF dpad=dpadCenter();
-        if (unchartedStyle && actionDistance(x,y,dpad)<58*sizeMultiplier) return "dpad";
+        if (unchartedStyle &&
+            actionDistance(x,y,dpad)<58*sizeMultiplier*DPAD_VISUAL_SCALE) return "dpad";
         if (!unchartedStyle && !editing && distance(x,y,dpad)<112*sizeMultiplier &&
             distance(center("up").x,center("up").y,dpad)<115*sizeMultiplier &&
             distance(center("left").x,center("left").y,dpad)<115*sizeMultiplier &&
@@ -663,6 +664,10 @@ final class TouchControllerOverlay extends View {
     }
     // Four independently highlighted, bevel-edged arms of a real PS-style
     // D-pad, instead of the old circle with two crossing lines.
+    // Make the cross large enough to operate with a thumb. Only the D-pad
+    // uses this factor: the analog sticks and action buttons stay unchanged.
+    // Arm extent: 52 * 1.5 = 78 (near the 80-unit analog base radius).
+    private static final float DPAD_VISUAL_SCALE=1.50f;
     private static final float[][] DPAD_ARMS={
         {-18f,-52f,18f,-7f}, {7f,-18f,52f,18f},
         {-18f,7f,18f,52f}, {-52f,-18f,-7f,18f}
@@ -670,7 +675,7 @@ final class TouchControllerOverlay extends View {
     private static final String[] DPAD_DIRECTIONS={"up","right","down","left"};
     private void actionDpad(Canvas c) {
         final PointF p=actionDpadCenter();
-        final float s=sizeMultiplier;
+        final float s=sizeMultiplier*DPAD_VISUAL_SCALE;
         c.save();
         c.translate(p.x,p.y);
         for (int i=0;i<4;i++) {
