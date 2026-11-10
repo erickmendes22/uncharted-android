@@ -20,6 +20,21 @@ assert "versionName='0.3.0'" in flow and "versionCode='100300'" in flow
 assert "Uncharted-Daedalus-0.3.0.apk" in flow
 assert 'gameCard(gallery,g[0])' in launcher
 assert 'gameCardAction(actions,"Play",true' in launcher
+assert 'gamePlayButtons.add(gameCardAction(actions,"Play",true' in launcher
+assert 'for(Button play:gamePlayButtons)play.setEnabled(problem == null && !busy);' in launcher
+assert 'gamePlayButtons.clear();' in launcher
+assert 'primaryButton(games,"Play selected game"' not in launcher
+assert 'note(games,"Select a game to play.")' not in launcher
+# Regression: both install actions must be visible in Games and Settings / Games-Files.
+assert 'LinearLayout pkgQuickActions=row(games);' in launcher
+assert 'button(pkgQuickActions,"Install game PKG",v->installPkg(false));' in launcher
+assert 'button(pkgQuickActions,"Install update PKG",v->installPkg(true));' in launcher
+assert 'LinearLayout pkgActions=row(folder);' in launcher
+assert 'button(pkgActions,"Install game PKG",v->installPkg(false));' in launcher
+assert 'button(pkgActions,"Install update PKG",v->installPkg(true));' in launcher
+assert 'case SetupFlow.PKG:pkgInstaller.pick(false)' in launcher
+assert 'case SetupFlow.UPDATE:pkgInstaller.pick(true)' in launcher
+assert 'selectedConfigSection=4;selectedPage=2;buildViews();refresh();' in launcher
 assert 'gameCardAction(actions,"Configure",false' not in launcher
 assert 'gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL)' in launcher
 assert 'categoryScroll.setHorizontalScrollBarEnabled(false)' in launcher

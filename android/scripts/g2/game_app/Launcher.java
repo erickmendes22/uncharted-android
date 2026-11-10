@@ -103,7 +103,8 @@ public class Launcher extends Activity {
     private File files;
     private TextView folderText, folderInfo, statusText;
     private EditText pathEdit, extraEnv;
-    private Button accessButton, playButton;
+    private Button accessButton;
+    private final java.util.ArrayList<Button> gamePlayButtons = new java.util.ArrayList<>();
     private RadioGroup resolution;
     private RadioGroup fpsLimit;
     private RadioGroup touchPad;
@@ -334,7 +335,7 @@ public class Launcher extends Activity {
         LinearLayout actions=new LinearLayout(this);
         actions.setOrientation(portrait?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         details.addView(actions,new LinearLayout.LayoutParams(-1,-2));
-        gameCardAction(actions,"Play",true,v->{chooseGame(game,0);play();});
+        gamePlayButtons.add(gameCardAction(actions,"Play",true,v->{chooseGame(game,0);play();}));
         // A card selects a game without unexpectedly entering global settings.
         container.setOnClickListener(v->chooseGame(game,0));
         return container;
@@ -708,6 +709,7 @@ public class Launcher extends Activity {
     }
 
     private void buildViews() {
+        gamePlayButtons.clear();
         refreshNativeAa=null;
         initPalette();
         LinearLayout shell = new LinearLayout(this);
@@ -790,13 +792,15 @@ public class Launcher extends Activity {
         hero.addView(heroCaption,new android.widget.FrameLayout.LayoutParams(-1,-1));
         if(portrait)home.addView(hero,new LinearLayout.LayoutParams(-1,dp(126)));
         LinearLayout games = card(home, "CHOOSE YOUR ADVENTURE");
-        if(portrait)note(games,"Select a game to play.");
         LinearLayout gallery=new LinearLayout(this);
         gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         games.addView(gallery);
         for(String[] g:GAMES)gameCard(gallery,g[0]);
-        playButton=primaryButton(games,"Play selected game",v->play());
-        button(games,"Install or update game files",v->{
+        // Keep installation visible on the home page, not hidden behind a generic file action.
+        LinearLayout pkgQuickActions=row(games);
+        button(pkgQuickActions,"Install game PKG",v->installPkg(false));
+        button(pkgQuickActions,"Install update PKG",v->installPkg(true));
+        button(games,"Choose folder",v->{
             selectedConfigSection=4;selectedPage=2;buildViews();refresh();
         });
         statusText = note(shell, "");
@@ -805,6 +809,10 @@ public class Launcher extends Activity {
         LinearLayout folder = card(configSections[4], "GAME INSTALLATION");
         folderText = text(folder, "", 15, false);
         folderInfo = note(folder, "");
+        // Same direct PKG and update actions as 0.2.9, retaining existing extraction logic.
+        LinearLayout pkgActions=row(folder);
+        button(pkgActions,"Install game PKG",v->installPkg(false));
+        button(pkgActions,"Install update PKG",v->installPkg(true));
         LinearLayout row = row(folder);
         button(row, "Choose folder", v -> chooseGameFolder());
         accessButton = button(row, "Allow file access", v -> requestStorageAccess());
@@ -1375,7 +1383,7 @@ public class Launcher extends Activity {
         } else {
             folderInfo.setText(AppLanguage.text(problem));
         }
-        playButton.setEnabled(problem == null && !busy);
+        for(Button play:gamePlayButtons)play.setEnabled(problem == null && !busy);
     }
 
     private void status(String s) {
