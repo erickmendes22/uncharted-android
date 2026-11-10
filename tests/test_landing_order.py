@@ -5,7 +5,7 @@ root=pathlib.Path(__file__).resolve().parents[1]
 s=(root/'gpu/shadps4/video_core/buffer_cache/buffer_cache.cpp').read_text()
 h=(root/'gpu/shadps4/video_core/buffer_cache/buffer_cache.h').read_text()
 def function(name):
- a=s.index('void BufferCache::'+name+'(') if name not in ('PendingLanding','LandingGateActive') else s.index(('u64' if name=='PendingLanding' else 'bool')+' BufferCache::'+name+'(')
+ a=s.index('void BufferCache::'+name+'(') if name not in ('PendingLanding','PendingGatedLanding','LandingGateActive') else s.index(('bool' if name=='LandingGateActive' else 'u64')+' BufferCache::'+name+'(')
  brace=s.index('{',a);depth=1;b=brace+1
  while depth:
   if s[b]=='{':depth+=1
@@ -49,12 +49,14 @@ public:
  }
  bool LandingGateActive() const;
  u64 PendingLanding() const;
+ u64 PendingGatedLanding() const;
  void WaitLanding(u64);
  void RunAfterLanding(u64,std::function<void()>,bool off_caller=false);
- void add() {
+ void add(bool gate=true) {
    std::scoped_lock lk(landing_mutex);
    auto item=std::make_shared<Landing>();item->seq=++landing_registered_seq;
    landing_registered.store(item->seq,std::memory_order_release);
+   if(gate)landing_gated_registered.store(item->seq,std::memory_order_release);
    landing_queue.push_back(item);landing_cv.notify_one();
  }
  void allow(u64 n) {std::scoped_lock lk(gpu_mutex);permitted=n;gpu_cv.notify_all();}
@@ -84,8 +86,17 @@ int main(){
  assert(b.LandingGateActive());
  b.allow(2);second_label.get_future().get();b.WaitLanding(2);
  assert(order==3);
+ // U3 speculative result (new seq 3) is pending. End-of-pipe label and flip
+ // interrupt must NOT wait for it, while the landing worker still owns it.
+ b.add(false);
+ assert(b.PendingLanding()==3);
+ assert(b.PendingGatedLanding()==0);
+ assert(!b.LandingGateActive());
+ b.RunAfterLanding(b.PendingGatedLanding(),[&]{assert(order++==3);});
+ assert(order==4);
+ b.allow(3);b.WaitLanding(3);
  std::promise<void> final;
- b.RunAfterLanding(0,[&]{assert(order++==3);final.set_value();});
+ b.RunAfterLanding(0,[&]{assert(order++==4);final.set_value();});
  final.get_future().get();
  // Reproduce the original EOP problem: even with no copies left to land,
  // off_caller must schedule the callback on the worker, never run it inline
@@ -94,19 +105,19 @@ int main(){
  const auto caller=std::this_thread::get_id();
  b.RunAfterLanding(0,[&]{
    assert(std::this_thread::get_id()!=caller);
-   assert(order++==4);
+   assert(order++==5);
    eop_dispatched.set_value();
  },true);
  eop_dispatched.get_future().get();
- assert(order==5);
+ assert(order==6);
  // Shutdown releases direct label waits even when the requested sequence is absent.
- auto waiter=std::async(std::launch::async,[&]{b.WaitLanding(3);});
+ auto waiter=std::async(std::launch::async,[&]{b.WaitLanding(4);});
  {std::scoped_lock lk(b.landing_mutex);b.landing_stop=true;}
  b.landing_done_cv.notify_all();b.landing_cv.notify_all();
  waiter.get();
- puts("PASS: actual landing worker preserves data-before-label, label order, overlap and cancellation");
+ puts("PASS: U2 gated labels preserve order; U3 speculative landings do not gate EOP; worker cancellation safe");
 }
-'''.replace('FIELDS',fields).replace('FUNCTIONS','\n'.join(function(n) for n in ['LandingWorker','PendingLanding','LandingGateActive','WaitLanding','RunAfterLanding']))
+'''.replace('FIELDS',fields).replace('FUNCTIONS','\n'.join(function(n) for n in ['LandingWorker','PendingLanding','PendingGatedLanding','LandingGateActive','WaitLanding','RunAfterLanding']))
 with tempfile.TemporaryDirectory() as td:
  p=pathlib.Path(td);(p/'test.cpp').write_text(code)
  subprocess.run(['g++','-std=c++20','-O2','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'gpu/shim'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
