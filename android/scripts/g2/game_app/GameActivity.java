@@ -332,8 +332,14 @@ public class GameActivity extends SDLActivity {
                 }
             }
             android.content.SharedPreferences options=getSharedPreferences("launcher",MODE_PRIVATE);
-            String compatibility=ArmCompatibility.environment(game,options.getBoolean("arm_uma_readback",true),
-                options.getBoolean("arm_flush_draws",true),options.getBoolean("arm_job_spin",true));
+            final boolean pocoSafe=PocoF7BootPolicy.conservative(
+                android.os.Build.MODEL,android.os.Build.DEVICE,
+                android.os.Build.VERSION.SDK_INT>=31?android.os.Build.SOC_MODEL:"",
+                game);
+            String compatibility=ArmCompatibility.environment(game,
+                !pocoSafe && options.getBoolean("arm_uma_readback",true),
+                !pocoSafe && options.getBoolean("arm_flush_draws",true),
+                options.getBoolean("arm_job_spin",true));
             for(String line:compatibility.split("\n")){
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
@@ -344,6 +350,12 @@ public class GameActivity extends SDLActivity {
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
             }
+            for(String line:PocoF7BootPolicy.environment(pocoSafe).split("\n")){
+                int eq=line.indexOf('=');
+                if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
+            }
+            if(pocoSafe) android.util.Log.w("UnchartedBoot",
+                "POCO F7 compatibility: conservative U2/U3 GPU readbacks, draw batching and warmup");
             // Repair CPU-visible animation constants copied from GPU-written sources in U3.
             // Unlike a global precise readback, this is scoped to 256..4096-byte scalar copies
             // going into a CPU-modified destination. U1 and U2 retain their established paths.
@@ -363,7 +375,26 @@ public class GameActivity extends SDLActivity {
             // old per-game environment files so their stale defaults cannot force English.
             Os.setenv("BB_LANGUAGE",Integer.toString(GameLanguage.id(AppLanguage.code(),android.content.res.Resources.getSystem().getConfiguration().getLocales().get(0))),true);
         } catch (Exception e) {
+            android.util.Log.e("UnchartedBoot","Boot configuration failed for "+game,e);
             throw new RuntimeException(e);
+        }
+        // Persist the attempted game *before* native SDL/FEX starts. If a
+        // native SIGSEGV kills the process prior to opening the per-game log,
+        // LogExport returns this diagnostic instead of a stale U1 logfile.
+        try(FileWriter writer=new FileWriter(new File(d,"boot-attempt.txt"),false)) {
+            writer.write("Uncharted Daedalus boot attempt\n");
+            writer.write("game="+game+"\n");
+            writer.write("device="+android.os.Build.MODEL+" / "+android.os.Build.DEVICE+"\n");
+            writer.write("soc="+(android.os.Build.VERSION.SDK_INT>=31?android.os.Build.SOC_MODEL:"unknown")+"\n");
+            writer.write("driver="+String.valueOf(System.getenv("BB_VK_DRIVER"))+"\n");
+            writer.write("boot="+(bootArgs.isEmpty()?"none":bootArgs.get(0))+"\n");
+            writer.write("boot_exists="+(!bootArgs.isEmpty() && new File(bootArgs.get(0)).isFile())+"\n");
+            writer.write("log=uncharted-daedalus-"+game+".log\n");
+            writer.write("compatibility="+(PocoF7BootPolicy.conservative(
+                android.os.Build.MODEL,android.os.Build.DEVICE,
+                android.os.Build.VERSION.SDK_INT>=31?android.os.Build.SOC_MODEL:"",game)?"poco-f7-safe":"default")+"\n");
+        }catch(IOException error){
+            android.util.Log.w("UnchartedBoot","Cannot save startup diagnostics",error);
         }
         super.onCreate(savedInstanceState);
         keepGameImmersive(); // SDL may reconfigure window flags during surface creation.

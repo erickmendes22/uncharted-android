@@ -1915,7 +1915,7 @@ public class Launcher extends Activity {
             StringBuilder args = new StringBuilder();
             args.append(out).append("/boot-linked.bin\n--content-profile\n").append(out).append("/content.bin\n")
                 .append("--app0\n").append(dir).append("\n--user\n").append(d).append("/user\n")
-                .append("--timeout\n0\n--log\n").append(d).append("/uncharted-daedalus.log\n");
+                .append("--timeout\n0\n--log\n").append(d).append("/uncharted-daedalus-").append(g[0]).append(".log\n");
             if (preset != null) args.append("--patches\n").append(preset).append('\n');
             writeText(new File(files, "args-" + g[0] + ".txt"), args.toString());
             if (SelectedGameArgs.isSelected(g[0],selected))

@@ -25,6 +25,12 @@ assert 'v->playGame(game)' in launcher
 assert 'SelectedGameArgs.isSelected(g[0],selected)' in launcher
 assert 'i.putExtra("launch_game",selected)' in launcher
 assert 'SelectedGameArgs.filename(requested)' in activity
+assert 'PocoF7BootPolicy.conservative(' in activity
+assert 'PocoF7BootPolicy.environment(pocoSafe)' in activity
+assert 'uncharted-daedalus-' in launcher and '.append(g[0]).append(".log' in launcher
+assert 'boot-attempt.txt' in activity
+assert 'SelectedGameArgs.valid(game)' in src("android/scripts/g2/game_app/LogExport.java")
+assert 'TestPocoF7BootPolicy' in flow
 assert 'if (bootArgs.isEmpty() && !SelectedGameArgs.valid(requested))' in activity
 assert 'img.setScaleType(portrait?android.widget.ImageView.ScaleType.CENTER_CROP:' in launcher
 assert 'android.widget.ImageView.ScaleType.FIT_CENTER' in launcher

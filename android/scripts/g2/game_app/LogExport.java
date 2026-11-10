@@ -7,7 +7,28 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 final class LogExport {
  static final int REQUEST=5100;
- static File source(Activity a){File root=a.getExternalFilesDir(null);if(root==null)root=a.getFilesDir();File f=new File(root,"uncharted-daedalus.log");if(f.isFile())return f;f=new File(root,"uncharted.log");return f.isFile()?f:new File(root,"bb-probe.log");}
+ static File source(Activity a){
+  File root=a.getExternalFilesDir(null);if(root==null)root=a.getFilesDir();
+  File attempt=new File(root,"boot-attempt.txt");
+  if(attempt.isFile()){
+   String game="";
+   try(BufferedReader reader=new BufferedReader(new FileReader(attempt))){
+    for(String line;(line=reader.readLine())!=null;)
+     if(line.startsWith("game=")){game=line.substring(5).trim();break;}
+   }catch(IOException ignored){}
+   if(SelectedGameArgs.valid(game)){
+    File log=new File(root,"uncharted-daedalus-"+game+".log");
+    // A game which crashes before native logging must not export a previous
+    // session's valid U1 log (or even a stale U2/U3 log).
+    if(log.isFile()&&log.length()>0&&log.lastModified()>=attempt.lastModified())return log;
+    return attempt;
+   }
+  }
+  File f=new File(root,"uncharted-daedalus.log");
+  if(f.isFile())return f;
+  f=new File(root,"uncharted.log");
+  return f.isFile()?f:new File(root,"bb-probe.log");
+ }
  static void pick(Activity a){if(!source(a).isFile()){Toast.makeText(a,AppLanguage.text("No game log yet."),Toast.LENGTH_LONG).show();return;}
   a.startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/plain").putExtra(Intent.EXTRA_TITLE,"Uncharted-Daedalus-"+new SimpleDateFormat("yyyyMMdd-HHmmss",Locale.ROOT).format(new Date())+".log"),REQUEST);
  }

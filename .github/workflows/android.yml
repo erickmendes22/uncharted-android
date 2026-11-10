@@ -70,6 +70,8 @@ jobs:
           python3 tests/test_launcher_localization.py
           javac -d "$RUNNER_TEMP/game-select-test" android/scripts/g2/game_app/SelectedGameArgs.java tests/TestSelectedGameArgs.java
           java -cp "$RUNNER_TEMP/game-select-test" dev.unchartedg2.game.TestSelectedGameArgs
+          javac -d "$RUNNER_TEMP/poco-boot-test" android/scripts/g2/game_app/PocoF7BootPolicy.java tests/TestPocoF7BootPolicy.java
+          java -cp "$RUNNER_TEMP/poco-boot-test" dev.unchartedg2.game.TestPocoF7BootPolicy
           python3 tests/test_v030_game_ui.py
           python3 tests/test_v030_portrait_controls.py
           python3 tests/test_upstream_high_priority.py
