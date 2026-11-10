@@ -188,9 +188,14 @@ jobs:
           grep -q "package: name='com.daedalus.uncharted'" dist/package.txt
           grep -q "application-label:'Uncharted Daedalus'" dist/package.txt
           grep -q "versionName='0.3.0'" dist/package.txt
-          grep -q "versionCode='110300'" dist/package.txt
-          # Check the Android launcher's resolved icon instead of the in-app drawable.
-          grep -q "ic_launcher" dist/package.txt
+          grep -q "versionCode='120300'" dist/package.txt
+          # Resolve the new launchable ComponentName, not the old Launcher cached by
+          # the Redmagic app drawer. Confirm the approved adaptive art is packaged.
+          grep -q "launchable-activity: name='dev.unchartedg2.game.UnchartedDaedalusIcon2026'" dist/package.txt
+          grep -q "application-icon-160:'res/mipmap-anydpi-v26/ic_launcher.xml'" dist/package.txt
+          unzip -p "$apk" res/drawable-nodpi-v4/uncharted_icon_approved.webp | \
+            cmp -s - android/scripts/g2/game_app/res/drawable-nodpi/uncharted_icon_approved.webp
+          grep -q 'UnchartedDaedalusIcon2026' dist/manifest.txt
           grep -q "targetSdkVersion:'28'" dist/package.txt
           grep -q "uses-permission: name='android.permission.WRITE_EXTERNAL_STORAGE'" dist/package.txt
           grep -q "native-code: 'arm64-v8a'" dist/package.txt

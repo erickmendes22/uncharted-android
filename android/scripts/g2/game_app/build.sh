@@ -31,7 +31,9 @@ V2=${V2%.*}
 VERSION_CODE=$((V1 * 10000 + V2 * 100 + V3))
 # New public build-code namespace avoids the Redmagic launcher keeping the
 # obsolete cached collection cover; future patch updates remain monotonic.
-[ "$PUBLIC" = 1 ] && VERSION_CODE=$((110000 + VERSION_CODE))
+# The new app-drawer alias has a distinct ComponentName; increase the versionCode
+# so it installs over build 125 without uninstalling or clearing application data.
+[ "$PUBLIC" = 1 ] && VERSION_CODE=$((120000 + VERSION_CODE))
 LINK_EXTRA=(--version-name "$VERSION" --version-code "$VERSION_CODE" --replace-version)
 if [ "$PUBLIC" = 1 ]; then
     MANIFEST=$HERE/AndroidManifest-public.xml

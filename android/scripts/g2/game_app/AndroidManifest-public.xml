@@ -16,15 +16,24 @@
         <meta-data android:name="android.game_mode_config" android:resource="@xml/game_mode_config" />
         <!-- singleTask: one launcher, which finishes when it starts the game; the icon then makes
              a new one, and that brings a running game back to the front (Launcher.resumeGame). -->
+        <!-- Keep the same real Activity and package, so saves, installed games and
+             task/restarter behavior survive the update. The distinct launcher alias
+             gives OEM launchers a new ComponentName instead of reusing their
+             cached old PlayStation Hits cover for Launcher. -->
         <activity android:name="dev.unchartedg2.game.Launcher" android:exported="true"
             android:icon="@mipmap/ic_launcher"
             android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation">
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation" />
+        <activity-alias android:name="dev.unchartedg2.game.UnchartedDaedalusIcon2026"
+            android:targetActivity="dev.unchartedg2.game.Launcher"
+            android:enabled="true" android:exported="true"
+            android:label="Uncharted Daedalus"
+            android:icon="@mipmap/ic_launcher">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
         <!-- Started by the launcher (and by scripts through adb). An affinity of its own: with the
              launcher's (the package name) Android hid the game's task from Recents and from
              getAppTasks as soon as a new launcher task appeared. -->
