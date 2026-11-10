@@ -322,13 +322,22 @@ Frame* Presenter::PrepareLastFrame() {
 
     Frame* frame = last_submit_frame;
 
+    unsigned fence_timeout_count = 0;
     while (true) {
+        // A permanently unsignaled present fence previously hid the blocker
+        // in an infinite wait. Keep synchronization intact, but report the
+        // queue/timeline state if no progress is made for five seconds.
         vk::Result result = instance.GetDevice().waitForFences(frame->present_done, false,
-                                                               std::numeric_limits<u64>::max());
+                                                               1'000'000'000ull);
         if (result == vk::Result::eSuccess) {
             break;
         }
         if (result == vk::Result::eTimeout) {
+            if (++fence_timeout_count % 5 == 0) {
+                std::printf("GPU stall: PrepareLastFrame present fence unsignaled for %u s\n",
+                            fence_timeout_count);
+                Scheduler::ReportStall();
+            }
             continue;
         }
         ASSERT_MSG(result != vk::Result::eErrorDeviceLost,
@@ -1073,7 +1082,17 @@ Frame* Presenter::GetRenderFrame() {
     Frame* frame;
     {
         std::unique_lock lock{free_mutex};
-        free_cv.wait(lock, [this] { return !free_queue.empty(); });
+        while (free_queue.empty()) {
+            if (!free_cv.wait_for(lock, std::chrono::seconds(5),
+                                  [this] { return !free_queue.empty(); })) {
+                // Do not hold free_mutex during the Vulkan timeline report:
+                // the presenting thread must still be able to return frames.
+                lock.unlock();
+                std::printf("GPU stall: no free presentation frame for 5 s\n");
+                Scheduler::ReportStall();
+                lock.lock();
+            }
+        }
         LOG_DEBUG(Render_Vulkan, "Got render frame, remaining {}", free_queue.size() - 1);
 
         // Take the frame from the queue
@@ -1085,9 +1104,10 @@ Frame* Presenter::GetRenderFrame() {
     vk::Result result{};
 
     const auto wait = [&]() {
-        result = device.waitForFences(frame->present_done, false, std::numeric_limits<u64>::max());
+        result = device.waitForFences(frame->present_done, false, 1'000'000'000ull);
         return result;
     };
+    unsigned fence_timeout_count = 0;
 
     // Wait for the presentation to be finished so all frame resources are free
     while (wait() != vk::Result::eSuccess) {
@@ -1095,6 +1115,11 @@ Frame* Presenter::GetRenderFrame() {
                    "Device lost during waiting for a frame");
         // Retry if the waiting times out
         if (result == vk::Result::eTimeout) {
+            if (++fence_timeout_count % 5 == 0) {
+                std::printf("GPU stall: GetRenderFrame present fence unsignaled for %u s\n",
+                            fence_timeout_count);
+                Scheduler::ReportStall();
+            }
             continue;
         }
     }

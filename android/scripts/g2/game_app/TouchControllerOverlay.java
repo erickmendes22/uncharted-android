@@ -226,10 +226,14 @@ final class TouchControllerOverlay extends View {
             if (p==null) continue;
             if (control.equals("dpad")) {
                 PointF c=dpadCenter();
-                if (p.x<c.x-22) pressed.add("left");
-                if (p.x>c.x+22) pressed.add("right");
-                if (p.y<c.y-22) pressed.add("up");
-                if (p.y>c.y+22) pressed.add("down");
+                // Hit testing/drawing use physical X on wide screens. Resolve
+                // directions in those same units, with only a tiny central deadzone.
+                final float dx=(p.x-c.x)*(unchartedStyle?actionHorizontalScale():1f);
+                final int directions=DpadResolver.resolve(dx,p.y-c.y,sizeMultiplier);
+                if ((directions & DpadResolver.UP)!=0) pressed.add("up");
+                if ((directions & DpadResolver.RIGHT)!=0) pressed.add("right");
+                if ((directions & DpadResolver.DOWN)!=0) pressed.add("down");
+                if ((directions & DpadResolver.LEFT)!=0) pressed.add("left");
             } else if (control.equals("leftstick")) {
                 left=true; PointF c=center(control);
                 // Normalize against the *drawn* distance on widescreen so

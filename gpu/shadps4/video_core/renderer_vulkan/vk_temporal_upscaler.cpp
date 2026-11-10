@@ -344,11 +344,14 @@ bool TemporalUpscaler::OnFrameStart() {
     // model at the applied preset while the menu saves the requested one for run.sh.
     // Velocity mode (Uncharted) runs at the game's own size: anti-aliasing (Native AA) only.
     const int preset = camera_motion.VelocityMode() ? 0 : BbSettings::RenderPreset();
-    if (applied_preset != preset || settings.upscaler == BbSettings::UpscalerOff) failed = false;
+    const int upscaler = settings.upscaler.load();
+    // Changing FSR3/GSR2 providers must recover from a previous provider's
+    // failed dispatch. Otherwise Active() remains false even after switching.
+    if (applied_preset != preset || applied_upscaler != upscaler ||
+        upscaler == BbSettings::UpscalerOff) failed = false;
     const bool movie_bypass = MovieFsrBypass();
     const bool active = Active();
     const bool jitter_on = active && settings.jitter && !BbToggle::Disabled(1u << 25);
-    const int upscaler = settings.upscaler.load();
     const int output =
         camera_motion.VelocityMode() ? BbSettings::OutputDefault : settings.output_res.load();
     const bool output_changed = !scaled_session && applied_output != output;
@@ -362,6 +365,12 @@ bool TemporalUpscaler::OnFrameStart() {
     const bool changed = output_changed || applied_preset != preset || active != last_active ||
                          jitter_on != last_jitter || applied_upscaler != upscaler;
     if (applied_upscaler != upscaler) {
+        // Explicit provider selection is useful when "FSR available" was logged
+        // at startup but GSR2 was the provider actually selected by the menu.
+        std::printf("Upscaler: requested provider %d -> %d (%s), fatal state reset\n",
+                    applied_upscaler, upscaler,
+                    upscaler == BbSettings::UpscalerFsr3 ? "FSR 3.1" :
+                    upscaler == BbSettings::UpscalerGsr2 ? "Snapdragon GSR 2" : "other/off");
         // A failed provider keeps a fatal flag internally; a user retry gets a fresh context.
         scheduler.Finish();
         fsr4 = std::make_unique<Fsr4Upscaler>(instance, scheduler);
@@ -389,11 +398,13 @@ bool TemporalUpscaler::OnFrameStart() {
     applied_upscaler = upscaler;
     last_active = active;
     last_jitter = jitter_on;
-    BbSettings::Get().temporal_running = dispatched_last_frame && active;
+    BbSettings::Get().temporal_running = dispatched_last_frame && active && !changed;
     dispatched_last_frame = false;
 
     // The display pass of an upscaled frame reads the upscaled UI image.
-    display_redirect = ui_phase && !movie_bypass;
+    // Never redirect the next guest display through a host image produced
+    // with the previous provider, preset, or output resolution.
+    display_redirect = ui_phase && !movie_bypass && !changed;
     ui_phase = false;
     ui_read_barrier = false;
     done_this_frame = false;
