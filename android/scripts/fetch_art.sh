@@ -6,3 +6,10 @@ curl --fail --location --retry 3 --output "$out/art/collection.png" 'https://ima
 echo "6db64158a2c72030415641dd786444fd58e90a5a6978376043cf70bcd9fdbf57  $out/art/collection.png" | sha256sum --check --status
 curl --fail --location --retry 3 --output "$out/art/hero.png" 'https://image.api.playstation.com/vulcan/img/rnd/202011/1101/6JXslFDceEZUjTfwEamrXFTJ.png'
 echo "23dec714b391171df804cab7e2d1e03caa450cb8095d3065ccd1eb80a28fc2e0  $out/art/hero.png" | sha256sum --check --status
+
+# Reuse the repository's three licensed/attributed launcher cover resources for
+# the new 0.3.0 per-game cards; do not fetch or invent separate artwork.
+repo_root=$(cd -- "$(dirname -- "$0")/../.." && pwd)
+for game in u1 u2 u3; do
+    cp "$repo_root/launcher/covers/$game.jpg" "$out/art/$game.jpg"
+done
