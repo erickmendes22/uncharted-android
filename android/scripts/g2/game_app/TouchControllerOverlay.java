@@ -661,16 +661,57 @@ final class TouchControllerOverlay extends View {
             c.drawText(label,p.x,p.y+r+22*sizeMultiplier,paint);
         }
     }
+    // Four independently highlighted, bevel-edged arms of a real PS-style
+    // D-pad, instead of the old circle with two crossing lines.
+    private static final float[][] DPAD_ARMS={
+        {-18f,-52f,18f,-7f}, {7f,-18f,52f,18f},
+        {-18f,7f,18f,52f}, {-52f,-18f,-7f,18f}
+    };
+    private static final String[] DPAD_DIRECTIONS={"up","right","down","left"};
     private void actionDpad(Canvas c) {
-        PointF p=actionDpadCenter(); float r=45*sizeMultiplier;
-        paint.setStyle(Paint.Style.FILL);paint.setColor(actionFill(false));
-        c.drawCircle(p.x,p.y,r,paint);
-        paint.setStyle(Paint.Style.STROKE);paint.setColor(0xffcfaa70);
-        paint.setStrokeWidth(2.4f);c.drawCircle(p.x,p.y,r,paint);
-        paint.setStrokeWidth(6*sizeMultiplier);paint.setStrokeCap(Paint.Cap.ROUND);
-        c.drawLine(p.x-r*.58f,p.y,p.x+r*.58f,p.y,paint);
-        c.drawLine(p.x,p.y-r*.58f,p.x,p.y+r*.58f,paint);
-        paint.setStrokeCap(Paint.Cap.BUTT);paint.setStyle(Paint.Style.FILL);
+        final PointF p=actionDpadCenter();
+        final float s=sizeMultiplier;
+        c.save();
+        c.translate(p.x,p.y);
+        for (int i=0;i<4;i++) {
+            final float[] arm=DPAD_ARMS[i];
+            final boolean selected=pressed.contains(DPAD_DIRECTIONS[i]);
+            final float x0=arm[0]*s,y0=arm[1]*s,x1=arm[2]*s,y1=arm[3]*s;
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(selected?0xff785737:0xd9232932);
+            c.drawRoundRect(x0,y0,x1,y1,6f*s,6f*s,paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(2.1f*s);
+            paint.setColor(selected?0xffffd997:0xffbd9865);
+            c.drawRoundRect(x0,y0,x1,y1,6f*s,6f*s,paint);
+            // Engraved directional chevrons: visible on each separate arm.
+            paint.setColor(selected?0xffffe8b5:0xffdec398);
+            paint.setStrokeWidth(3.3f*s);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            if (i==0) {
+                c.drawLine(-7f*s,-29f*s,0,-37f*s,paint);
+                c.drawLine(0,-37f*s,7f*s,-29f*s,paint);
+            } else if (i==1) {
+                c.drawLine(29f*s,-7f*s,37f*s,0,paint);
+                c.drawLine(37f*s,0,29f*s,7f*s,paint);
+            } else if (i==2) {
+                c.drawLine(-7f*s,29f*s,0,37f*s,paint);
+                c.drawLine(0,37f*s,7f*s,29f*s,paint);
+            } else {
+                c.drawLine(-29f*s,-7f*s,-37f*s,0,paint);
+                c.drawLine(-37f*s,0,-29f*s,7f*s,paint);
+            }
+        }
+        paint.setStrokeCap(Paint.Cap.BUTT);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(0xff1b2029);
+        c.drawRoundRect(-12f*s,-12f*s,12f*s,12f*s,3f*s,3f*s,paint);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(1.4f*s);
+        paint.setColor(0xff866c4f);
+        c.drawRoundRect(-12f*s,-12f*s,12f*s,12f*s,3f*s,3f*s,paint);
+        paint.setStyle(Paint.Style.FILL);
+        c.restore();
     }
     private void actionStick(Canvas c,String name) {
         PointF p=actionCenter(name);

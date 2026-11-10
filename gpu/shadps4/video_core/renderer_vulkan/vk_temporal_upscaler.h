@@ -163,7 +163,10 @@ private:
     /// The scene depth and the game's motion vectors for frame generation (velocity mode).
     void CaptureFrameGen();
     void RunScaled();
-    void RunUiOnly(VideoCore::ImageId color, VideoCore::ImageId depth);
+    // Scene fallbacks crop the patched render area, not the full guest target.
+    // Menus, HUD and movie backgrounds retain the full source dimensions.
+    void RunUiOnly(VideoCore::ImageId color, VideoCore::ImageId depth,
+                   bool scene_fallback = false);
     void EnsureUiResources(u32 width, u32 height, vk::Format color, vk::Format depth);
     void PrepareUiDepth(VideoCore::ImageId depth);
     /// Render size below the scaled-preset output size (the resolution patch is on).

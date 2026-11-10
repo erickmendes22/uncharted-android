@@ -1626,9 +1626,19 @@ void TemporalUpscaler::BeforeDisplay(u64 ps_hash, VideoCore::ImageId source) {
             std::printf("Upscaler: Uncharted fallback current-frame source (provider %d, active %d, ready %d, failed %d)\n",
                         requested, int(Active()), int(camera_motion.Ready()), int(failed));
         }
-        RunUiOnly(source, camera_motion.Depth());
+        RunUiOnly(source, camera_motion.Depth(), true);
         reset = true;
     }
+    // Report whether a temporal provider is consistently rebuilding frames
+    // or repeatedly falling back to the current guest scene.
+    static u64 seen_frames=0, scene_fallbacks=0;
+    ++seen_frames;
+    if (!ui_phase || !ready) ++scene_fallbacks;
+    if (seen_frames % 256 == 0)
+        std::printf("Upscaler: boundary frames=%llu scene_fallbacks=%llu provider=%d camera_ready=%d\n",
+            static_cast<unsigned long long>(seen_frames),
+            static_cast<unsigned long long>(scene_fallbacks),
+            requested, int(camera_motion.Ready()));
 }
 
 void TemporalUpscaler::OnColorTarget(VideoCore::ImageId color) {
@@ -1813,7 +1823,8 @@ void TemporalUpscaler::PrepareUiDepth(VideoCore::ImageId depth_id) {
     cmd.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &barrier});
 }
 
-void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId depth_id) {
+void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId depth_id,
+                                 bool scene_fallback) {
     if (auto* profiler = GpuProfiler::Get()) {
         profiler->Mark(0xF5A1'0000ull, [] { return std::string{"upscaler RunUiOnly"}; });
     }
@@ -1828,6 +1839,14 @@ void TemporalUpscaler::RunUiOnly(VideoCore::ImageId color_id, VideoCore::ImageId
     vk::Image source = color.GetImage();
     auto source_layout = vk::ImageLayout::eTransferSrcOptimal;
     u32 source_width = color.info.size.width, source_height = color.info.size.height;
+    // A patched 640x360 scene may live in a larger guest allocation. Never
+    // include unrendered padding in the fallback blit; menu and videos keep
+    // their original size as only scene_fallback enables this cropping.
+    if (scene_fallback && scaled_session && camera_motion.VelocityMode()) {
+        const auto visible = SceneSize(source_width, source_height);
+        source_width = visible[0];
+        source_height = visible[1];
+    }
     if (!scaled_session && camera_motion.Depth() && scene_targets.Reduced() &&
         scene_targets.EligibleScene(color)) {
         VideoCore::ImageViewInfo view;

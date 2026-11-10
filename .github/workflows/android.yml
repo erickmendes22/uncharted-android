@@ -51,6 +51,7 @@ jobs:
           python3 tests/test_optional_touch_styles.py
           python3 tests/test_touch_widescreen_geometry.py
           python3 tests/test_touch_action_graphics.py
+          python3 tests/test_dpad_visual.py
           javac -d "$RUNNER_TEMP/dpad-test" android/scripts/g2/game_app/DpadResolver.java tests/TestDpadResolver.java
           java -cp "$RUNNER_TEMP/dpad-test" dev.unchartedg2.game.TestDpadResolver
           cc -std=c11 -Wall -Wextra -Werror -Isrc tests/test_pad_host_policy.c -o "$RUNNER_TEMP/test-pad-host-policy"
@@ -71,6 +72,7 @@ jobs:
           python3 tests/test_shader_selection_recovery.py
           python3 tests/test_fsr_native_aa_policy.py
           python3 tests/test_temporal_flicker_guard.py
+          python3 tests/test_gsr2_history_flicker_fix.py
           python3 tests/test_unchartered_provider_stall_guard.py
           python3 tests/test_u3_skip_logos.py
           python3 tests/test_u3_patch_install.py
