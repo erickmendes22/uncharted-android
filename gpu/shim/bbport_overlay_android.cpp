@@ -185,6 +185,12 @@ MobileDraft draft;
 void LoadDraft() {
     draft=MobileDraft{};
     draft.loaded=true;
+    // An older installation may not yet have a native per-game patch state.
+    // Recover the actual running provider, never silently display "Off".
+    const auto& running=BbSettings::Get();
+    const int quality=std::clamp(running.preset.load(),0,3);
+    if(running.upscaler==BbSettings::UpscalerGsr2)draft.upscale=5+quality;
+    else if(running.upscaler==BbSettings::UpscalerFsr3)draft.upscale=1+quality;
     if(const char* filename=std::getenv("BB_PATCH_STATE")){
         if(FILE* f=std::fopen(filename,"rb")){
             char line[256];
