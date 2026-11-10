@@ -29,7 +29,9 @@ V2=${V2%.*}
 # Public release numbering stays newer than development 0.2.10 (code 210), even
 # though its public version is intentionally reset to 0.2.5.
 VERSION_CODE=$((V1 * 10000 + V2 * 100 + V3))
-[ "$PUBLIC" = 1 ] && VERSION_CODE=$((100000 + VERSION_CODE))
+# New public build-code namespace avoids the Redmagic launcher keeping the
+# obsolete cached collection cover; future patch updates remain monotonic.
+[ "$PUBLIC" = 1 ] && VERSION_CODE=$((110000 + VERSION_CODE))
 LINK_EXTRA=(--version-name "$VERSION" --version-code "$VERSION_CODE" --replace-version)
 if [ "$PUBLIC" = 1 ]; then
     MANIFEST=$HERE/AndroidManifest-public.xml
@@ -42,11 +44,17 @@ mkdir -p "$W/res/drawable"
 cp -r "$HERE/res/". "$W/res/"
 if [ -n "$ASSETS_DIR" ]; then cp -r "$ASSETS_DIR"/. "$W/assets/"; fi
 if [ ! -f "$W/assets/art/collection.png" ]; then bash "$HERE/../../fetch_art.sh" "$W/assets"; fi
-# The app icon uses the approved UNCHARTED DAEDALUS artwork, not the former vector.
-if [ ! -f "$HERE/res/drawable/collection.xml" ] || \
-   [ ! -f "$HERE/res/drawable-nodpi/uncharted_icon_approved.webp" ]; then
-    echo "Missing approved Uncharted app icon resource" >&2; exit 1
-fi
+# Explicit adaptive and legacy launcher icons reuse the approved artwork.
+for icon in \
+    "$HERE/res/drawable-nodpi/uncharted_icon_approved.webp" \
+    "$HERE/res/drawable/uncharted_launcher_foreground.xml" \
+    "$HERE/res/drawable/uncharted_launcher_background.xml" \
+    "$HERE/res/mipmap-anydpi/ic_launcher.xml" \
+    "$HERE/res/mipmap-anydpi/ic_launcher_round.xml" \
+    "$HERE/res/mipmap-anydpi-v26/ic_launcher.xml" \
+    "$HERE/res/mipmap-anydpi-v26/ic_launcher_round.xml"; do
+    if [ ! -s "$icon" ]; then echo "Missing approved Uncharted app icon resource: $icon" >&2; exit 1; fi
+done
 "$BT/aapt2" compile --dir "$W/res" -o "$W/resources.zip"
 LINK_EXTRA+=(-A "$W/assets")
 cd "$W"

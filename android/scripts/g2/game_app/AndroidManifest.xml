@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" /> <!-- driver packages from GitHub (the launcher) -->
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
-    <application android:label="Uncharted Daedalus" android:hasCode="true" android:extractNativeLibs="true" android:isGame="true" android:appCategory="game"
+    <application android:label="Uncharted Daedalus" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:hasCode="true" android:extractNativeLibs="true" android:isGame="true" android:appCategory="game"
         android:hardwareAccelerated="true" android:requestLegacyExternalStorage="true"
         android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
         <meta-data android:name="android.game_mode_config" android:resource="@xml/game_mode_config" />

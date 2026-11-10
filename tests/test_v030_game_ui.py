@@ -15,8 +15,8 @@ flow=src(".github/workflows/android.yml")
 
 assert src("android/VERSION").strip()=="0.3.0"
 assert 'String version="0.3.0"' in launcher
-assert "VERSION_CODE=$((100000 + VERSION_CODE))" not in flow
-assert "versionName='0.3.0'" in flow and "versionCode='100300'" in flow
+assert 'VERSION_CODE=$((110000 + VERSION_CODE))' in src("android/scripts/g2/game_app/build.sh")
+assert "versionName='0.3.0'" in flow and "versionCode='110300'" in flow
 assert "Uncharted-Daedalus-0.3.0.apk" in flow
 assert 'gameCard(gallery,g[0])' in launcher
 assert 'gameCardAction(actions,"Play",true' in launcher
@@ -47,6 +47,12 @@ assert 'final String[] qualityLabels={"Native AA","Quality","Balanced","Performa
 assert 'UpscalePreset.compose(provider,quality)' in launcher
 assert '@drawable/uncharted_icon_approved' in src("android/scripts/g2/game_app/res/drawable/collection.xml")
 assert 'drawable-nodpi/uncharted_icon_approved.webp' in src("android/scripts/g2/game_app/build.sh")
+assert 'android:icon="@mipmap/ic_launcher"' in src("android/scripts/g2/game_app/AndroidManifest-public.xml")
+assert 'android:roundIcon="@mipmap/ic_launcher_round"' in src("android/scripts/g2/game_app/AndroidManifest-public.xml")
+assert 'android:icon="@mipmap/ic_launcher"' in src("android/scripts/g2/game_app/AndroidManifest.xml")
+assert '<adaptive-icon' in src("android/scripts/g2/game_app/res/mipmap-anydpi-v26/ic_launcher.xml")
+assert '<adaptive-icon' in src("android/scripts/g2/game_app/res/mipmap-anydpi-v26/ic_launcher_round.xml")
+assert '@drawable/uncharted_icon_approved' in src("android/scripts/g2/game_app/res/drawable/uncharted_launcher_foreground.xml")
 assert 'approved Uncharted app icon resource' in src("android/scripts/g2/game_app/build.sh")
 assert '@drawable/uncharted_icon_approved' in src("android/scripts/g2/game_app/res/drawable/collection.xml")
 assert 'for(Button play:gamePlayButtons)play.setEnabled(problem == null && !busy);' in launcher

@@ -10,13 +10,14 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" /> <!-- driver packages from GitHub (the launcher) -->
     <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
-    <application android:label="Uncharted Daedalus" android:icon="@drawable/collection" android:hasCode="true" android:extractNativeLibs="true" android:isGame="true" android:appCategory="game"
+    <application android:label="Uncharted Daedalus" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:hasCode="true" android:extractNativeLibs="true" android:isGame="true" android:appCategory="game"
         android:hardwareAccelerated="true" android:requestLegacyExternalStorage="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <meta-data android:name="android.game_mode_config" android:resource="@xml/game_mode_config" />
         <!-- singleTask: one launcher, which finishes when it starts the game; the icon then makes
              a new one, and that brings a running game back to the front (Launcher.resumeGame). -->
         <activity android:name="dev.unchartedg2.game.Launcher" android:exported="true"
+            android:icon="@mipmap/ic_launcher"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation">
             <intent-filter>
