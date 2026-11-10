@@ -5152,18 +5152,18 @@
     "tr": "İsteğe bağlı: küçük GPU okumaları FPS'yi düşürebilir. Yalnızca gerekirse açın.",
     "pl": "Opcjonalne: odczyt małych wyników GPU może obniżyć FPS. Włączaj tylko w razie potrzeby."
   },
-  "Uncharted · action icons (GoW III)": {
-    "pt": "Uncharted · ícones de ação (GoW III)",
-    "es": "Uncharted · iconos de acción (GoW III)",
-    "fr": "Uncharted · icônes d'action (GoW III)",
-    "de": "Uncharted · Aktionssymbole (GoW III)",
-    "it": "Uncharted · icone azione (GoW III)",
-    "ru": "Uncharted · значки действий (GoW III)",
-    "ja": "Uncharted · アクションアイコン (GoW III)",
-    "ko": "Uncharted · 액션 아이콘 (GoW III)",
-    "zh": "Uncharted · 操作图标 (GoW III)",
-    "tr": "Uncharted · eylem simgeleri (GoW III)",
-    "pl": "Uncharted · ikony akcji (GoW III)"
+  "Uncharted · action icons": {
+    "pt": "Uncharted · ícones de ação",
+    "es": "Uncharted · iconos de acción",
+    "fr": "Uncharted · icônes d'action",
+    "de": "Uncharted · Aktionssymbole",
+    "it": "Uncharted · icone azione",
+    "ru": "Uncharted · значки действий",
+    "ja": "Uncharted · アクションアイコン",
+    "ko": "Uncharted · 액션 아이콘",
+    "zh": "Uncharted · 操作图标",
+    "tr": "Uncharted · eylem simgeleri",
+    "pl": "Uncharted · ikony akcji"
   },
   "Classic · previous PlayStation buttons": {
     "pt": "Clássico · botões PlayStation anteriores",

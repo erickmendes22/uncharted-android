@@ -81,7 +81,7 @@ final class TouchControllerOverlay extends View {
         super(context); this.pad=pad;
         preferences=context.getSharedPreferences("uncharted_touch",Context.MODE_PRIVATE);
         loadStyle();
-        setContentDescription("On-screen PlayStation controller, GoW III / inFAMOUS layout");
+        setContentDescription("On-screen Uncharted action controls or classic PlayStation controls");
     }
     static final String CLASSIC_STYLE="classic";
     static final String UNCHARTED_STYLE="uncharted";
@@ -566,7 +566,7 @@ final class TouchControllerOverlay extends View {
                    knobY-(paint.ascent()+paint.descent())/2,paint);
     }
     // Uncharted: desaturated slate surfaces and weathered metallic edges.
-    // Gold is reserved for selected-state highlights, not the entire controller.
+    // Neutral steel/sandstone surfaces; pressed controls have a subtle warm highlight.
     private static final int ACTION_EDGE=0xff8d9da2;
     private static final int ACTION_EDGE_ACTIVE=0xffc8b28a;
     private static final int ACTION_GLYPH=0xffd0d8d6;

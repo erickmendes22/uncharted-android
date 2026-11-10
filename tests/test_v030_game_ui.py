@@ -20,10 +20,10 @@ assert "versionName='0.3.0'" in flow and "versionCode='100300'" in flow
 assert "Uncharted-Daedalus-0.3.0.apk" in flow
 assert 'gameCard(gallery,g[0])' in launcher
 assert 'gameCardAction(actions,"Play",true' in launcher
-assert 'gameCardAction(actions,"Configure",false' in launcher
+assert 'gameCardAction(actions,"Configure",false' not in launcher
 assert 'gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL)' in launcher
 assert 'categoryScroll.setHorizontalScrollBarEnabled(false)' in launcher
-assert 'chooseGame(game,2)' in launcher
+assert 'container.setOnClickListener(v->chooseGame(game,0))' in launcher
 assert "private void saveGameProfile(String game)" in launcher
 assert "private void loadGameProfile(String game)" in launcher
 assert 'if(key.startsWith("patch_")) return true;' in launcher
@@ -63,4 +63,4 @@ assert '8d30be022582d0c03b1918c019540491d00439e14e9e5e1359fe0bb19004f781' in dri
 assert '"gpu_small_readbacks",false' in launcher
 assert '"BB_COPY64_EOP_READBACK","u3".equals(game)?"1":"0"' in activity
 assert '"BB_EFFECT_LOOP_CLAMP","1"' in activity
-print("PASS: 0.3.0 per-game settings, left Uncharted menu, verified driver assets, patches and HUD")
+print("PASS: 0.3.0 selection, responsive immersive UI, patches and HUD")

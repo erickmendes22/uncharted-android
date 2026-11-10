@@ -21,7 +21,7 @@ assert all(v.get("pt") for v in rows.values()), [
 core = (
     "Small GPU result readbacks (U2/U3)",
     "Optional: small GPU readbacks may reduce FPS. Enable only if necessary.",
-    "Uncharted · action icons (GoW III)",
+    "Uncharted · action icons",
     "Classic · previous PlayStation buttons",
     "Control size",
     "Edit button position and size",

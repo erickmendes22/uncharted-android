@@ -228,6 +228,27 @@ public class Launcher extends Activity {
                "UNCHARTED 3 · Drake's Deception";
     }
 
+    /** Hide both system bars on launch. Edge swipe can show them transiently. */
+    private void enterImmersiveMode() {
+        View decor=getWindow().getDecorView();
+        decor.setSystemUiVisibility(View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+            View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+        if(android.os.Build.VERSION.SDK_INT>=30) {
+            android.view.WindowInsetsController controller=decor.getWindowInsetsController();
+            if(controller!=null) {
+                controller.hide(android.view.WindowInsets.Type.statusBars() |
+                                android.view.WindowInsets.Type.navigationBars());
+                controller.setSystemBarsBehavior(
+                    android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            }
+        }
+    }
+    @Override public void onWindowFocusChanged(boolean focused) {
+        super.onWindowFocusChanged(focused);
+        if(focused)enterImmersiveMode();
+    }
     private boolean portraitLayout() {
         return getResources().getConfiguration().orientation==
                android.content.res.Configuration.ORIENTATION_PORTRAIT;
@@ -268,7 +289,7 @@ public class Launcher extends Activity {
         container.setBackground(bg);
         LinearLayout.LayoutParams panel=portrait?
             new LinearLayout.LayoutParams(-1,dp(182)):
-            new LinearLayout.LayoutParams(0,dp(292),1f);
+            new LinearLayout.LayoutParams(0,dp(216),1f);
         panel.setMargins(dp(5),dp(7),dp(5),dp(7));
         parent.addView(container,panel);
 
@@ -290,21 +311,37 @@ public class Launcher extends Activity {
         details.setOrientation(LinearLayout.VERTICAL);
         details.setPadding(dp(8),dp(6),dp(8),dp(8));
         if(portrait)container.addView(details,new LinearLayout.LayoutParams(0,-1,.60f));
-        else container.addView(details,new LinearLayout.LayoutParams(-1,dp(102)));
-        TextView name=text(details,gameName(game),portrait?15:14,true);
-        name.setTextColor(0xfff0debc);
-        name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        TextView state=text(details,prepared()?"Prepared":"Not prepared",12,false);
+        else container.addView(details,new LinearLayout.LayoutParams(-1,dp(86)));
+        if(portrait) {
+            TextView name=text(details,gameName(game),15,true);
+            name.setTextColor(0xfff0debc);
+            name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        } else {
+            // Put long game names over the cover, leaving room for the Play control.
+            TextView name=new TextView(this);
+            name.setText(AppLanguage.text(gameName(game)));
+            name.setTextSize(13);name.setTypeface(Typeface.DEFAULT_BOLD);
+            name.setTextColor(0xfff5e7ce);name.setMaxLines(2);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            name.setPadding(dp(10),dp(12),dp(8),dp(7));
+            name.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x000b1927,0xf0081927}));
+            poster.addView(name,new android.widget.FrameLayout.LayoutParams(
+                -1,-2,android.view.Gravity.BOTTOM));
+        }
+        TextView state=text(details,prepared()?"Prepared":"Not prepared",11,false);
         state.setTextColor(prepared()?0xffa2c8a2:muted);
         LinearLayout actions=new LinearLayout(this);
         actions.setOrientation(portrait?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         details.addView(actions,new LinearLayout.LayoutParams(-1,-2));
         gameCardAction(actions,"Play",true,v->{chooseGame(game,0);play();});
-        gameCardAction(actions,"Configure",false,v->chooseGame(game,2));
+        // A card selects a game without unexpectedly entering global settings.
+        container.setOnClickListener(v->chooseGame(game,0));
         return container;
     }
 
     private int selectedPage;
+    private int selectedConfigSection;
     private boolean autoPlayConfigRequest;
     private Runnable refreshNativeAa;
     private ScrollView pageScroll;
@@ -315,6 +352,7 @@ public class Launcher extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        enterImmersiveMode();
         gpuChip = gpuChipId();
         // The home screen icon while a game runs: back to it, not a new menu. GameActivity is a
         // task of its own (singleInstance; after a restart into U2/U3 too) and this activity
@@ -520,6 +558,7 @@ public class Launcher extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        enterImmersiveMode();
         refresh(); // back from permissions
         runSetupAction(setupFlow.resumed(storageAccess()));
     }
@@ -675,19 +714,22 @@ public class Launcher extends Activity {
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
             new int[] {0xFF142A3B, 0xFF091421, 0xFF2D261D}));
-        TextView brand = text(shell, "Uncharted Daedalus", 26, true);
+        final boolean portrait=portraitLayout();
+        TextView brand = text(shell, "Uncharted Daedalus", portrait?26:20, true);
         brand.setTypeface(Typeface.create("serif", Typeface.BOLD));
         brand.setLetterSpacing(0.025f);
-        brand.setPadding(dp(22), dp(14), dp(16), 0);
+        brand.setPadding(dp(portrait?22:12),dp(portrait?14:2),dp(12),0);
         TextView subtitle = note(shell, "THE NATHAN DRAKE COLLECTION");
         subtitle.setTextSize(11);
         subtitle.setPadding(dp(22), 0, dp(16), dp(8));
+        subtitle.setVisibility(portrait?View.VISIBLE:View.GONE);
         ScrollView scroll = new ScrollView(this);
         pageScroll=scroll;
         scroll.setFillViewport(true);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(20), dp(20), dp(28));
+        root.setPadding(dp(portrait?20:10),dp(portrait?20:2),
+                        dp(portrait?20:10),dp(portrait?28:8));
         scroll.addView(root);
 
         LinearLayout[] pages = new LinearLayout[4];
@@ -700,8 +742,7 @@ public class Launcher extends Activity {
         LinearLayout home = pages[0], patches = pages[1], config = pages[2], about = pages[3];
         // Same six-section information architecture as the Android in-game
         // left panel, but only expose options the Java launcher can configure.
-        text(config,AppLanguage.text("Configuring")+" · "+
-             AppLanguage.text(gameName(prefs.getString("selected_game","u1"))),17,true);
+        text(config,"Settings",portrait?17:15,true);
         final String[] categories={"Video","Performance","Controls","Drivers","Games / Files","System"};
         final LinearLayout[] configSections=new LinearLayout[categories.length];
         final LinearLayout sectionPicker=new LinearLayout(this);
@@ -715,22 +756,23 @@ public class Launcher extends Activity {
             configSections[n]=new LinearLayout(this);
             configSections[n].setOrientation(LinearLayout.VERTICAL);
             config.addView(configSections[n]);
-            configSections[n].setVisibility(n==0?View.VISIBLE:View.GONE);
+            configSections[n].setVisibility(n==selectedConfigSection?View.VISIBLE:View.GONE);
             final int section=n;
             Button tab=button(sectionPicker,categories[n],v->{
+                selectedConfigSection=section;
                 for(int j=0;j<configSections.length;j++)
                     configSections[j].setVisibility(j==section?View.VISIBLE:View.GONE);
                 if(pageScroll!=null)pageScroll.smoothScrollTo(0,0);
             });
-            tab.setTextSize(12);
+            tab.setTextSize(portrait?12:11);
             tab.setSingleLine(true);
             tab.setEllipsize(android.text.TextUtils.TruncateAt.END);
             tab.setCompoundDrawables(null,null,null,null);
             tab.setPadding(dp(10),0,dp(10),0);
             LinearLayout.LayoutParams tabLayout=(LinearLayout.LayoutParams)tab.getLayoutParams();
-            tabLayout.width=dp(portraitLayout()?132:150);
-            tabLayout.height=dp(46);
-            tabLayout.weight=0f;
+            tabLayout.width=portrait?dp(132):0;
+            tabLayout.height=dp(portrait?46:38);
+            tabLayout.weight=portrait?0f:1f;
             tab.setLayoutParams(tabLayout);
         }
         android.widget.FrameLayout hero = new android.widget.FrameLayout(this);
@@ -746,15 +788,17 @@ public class Launcher extends Activity {
         heroCaption.setGravity(android.view.Gravity.BOTTOM);heroCaption.setPadding(dp(18),dp(16),dp(18),dp(16));
         heroCaption.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0x0015110C,0xE615110C}));
         hero.addView(heroCaption,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        home.addView(hero,new LinearLayout.LayoutParams(-1,dp(portraitLayout()?126:210)));
+        if(portrait)home.addView(hero,new LinearLayout.LayoutParams(-1,dp(126)));
         LinearLayout games = card(home, "CHOOSE YOUR ADVENTURE");
-        note(games,"Choose a game to play or configure its own video and patches.");
+        if(portrait)note(games,"Select a game to play.");
         LinearLayout gallery=new LinearLayout(this);
         gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         games.addView(gallery);
         for(String[] g:GAMES)gameCard(gallery,g[0]);
         playButton=primaryButton(games,"Play selected game",v->play());
-        button(games,"Install or update game files",v->chooseGame( prefs.getString("selected_game","u1"),2));
+        button(games,"Install or update game files",v->{
+            selectedConfigSection=4;selectedPage=2;buildViews();refresh();
+        });
         statusText = note(shell, "");
         statusText.setPadding(dp(22), 0, dp(22), dp(4));
         root = home;
@@ -914,7 +958,7 @@ public class Launcher extends Activity {
         RadioGroup touchStyles=new RadioGroup(this);
         touchStyles.setOrientation(RadioGroup.VERTICAL);
         for(String[] choice:new String[][]{
-            {TouchControllerOverlay.UNCHARTED_STYLE,"Uncharted · action icons (GoW III)"},
+            {TouchControllerOverlay.UNCHARTED_STYLE,"Uncharted · action icons"},
             {TouchControllerOverlay.CLASSIC_STYLE,"Classic · previous PlayStation buttons"}
         }) {
             RadioButton option=new RadioButton(this);
@@ -1063,7 +1107,7 @@ public class Launcher extends Activity {
         note(help,"Open the in-game menu by swiping from left to right.");
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout nav = new LinearLayout(this);
-        nav.setPadding(dp(8), dp(6), dp(8), dp(6));
+        nav.setPadding(dp(8),dp(portrait?6:1),dp(8),dp(portrait?6:1));
         nav.setBackgroundColor(0xF5081624);
         String[] tabs = {"Games", "Patches", "Settings", "About"};
         Button[] navButtons = new Button[4];
@@ -1072,8 +1116,10 @@ public class Launcher extends Activity {
             Button item = new Button(this, null, android.R.attr.borderlessButtonStyle);
             item.setText(AppLanguage.text(tabs[n])); item.setAllCaps(false); item.setTextSize(11);
             ExpeditionIcon navIcon=new ExpeditionIcon(n,n==selectedPage?accent:muted);navIcon.setBounds(0,0,dp(22),dp(22));
-            item.setCompoundDrawables(null,navIcon,null,null);item.setCompoundDrawablePadding(dp(3));
-            item.setMinWidth(0); item.setMinimumWidth(0); item.setPadding(0, dp(12), 0, dp(12));
+            item.setCompoundDrawables(portrait?null:navIcon,portrait?navIcon:null,null,null);
+            item.setCompoundDrawablePadding(dp(3));
+            item.setMinWidth(0); item.setMinimumWidth(0);
+            item.setPadding(dp(portrait?0:5),dp(portrait?10:3),0,dp(portrait?10:3));
             item.setTextColor(n == selectedPage ? accent : muted);
             item.setOnClickListener(v -> {
                 selectedPage=index;
@@ -1087,7 +1133,7 @@ public class Launcher extends Activity {
                 scroll.scrollTo(0, 0);
             });
             navButtons[n] = item;
-            nav.addView(item, new LinearLayout.LayoutParams(0, dp(68), 1));
+            nav.addView(item, new LinearLayout.LayoutParams(0, dp(portrait?62:42), 1));
         }
         shell.addView(nav);
         styleChildren(shell);
@@ -1095,7 +1141,7 @@ public class Launcher extends Activity {
             android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());
             view.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;
         });
-        setContentView(shell);shell.requestApplyInsets();
+        setContentView(shell);shell.requestApplyInsets();enterImmersiveMode();
     }
 
     private final class ExpeditionDialog extends android.app.AlertDialog.Builder {
