@@ -51,7 +51,6 @@ formats = (
     "DLL import failed: %s",
     "Driver package installed and selected: %s",
     "Installing the package failed: %s",
-    "Automatic Gen8 driver failed: %s. Using bundled Turnip.",
     "No packages found. %s",
     "Downloading %s ...",
     "Downloading failed: %s",
@@ -100,4 +99,4 @@ assert 'gpu_shader_loop_safety' not in launcher
 assert 'Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game)?"1":"0",true)' in activity
 assert 'Os.setenv("BB_EFFECT_LOOP_CLAMP","1",true)' in activity
 assert '"gpu_small_readbacks",false)' in launcher
-print("PASS: 12-language launcher messages, 16 formatted statuses, HUD labels and fixed U3/shader defaults")
+print("PASS: 12-language launcher messages, 15 formatted statuses, HUD labels and fixed U3/shader defaults")
