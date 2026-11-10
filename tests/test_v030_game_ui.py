@@ -52,7 +52,8 @@ assert 'android:icon="@mipmap/ic_launcher"' in public_manifest
 assert '<activity-alias android:name="dev.unchartedg2.game.UnchartedDaedalusIcon2026"' in public_manifest
 assert 'android:targetActivity="dev.unchartedg2.game.Launcher"' in public_manifest
 assert public_manifest.count('android.intent.category.LAUNCHER')==1
-assert 'launchable-activity: name=' in flow and 'UnchartedDaedalusIcon2026' in flow
+assert "grep -q 'E: activity-alias' dist/manifest.txt" in flow
+assert "grep -q 'UnchartedDaedalusIcon2026' dist/manifest.txt" in flow
 assert 'android:roundIcon="@mipmap/ic_launcher_round"' in src("android/scripts/g2/game_app/AndroidManifest-public.xml")
 assert 'android:icon="@mipmap/ic_launcher"' in src("android/scripts/g2/game_app/AndroidManifest.xml")
 assert '<adaptive-icon' in src("android/scripts/g2/game_app/res/mipmap-anydpi-v26/ic_launcher.xml")
