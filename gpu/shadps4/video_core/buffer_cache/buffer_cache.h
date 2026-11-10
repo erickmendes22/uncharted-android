@@ -73,6 +73,9 @@ public:
     // not a global precise readback or an EOP fence wait.
     bool DeferCopy64Readback(VAddr address, u64 size);
     u64 PendingLanding() const;
+    // Only guest-visible labels that MUST wait for a landing. U3 speculative
+    // raycaster results are non-gated; U2 deferred guest copies remain gated.
+    u64 PendingGatedLanding() const;
     // Telemetry only: count of outstanding async snapshots, NOT the timeline seq.
     u64 PendingLandingCount() const;
     bool LandingGateActive() const;
@@ -231,7 +234,8 @@ private:
     bool DownloadOnSideQueue(VAddr page, u64 length);
     /// bbport: deferred raycaster copies (DeferGuestCopy).
     struct Landing;
-    bool QueueGuestSnapshot(VAddr src, VAddr dst, u64 size, bool submit_now = true);
+    bool QueueGuestSnapshot(VAddr src, VAddr dst, u64 size,
+                            bool submit_now = true, bool gate_guest_label = true);
     struct GatedLabel {
         u64 seq;
         std::function<void()> fn;
@@ -242,6 +246,9 @@ private:
     std::deque<GatedLabel> gated_labels;                 ///< labels waiting for a landing
     u64 landing_registered_seq{0}, landing_done_seq{0};
     std::atomic<u64> landing_registered{0}, landing_done{0};
+    // Sequence of the last snapshot requiring guest label synchronization.
+    // Non-gated U3 readbacks advance landing_registered, but never this value.
+    std::atomic<u64> landing_gated_registered{0};
     bool landing_stop{false}, gate_running{false};
     std::atomic<u32> gate_outstanding{0}; ///< labels queued or running on the landing thread
     BbStaging::Reuse<Buffer> landing_free_snapshots; // guarded by landing_mutex

@@ -2533,7 +2533,7 @@ bool Copy64EopReadback() {
     static const bool enabled = [] {
         const char* flag = std::getenv("BB_COPY64_EOP_READBACK");
         const bool on = flag && flag[0] == '1';
-        if (on) std::printf("COPY64EOP: U3 raycaster GPU results deferred to CPU without EOP wait\n");
+        if (on) std::printf("COPY64EOP: U3 GPU results async, guest EOP labels UNGATED\n");
         return on;
     }();
     return enabled;
@@ -2612,6 +2612,7 @@ void Rasterizer::ReadBackSmallWrittenBuffers() {
     // All counters are local to the GPU command path; print once/256 events.
     static std::atomic<u64> events{0}, candidates{0}, queued{0}, no_gpu{0};
     static std::atomic<u64> sync_fallbacks{0}, sync_ns{0}, max_pending{0};
+    static std::atomic<u64> gated_events{0};
     if (copy64_enabled)
         candidates.fetch_add(copy64.size(), std::memory_order_relaxed);
     for (const auto& [address, size] : copy64) {
@@ -2639,21 +2640,26 @@ void Rasterizer::ReadBackSmallWrittenBuffers() {
     }
     if (captured) scheduler.Flush(); // one submission for this event, no GPU wait
     if (copy64_enabled) {
+        if (buffer_cache.PendingGatedLanding() != 0)
+            gated_events.fetch_add(1, std::memory_order_relaxed);
         const u64 pending = buffer_cache.PendingLandingCount();
         u64 peak = max_pending.load(std::memory_order_relaxed);
         while (peak < pending &&
                !max_pending.compare_exchange_weak(peak, pending, std::memory_order_relaxed)) {}
         const u64 event = events.fetch_add(1, std::memory_order_relaxed) + 1;
-        if (event % 256 == 0) {
+        // The old per-256-event reporting produced >800 lines in a 40 s run;
+        // rate-limit to prevent diagnostics from adding CPU/logcat overhead.
+        if (event % 8192 == 0) {
             std::printf("COPY64EOP stats: events=%llu candidates=%llu async=%llu no_gpu=%llu "
-                        "sync_fallbacks=%llu sync_ms=%.3f pending_peak=%llu\n",
+                        "sync_fallbacks=%llu sync_ms=%.3f pending_peak=%llu gated_events=%llu\n",
                         static_cast<unsigned long long>(event),
                         static_cast<unsigned long long>(candidates.load(std::memory_order_relaxed)),
                         static_cast<unsigned long long>(queued.load(std::memory_order_relaxed)),
                         static_cast<unsigned long long>(no_gpu.load(std::memory_order_relaxed)),
                         static_cast<unsigned long long>(sync_fallbacks.load(std::memory_order_relaxed)),
                         static_cast<double>(sync_ns.load(std::memory_order_relaxed)) / 1'000'000.0,
-                        static_cast<unsigned long long>(max_pending.load(std::memory_order_relaxed)));
+                        static_cast<unsigned long long>(max_pending.load(std::memory_order_relaxed)),
+                        static_cast<unsigned long long>(gated_events.load(std::memory_order_relaxed)));
         }
     }
 }

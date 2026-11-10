@@ -14,8 +14,10 @@
 
 namespace VideoCore::LandingGate {
 
-/// The highest sequence number of a deferred copy not yet landed; 0 when none is pending.
-/// Taken when a guest-visible write is executed: it follows the copies registered before it.
+/// Last *label-gated* deferred copy, or 0 if none is outstanding.
+/// U3's speculative raycaster readbacks are intentionally non-gated: unlike U2's
+/// required guest-memory results, they must not stall every EOP/flip label.
+/// The unfiltered snapshot sequence remains available via BufferCache::PendingLanding().
 u64 Pending();
 
 /// Whether guest-visible signals must go through Run (a copy is pending or labels are waiting

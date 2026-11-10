@@ -344,11 +344,15 @@ bool BufferCache::DeferSmallReadback(VAddr address, u64 size) {
 }
 
 bool BufferCache::DeferCopy64Readback(VAddr address, u64 size) {
+    // U3: the result is speculative and is copied after GPU completion, but
+    // guest EOP labels must NOT wait for it (PC upstream's default behavior).
+    // The old code registered each U3 snapshot as a mandatory gated landing.
     return size > 0 && size <= 64_KB &&
-           QueueGuestSnapshot(address, address, size, false);
+           QueueGuestSnapshot(address, address, size, false, false);
 }
 
-bool BufferCache::QueueGuestSnapshot(VAddr src, VAddr dst, u64 size, bool submit_now) {
+bool BufferCache::QueueGuestSnapshot(VAddr src, VAddr dst, u64 size,
+                                     bool submit_now, bool gate_guest_label) {
     if (land_stopping.load(std::memory_order_acquire) || size == 0 ||
         size >= 1_MB || !memory->IsValidGpuMapping(src, size) ||
         !memory->IsValidGpuMapping(dst, size)) {
@@ -414,6 +418,8 @@ bool BufferCache::QueueGuestSnapshot(VAddr src, VAddr dst, u64 size, bool submit
         }
         landing->seq = ++landing_registered_seq;
         landing_registered.store(landing->seq, std::memory_order_release);
+        if (gate_guest_label)
+            landing_gated_registered.store(landing->seq, std::memory_order_release);
         landing_queue.push_back(std::move(landing));
         if (!landing_thread.joinable()) {
             landing_thread = std::thread([this] { LandingWorker(); });
@@ -567,7 +573,12 @@ void BufferCache::StopLanding() {
 }
 
 bool BufferCache::LandingGateActive() const {
-    return PendingLanding() != 0 || gate_outstanding.load(std::memory_order_acquire) != 0;
+    return PendingGatedLanding() != 0 || gate_outstanding.load(std::memory_order_acquire) != 0;
+}
+
+u64 BufferCache::PendingGatedLanding() const {
+    const u64 gated = landing_gated_registered.load(std::memory_order_acquire);
+    return gated > landing_done.load(std::memory_order_acquire) ? gated : 0;
 }
 
 u64 BufferCache::PendingLanding() const {
@@ -623,7 +634,7 @@ void BufferCache::RunAfterLanding(u64 seq, std::function<void()> fn, bool off_ca
 namespace LandingGate {
 u64 Pending() {
     auto* cache = land_instance.load(std::memory_order_acquire);
-    return cache ? cache->PendingLanding() : 0;
+    return cache ? cache->PendingGatedLanding() : 0;
 }
 bool Active() {
     auto* cache = land_instance.load(std::memory_order_acquire);

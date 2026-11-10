@@ -66,6 +66,9 @@ assert "size > Copy64ReadbackMax" not in renderer  # size is named bytes
 assert "bytes > Copy64ReadbackMax" in renderer
 assert "u64(src.num_records), u64(dst.num_records)" in renderer
 assert "COPY64EOP stats: events=%llu candidates=%llu async=%llu no_gpu=%llu" in renderer
+assert "gated_events=%llu" in renderer
+assert "event % 8192 == 0" in renderer
+assert "buffer_cache.PendingGatedLanding()" in renderer
 assert "sync_fallbacks=%llu sync_ms=%.3f pending_peak=%llu" in renderer
 assert "max_pending.compare_exchange_weak" in renderer
 assert "buffer_cache.PendingLandingCount()" in renderer
