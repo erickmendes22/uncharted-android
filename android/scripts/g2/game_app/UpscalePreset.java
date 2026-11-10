@@ -7,6 +7,19 @@ final class UpscalePreset {
         "GSR 2 Native AA","GSR 2 Quality","GSR 2 Balanced","GSR 2 Performance"};
     static int normalize(int mode){return Math.max(0,Math.min(8,mode));}
     static int preset(int mode){int m=normalize(mode);return m>=5?m-4:m;}
+    /** 0=off, 1=FSR 3.1, 2=Snapdragon GSR 2. */
+    static int providerChoice(int mode){
+        int m=normalize(mode);return m==0?0:(m>=5?2:1);
+    }
+    /** 1=Native AA, 2=Quality, 3=Balanced, 4=Performance. */
+    static int qualityChoice(int mode){
+        int m=normalize(mode);return m==0?2:preset(m);
+    }
+    static int compose(int providerChoice,int qualityChoice){
+        if(providerChoice<=0)return 0;
+        int quality=Math.max(1,Math.min(4,qualityChoice));
+        return providerChoice==2?quality+4:quality;
+    }
     static String provider(int mode){return normalize(mode)>=5?"gsr2":"fsr3";}
     static String input(int mode,String manual){return normalize(mode)==0?manual:SIZES[preset(mode)];}
     // FSR 3.1/GSR 2 require the original AA and motion/velocity passes.

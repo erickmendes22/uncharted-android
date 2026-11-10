@@ -16,6 +16,18 @@ public final class TestUpscalePreset {
    if(UpscalePreset.preset(mode)!=mode-4)throw new AssertionError("GSR preset "+mode);
   }
   if(!UpscalePreset.provider(4).equals("fsr3"))throw new AssertionError("FSR provider");
+  for(int providerChoice=0;providerChoice<=2;providerChoice++)
+   for(int quality=1;quality<=4;quality++){
+    int combined=UpscalePreset.compose(providerChoice,quality);
+    if(combined!=(providerChoice==0?0:providerChoice==1?quality:quality+4))
+      throw new AssertionError("compose "+providerChoice+" "+quality);
+    if(UpscalePreset.providerChoice(combined)!=providerChoice)
+      throw new AssertionError("provider selection "+combined);
+    if(providerChoice!=0 && UpscalePreset.qualityChoice(combined)!=quality)
+      throw new AssertionError("quality selection "+combined);
+   }
+  if(UpscalePreset.compose(0,3)!=0)throw new AssertionError("Off must disable upscale");
+  if(UpscalePreset.compose(2,4)!=8)throw new AssertionError("GSR performance");
   for(int mode=0;mode<=8;++mode)for(boolean saved:new boolean[]{false,true}) {
    boolean effective=UpscalePreset.disableNativeAa(mode,saved);
    if(effective!=(mode>0 || saved))throw new AssertionError("native AA conflict mode="+mode);

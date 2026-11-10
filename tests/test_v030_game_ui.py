@@ -28,7 +28,17 @@ assert 'SelectedGameArgs.filename(requested)' in activity
 assert 'if (bootArgs.isEmpty() && !SelectedGameArgs.valid(requested))' in activity
 assert 'img.setScaleType(portrait?android.widget.ImageView.ScaleType.CENTER_CROP:' in launcher
 assert 'android.widget.ImageView.ScaleType.FIT_CENTER' in launcher
-assert 'Math.round(coverWidth*9f/16f)' in launcher
+assert 'gamesLayout.height=0' in launcher
+assert 'gamesLayout.weight=1f' in launcher
+assert 'games.addView(gallery,new LinearLayout.LayoutParams(-1,0,1f));' in launcher
+assert 'new LinearLayout.LayoutParams(-1,0,1f)' in launcher
+assert 'new LinearLayout.LayoutParams(0,-1,1f)' in launcher
+assert 'backdrop.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(' in launcher
+assert 'int coverHeight=' not in launcher
+assert 'String[] labels={"Off · manual resolution"' not in launcher
+assert 'final String[] providers={"Off","FSR 3.1","Snapdragon GSR 2"}' in launcher
+assert 'final String[] qualityLabels={"Native AA","Quality","Balanced","Performance"}' in launcher
+assert 'UpscalePreset.compose(provider,quality)' in launcher
 assert src("android/scripts/g2/game_app/res/drawable/collection.xml").startswith('<?xml')
 assert 'not collection cover art' in src("android/scripts/g2/game_app/build.sh")
 assert 'for(Button play:gamePlayButtons)play.setEnabled(problem == null && !busy);' in launcher

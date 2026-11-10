@@ -295,35 +295,46 @@ public class Launcher extends Activity {
         bg.setStroke(dp(2),game.equals(prefs.getString("selected_game","u1"))?accent:0xaa536d79);
         bg.setCornerRadius(dp(13));
         container.setBackground(bg);
+        // Match the full available Games viewport, not a fixed 138dp portrait
+        // card or image width-derived landscape height that forces scrolling.
         LinearLayout.LayoutParams panel=portrait?
-            new LinearLayout.LayoutParams(-1,dp(138)):
-            new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f);
-        panel.setMargins(dp(5),dp(7),dp(5),dp(7));
+            new LinearLayout.LayoutParams(-1,0,1f):
+            new LinearLayout.LayoutParams(0,-1,1f);
+        panel.setMargins(dp(4),dp(portrait?4:2),dp(4),dp(portrait?4:2));
         parent.addView(container,panel);
 
         android.widget.FrameLayout poster=new android.widget.FrameLayout(this);
+        poster.setBackgroundColor(0xff102838);
+        android.widget.ImageView backdrop=new android.widget.ImageView(this);
+        backdrop.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        backdrop.setAlpha(.38f);
+        if(!portrait && android.os.Build.VERSION.SDK_INT>=31)
+            backdrop.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
+                dp(15),dp(15),android.graphics.Shader.TileMode.CLAMP));
         android.widget.ImageView img=new android.widget.ImageView(this);
+        // Foreground preserves every part of the portrait cover in landscape.
         img.setScaleType(portrait?android.widget.ImageView.ScaleType.CENTER_CROP:
             android.widget.ImageView.ScaleType.FIT_CENTER);
-        poster.setBackgroundColor(0xff0b1d2b);
         for(String path:new String[]{"art/"+game+".jpg","art/"+game+".png","art/collection.png"}) {
             try(InputStream in=getAssets().open(path)){
-                img.setImageBitmap(android.graphics.BitmapFactory.decodeStream(in));
+                android.graphics.Bitmap art=android.graphics.BitmapFactory.decodeStream(in);
+                img.setImageBitmap(art);
+                backdrop.setImageBitmap(art);
                 break;
             }catch(Exception ignored){}
         }
+        if(!portrait)poster.addView(backdrop,
+            new android.widget.FrameLayout.LayoutParams(-1,-1));
         poster.addView(img,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        int coverWidth=Math.max(dp(96),(getResources().getDisplayMetrics().widthPixels-dp(95))/3);
-        int coverHeight=Math.round(coverWidth*9f/16f);
         container.addView(poster,portrait?
             new LinearLayout.LayoutParams(0,-1,.40f):
-            new LinearLayout.LayoutParams(-1,coverHeight));
+            new LinearLayout.LayoutParams(-1,0,1f));
 
         LinearLayout details=new LinearLayout(this);
         details.setOrientation(LinearLayout.VERTICAL);
-        details.setPadding(dp(8),dp(6),dp(8),dp(8));
+        details.setPadding(dp(8),dp(portrait?6:2),dp(8),dp(portrait?8:3));
         if(portrait)container.addView(details,new LinearLayout.LayoutParams(0,-1,.60f));
-        else container.addView(details,new LinearLayout.LayoutParams(-1,dp(68)));
+        else container.addView(details,new LinearLayout.LayoutParams(-1,dp(62)));
         if(portrait) {
             TextView name=text(details,gameName(game),15,true);
             name.setTextColor(0xfff0debc);
@@ -749,7 +760,12 @@ public class Launcher extends Activity {
         for (int n = 0; n < pages.length; n++) {
             pages[n] = new LinearLayout(this);
             pages[n].setOrientation(LinearLayout.VERTICAL);
-            root.addView(pages[n]);
+            // Only Games fills the available viewport. Long settings/patch pages
+            // keep their natural height and remain scrollable.
+            LinearLayout.LayoutParams pageLayout=new LinearLayout.LayoutParams(-1,
+                n==0?0:ViewGroup.LayoutParams.WRAP_CONTENT);
+            if(n==0)pageLayout.weight=1f;
+            root.addView(pages[n],pageLayout);
             pages[n].setVisibility(n == selectedPage ? View.VISIBLE : View.GONE);
         }
         LinearLayout home = pages[0], patches = pages[1], config = pages[2], about = pages[3];
@@ -791,9 +807,13 @@ public class Launcher extends Activity {
         // The collection hero repeated the header and concealed the third game card.
         // Use only the three game cover artworks on the home screen.
         LinearLayout games = card(home, "CHOOSE YOUR ADVENTURE");
+        LinearLayout.LayoutParams gamesLayout=(LinearLayout.LayoutParams)games.getLayoutParams();
+        gamesLayout.height=0;
+        gamesLayout.weight=1f;
+        games.setLayoutParams(gamesLayout);
         LinearLayout gallery=new LinearLayout(this);
         gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
-        games.addView(gallery);
+        games.addView(gallery,new LinearLayout.LayoutParams(-1,0,1f));
         for(String[] g:GAMES)gameCard(gallery,g[0]);
         // PKG installation and folder management live only in Config > Games / Files.
         statusText = note(shell, "");
@@ -859,19 +879,70 @@ public class Launcher extends Activity {
         fullscreen.setChecked("1".equals(iniGet("fullscreen")));
         fullscreen.setOnCheckedChangeListener((view,on)->iniPut("fullscreen",on?"1":"0"));displayCard.addView(fullscreen);
         note(displayCard,"Off: original aspect ratio. On: fill the screen.");
-        Button upscaleChoice=button(displayCard,"Upscale · "+upscaleLabel(prefs.getInt("mobile_upscale",0)),null);
-        upscaleChoice.setOnClickListener(v->{
-            String[] labels={"Off · manual resolution","FSR 3.1 Native AA · 720p","FSR 3.1 Quality · 540p → 720p","FSR 3.1 Balanced · 468p → 720p","FSR 3.1 Performance · 360p → 720p",
-                "Snapdragon GSR 2 Native AA · 720p","Snapdragon GSR 2 Quality · 540p → 720p","Snapdragon GSR 2 Balanced · 468p → 720p","Snapdragon GSR 2 Performance · 360p → 720p"};
-            int[] values={0,1,2,3,4,5,6,7,8};int selected=0;
-            for(int n=0;n<values.length;n++)if(values[n]==prefs.getInt("mobile_upscale",0))selected=n;
-            new ExpeditionDialog(this).setTitle(AppLanguage.text("Upscale")).setSingleChoiceItems(labels,selected,(dialog,which)->{
-                prefs.edit().putInt("mobile_upscale",values[which]).apply();
-                updateManualResolution.run();
-                if(refreshNativeAa!=null)refreshNativeAa.run();
-                upscaleChoice.setText(AppLanguage.text("Upscale · "+upscaleLabel(values[which])));dialog.dismiss();
-            }).setNegativeButton("Cancel",null).show();
+        // Technology and quality are separate controls, retaining the same
+        // 0..8 mobile_upscale values understood by the native renderer.
+        text(displayCard,"Upscaling",14,true);
+        RadioGroup upscaleProvider=new RadioGroup(this);
+        upscaleProvider.setOrientation(RadioGroup.HORIZONTAL);
+        final String[] providers={"Off","FSR 3.1","Snapdragon GSR 2"};
+        for(int provider=0;provider<providers.length;provider++){
+            RadioButton option=new RadioButton(this);
+            option.setId(View.generateViewId());option.setTag(provider);
+            option.setText(AppLanguage.text(providers[provider]));
+            option.setTextColor(0xffeee2cc);option.setTextSize(portrait?12:14);
+            option.setButtonTintList(ColorStateList.valueOf(accent));
+            option.setPadding(dp(2),dp(3),dp(6),dp(3));
+            upscaleProvider.addView(option,new RadioGroup.LayoutParams(0,dp(40),1f));
+            if(provider==UpscalePreset.providerChoice(prefs.getInt("mobile_upscale",0)))
+                upscaleProvider.check(option.getId());
+        }
+        displayCard.addView(upscaleProvider);
+        TextView qualityHeading=text(displayCard,"Input mode",14,true);
+        RadioGroup upscaleQuality=new RadioGroup(this);
+        upscaleQuality.setOrientation(portrait?RadioGroup.VERTICAL:RadioGroup.HORIZONTAL);
+        final String[] qualityLabels={"Native AA","Quality","Balanced","Performance"};
+        for(int quality=1;quality<=qualityLabels.length;quality++){
+            RadioButton option=new RadioButton(this);
+            option.setId(View.generateViewId());option.setTag(quality);
+            option.setText(AppLanguage.text(qualityLabels[quality-1]));
+            option.setTextColor(0xffeee2cc);option.setTextSize(portrait?14:13);
+            option.setButtonTintList(ColorStateList.valueOf(accent));
+            option.setPadding(dp(3),dp(3),dp(5),dp(3));
+            upscaleQuality.addView(option,new RadioGroup.LayoutParams(
+                portrait?-1:0,dp(36),portrait?0:1f));
+        }
+        displayCard.addView(upscaleQuality);
+        int currentUpscale=prefs.getInt("mobile_upscale",0);
+        int remembered=prefs.getInt("upscale_quality",UpscalePreset.qualityChoice(currentUpscale));
+        for(int n=0;n<upscaleQuality.getChildCount();n++){
+            RadioButton option=(RadioButton)upscaleQuality.getChildAt(n);
+            if(((Integer)option.getTag())==remembered)upscaleQuality.check(option.getId());
+        }
+        Runnable updateUpscalerVisibility=()->{
+            boolean enabled=UpscalePreset.providerChoice(prefs.getInt("mobile_upscale",0))!=0;
+            qualityHeading.setVisibility(enabled?View.VISIBLE:View.GONE);
+            upscaleQuality.setVisibility(enabled?View.VISIBLE:View.GONE);
+            updateManualResolution.run();
+            if(refreshNativeAa!=null)refreshNativeAa.run();
+        };
+        upscaleProvider.setOnCheckedChangeListener((group,id)->{
+            RadioButton chosen=group.findViewById(id);
+            if(chosen==null)return;
+            int provider=(Integer)chosen.getTag();
+            int quality=prefs.getInt("upscale_quality",remembered);
+            prefs.edit().putInt("mobile_upscale",UpscalePreset.compose(provider,quality)).apply();
+            updateUpscalerVisibility.run();
         });
+        upscaleQuality.setOnCheckedChangeListener((group,id)->{
+            RadioButton chosen=group.findViewById(id);
+            if(chosen==null)return;
+            int quality=(Integer)chosen.getTag();
+            int provider=UpscalePreset.providerChoice(prefs.getInt("mobile_upscale",0));
+            prefs.edit().putInt("upscale_quality",quality)
+                .putInt("mobile_upscale",UpscalePreset.compose(provider,quality)).apply();
+            updateUpscalerVisibility.run();
+        });
+        updateUpscalerVisibility.run();
         button(displayCard,"Performance HUD",v->{
             String[] labels={"Minimal · FPS","Compact · FPS / GPU / CPU / RAM","Full · FPS / GPU / CPU / RAM / FSR"};
             int selected=1;try{selected=Integer.parseInt(iniGet("hud_mode"));}catch(Exception ignored){}
