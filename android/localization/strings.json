@@ -945,7 +945,8 @@
     "ko": "이동",
     "zh": "移动",
     "tr": "Hareket",
-    "pl": "Ruch"
+    "pl": "Ruch",
+    "pt": "Mover"
   },
   "Look": {
     "es": "Mirar",
@@ -957,7 +958,8 @@
     "ko": "시점",
     "zh": "视角",
     "tr": "Bak",
-    "pl": "Rozglądanie"
+    "pl": "Rozglądanie",
+    "pt": "Olhar"
   },
   "Jump": {
     "es": "Saltar",
@@ -1073,7 +1075,8 @@
     "ko": "터치",
     "zh": "触摸",
     "tr": "Dokun",
-    "pl": "Dotyk"
+    "pl": "Dotyk",
+    "pt": "Toque"
   },
   "Swap □ / △": {
     "es": "Intercambiar □ / △",
@@ -1605,7 +1608,8 @@
     "ko": "모바일: 오른쪽을 드래그해 시점을 움직입니다. 버튼은 게임의 원래 기능을 유지합니다. 클래식 배치와 스와이프패드도 선택할 수 있습니다.",
     "zh": "移动：拖动右侧调整视角。按钮保留游戏原始操作。可选经典布局和滑动板。",
     "tr": "Mobil: kamerayı çevirmek için sağ tarafta kaydırın. Eylem tuşları oyunun özgün işlevlerini korur. Klasik düzen ve kaydırma paneli isteğe bağlıdır.",
-    "pl": "Mobilnie: przeciągnij po prawej, aby się rozglądać. Przyciski akcji zachowują oryginalne funkcje. Klasyczny układ i panel dotykowy są opcjonalne."
+    "pl": "Mobilnie: przeciągnij po prawej, aby się rozglądać. Przyciski akcji zachowują oryginalne funkcje. Klasyczny układ i panel dotykowy są opcjonalne.",
+    "pt": "No celular, arraste o lado direito para mover a câmera. Os botões mantêm as ações originais do jogo. O layout clássico e a área de gestos são opcionais."
   },
   "How would you like to add the game? Install a PKG directly into a chosen folder or select an already extracted game folder.": {
     "pt": "Como você quer adicionar o jogo? Instale um PKG diretamente na pasta escolhida ou selecione uma pasta de jogo já extraída.",
@@ -1656,7 +1660,8 @@
     "ko": "☷\\n패치",
     "zh": "☷\\n补丁",
     "tr": "☷\nYamalar",
-    "pl": "☷\nPatche"
+    "pl": "☷\nPatche",
+    "pt": "☷\nPatches"
   },
   "LOGS": {
     "es": "REGISTROS",
@@ -1733,7 +1738,8 @@
     "ko": "리드백 모드를 적용하려면 게임을 다시 시작하세요.",
     "zh": "重启游戏以应用回读模式。",
     "tr": "Seçilen Readback modu için oyunu yeniden başlatın.",
-    "pl": "Uruchom grę ponownie, aby zastosować tryb Readback."
+    "pl": "Uruchom grę ponownie, aby zastosować tryb Readback.",
+    "pt": "Reinicie o jogo para aplicar o modo de readback selecionado."
   },
   "Experimental: reduce unused GPU fence copies (backoff 63 instead of 7)": {
     "es": "Experimental: reducir copias GPU no utilizadas (63 en lugar de 7)",
@@ -1745,7 +1751,8 @@
     "ko": "실험: 불필요한 GPU 복사 감소 (7→63)",
     "zh": "实验：减少不必要的GPU复制（7改为63）",
     "tr": "Deneysel: gereksiz GPU eşleme kopyalarını azalt (7 yerine 63)",
-    "pl": "Eksperymentalne: ogranicz zbędne kopie przy synchronizacji GPU (63 zamiast 7)"
+    "pl": "Eksperymentalne: ogranicz zbędne kopie przy synchronizacji GPU (63 zamiast 7)",
+    "pt": "Experimental: reduzir cópias de fence desnecessárias da GPU (63 em vez de 7)."
   },
   "Performance experiment: demand-driven staged readbacks": {
     "es": "Prueba de rendimiento: lecturas por demanda",
@@ -1757,7 +1764,8 @@
     "ko": "성능 실험: 필요할 때만 리드백",
     "zh": "性能实验：按需回读",
     "tr": "Performans deneyi: talebe bağlı aşamalı okumalar",
-    "pl": "Test wydajności: etapowy odczyt na żądanie"
+    "pl": "Test wydajności: etapowy odczyt na żądanie",
+    "pt": "Experimento de desempenho: leituras da GPU sob demanda."
   },
   "Version": {
     "es": "Versión",
@@ -2367,7 +2375,8 @@
     "ko": "자동: GPU 감지(기본값)",
     "zh": "自动：检测GPU（默认）",
     "tr": "Otomatik: GPU'yu algıla (varsayılan)",
-    "pl": "Automatycznie: wykryj GPU (domyślne)"
+    "pl": "Automatycznie: wykryj GPU (domyślne)",
+    "pt": "Automático: detectar GPU (padrão)"
   },
   "Mobile: drag the right side to look. Action buttons keep the original game mappings. Mobile is the default layout. The swipepad starts enabled and can be switched off.": {
     "es": "Móvil: arrastra a la derecha para mirar. Los botones mantienen sus acciones originales. El diseño móvil es predeterminado y el panel táctil puede desactivarse.",
@@ -2405,7 +2414,8 @@
     "ko": "BloodFrame · Lossless Scaling\\n설치된 Lossless Scaling에서 Lossless.dll을 가져오세요. 셰이더는 포함되지 않습니다.",
     "zh": "BloodFrame · Lossless Scaling\\n请从安装的Lossless Scaling中导入Lossless.dll。本应用不包含着色器。",
     "tr": "BloodFrame · Lossless Scaling\nLossless Scaling kurulumunuzdan Lossless.dll dosyasını içe aktarın. Gölgelendiriciler bu uygulamaya dahil değildir.",
-    "pl": "BloodFrame · Lossless Scaling\nZaimportuj Lossless.dll ze swojej instalacji Lossless Scaling. Shadery nie są dołączone do aplik."
+    "pl": "BloodFrame · Lossless Scaling\nZaimportuj Lossless.dll ze swojej instalacji Lossless Scaling. Shadery nie są dołączone do aplik.",
+    "pt": "BloodFrame · Lossless Scaling\nImporte a Lossless.dll da sua instalação do Lossless Scaling. Os shaders não estão incluídos."
   },
   "FSR 3.1 temporal upscaling": {
     "es": "Upscaling temporal FSR 3.1",
@@ -2799,7 +2809,7 @@
   "BloodFrame · Lossless Scaling\nImport Lossless.dll from your Lossless Scaling installation. Shaders are not included with this app.": {
     "tr": "BloodFrame · Lossless Scaling\nLossless Scaling kurulumunuzdan Lossless.dll dosyasını içe aktarın. Gölgelendiriciler bu uygulamaya dahil değildir.",
     "pl": "BloodFrame · Lossless Scaling\nZaimportuj Lossless.dll ze swojej instalacji Lossless Scaling. Shadery nie są dołączone.",
-    "pt": "BloodFrame · Lossless Scaling\nImporte a Lossless.dll da sua instalação do Lossless Scaling. Os shaders não acompanham o aplicativo."
+    "pt": "BloodFrame · Lossless Scaling\nImporte a Lossless.dll da sua instalação do Lossless Scaling. Os shaders não estão incluídos no aplicativo."
   },
   "Cannot save performance HUD settings.": {
     "tr": "Performans HUD ayarları kaydedilemedi.",
@@ -3271,7 +3281,7 @@
     "pl": "Jakość"
   },
   "Performance": {
-    "pt": "Performance",
+    "pt": "Desempenho",
     "es": "Rendimiento",
     "fr": "Performances",
     "de": "Leistung",
@@ -3778,30 +3788,30 @@
     "pl": "Panel wydajności"
   },
   "Minimal · FPS": {
-    "pt": "Mínima",
-    "es": "Mínimo",
-    "fr": "Minimal",
-    "de": "Minimal",
-    "it": "Minimo",
-    "ru": "Минимальный",
-    "ja": "最小",
-    "ko": "최소",
-    "zh": "精简",
-    "tr": "En az",
-    "pl": "Minimalny"
+    "pt": "Mínima · FPS",
+    "es": "Mínimo · FPS",
+    "fr": "Minimal · FPS",
+    "de": "Minimal · FPS",
+    "it": "Minimo · FPS",
+    "ru": "Минимальный · FPS",
+    "ja": "最小 · FPS",
+    "ko": "최소 · FPS",
+    "zh": "精简 · FPS",
+    "tr": "En az · FPS",
+    "pl": "Minimalny · FPS"
   },
   "Compact · FPS / GPU / CPU / RAM": {
-    "pt": "Compacta",
-    "es": "Compacto",
-    "fr": "Compact",
-    "de": "Kompakt",
-    "it": "Compatto",
-    "ru": "Компактный",
-    "ja": "コンパクト",
-    "ko": "간략",
-    "zh": "紧凑",
-    "tr": "Kompakt",
-    "pl": "Kompaktowy"
+    "pt": "Compacta · FPS / GPU / CPU / RAM",
+    "es": "Compacto · FPS / GPU / CPU / RAM",
+    "fr": "Compact · FPS / GPU / CPU / RAM",
+    "de": "Kompakt · FPS / GPU / CPU / RAM",
+    "it": "Compatto · FPS / GPU / CPU / RAM",
+    "ru": "Компактный · FPS / GPU / CPU / RAM",
+    "ja": "コンパクト · FPS / GPU / CPU / RAM",
+    "ko": "간략 · FPS / GPU / CPU / RAM",
+    "zh": "紧凑 · FPS / GPU / CPU / RAM",
+    "tr": "Kompakt · FPS / GPU / CPU / RAM",
+    "pl": "Kompaktowy · FPS / GPU / CPU / RAM"
   },
   "Full · metrics and resolutions": {
     "pt": "Completa",
@@ -5115,5 +5125,551 @@
     "zh": "个文件",
     "tr": "dosya",
     "pl": "plików"
+  },
+  "Small GPU result readbacks (U2/U3)": {
+    "pt": "Ler pequenos resultados da GPU (U2/U3)",
+    "es": "Leer pequeños resultados de GPU (U2/U3)",
+    "fr": "Lire les petits résultats du GPU (U2/U3)",
+    "de": "Kleine GPU-Ergebnisse zurücklesen (U2/U3)",
+    "it": "Lettura piccoli risultati GPU (U2/U3)",
+    "ru": "Читать небольшие результаты GPU (U2/U3)",
+    "ja": "GPUの小さな結果を読み戻す（U2/U3）",
+    "ko": "작은 GPU 결과 다시 읽기 (U2/U3)",
+    "zh": "回读少量 GPU 结果（U2/U3）",
+    "tr": "Küçük GPU sonuçlarını geri oku (U2/U3)",
+    "pl": "Odczyt małych wyników GPU (U2/U3)"
+  },
+  "Optional: small GPU readbacks may reduce FPS. Enable only if necessary.": {
+    "pt": "Opcional: a leitura desses resultados pode reduzir o FPS. Ative apenas se necessário.",
+    "es": "Opcional: estas lecturas de GPU pueden reducir los FPS. Actívalas solo si es necesario.",
+    "fr": "Optionnel : ces lectures GPU peuvent réduire les FPS. À activer uniquement si nécessaire.",
+    "de": "Optional: Diese GPU-Rücklesevorgänge können FPS kosten. Nur bei Bedarf aktivieren.",
+    "it": "Opzionale: queste letture GPU possono ridurre gli FPS. Attivare solo se necessario.",
+    "ru": "Необязательно: чтение результатов GPU может снизить FPS. Включайте только при необходимости.",
+    "ja": "任意：小さなGPU結果の読み戻しでFPSが下がる場合があります。必要な場合のみ有効にしてください。",
+    "ko": "선택 사항: 작은 GPU 결과 읽기로 FPS가 감소할 수 있습니다. 필요한 경우에만 켜세요.",
+    "zh": "可选：回读少量 GPU 结果可能降低帧率，仅在需要时启用。",
+    "tr": "İsteğe bağlı: küçük GPU okumaları FPS'yi düşürebilir. Yalnızca gerekirse açın.",
+    "pl": "Opcjonalne: odczyt małych wyników GPU może obniżyć FPS. Włączaj tylko w razie potrzeby."
+  },
+  "Uncharted · action icons (GoW III)": {
+    "pt": "Uncharted · ícones de ação (GoW III)",
+    "es": "Uncharted · iconos de acción (GoW III)",
+    "fr": "Uncharted · icônes d'action (GoW III)",
+    "de": "Uncharted · Aktionssymbole (GoW III)",
+    "it": "Uncharted · icone azione (GoW III)",
+    "ru": "Uncharted · значки действий (GoW III)",
+    "ja": "Uncharted · アクションアイコン (GoW III)",
+    "ko": "Uncharted · 액션 아이콘 (GoW III)",
+    "zh": "Uncharted · 操作图标 (GoW III)",
+    "tr": "Uncharted · eylem simgeleri (GoW III)",
+    "pl": "Uncharted · ikony akcji (GoW III)"
+  },
+  "Classic · previous PlayStation buttons": {
+    "pt": "Clássico · botões PlayStation anteriores",
+    "es": "Clásico · botones PlayStation anteriores",
+    "fr": "Classique · anciens boutons PlayStation",
+    "de": "Klassisch · bisherige PlayStation-Tasten",
+    "it": "Classico · pulsanti PlayStation precedenti",
+    "ru": "Классика · прежние кнопки PlayStation",
+    "ja": "クラシック · 以前のPlayStationボタン",
+    "ko": "클래식 · 이전 PlayStation 버튼",
+    "zh": "经典 · 旧版 PlayStation 按钮",
+    "tr": "Klasik · önceki PlayStation tuşları",
+    "pl": "Klasyczny · poprzednie przyciski PlayStation"
+  },
+  "Control size": {
+    "pt": "Tamanho dos controles",
+    "es": "Tamaño de los controles",
+    "fr": "Taille des commandes",
+    "de": "Größe der Steuerung",
+    "it": "Dimensione dei comandi",
+    "ru": "Размер управления",
+    "ja": "操作ボタンの大きさ",
+    "ko": "컨트롤 크기",
+    "zh": "控制按钮大小",
+    "tr": "Kontrol boyutu",
+    "pl": "Rozmiar przycisków"
+  },
+  "Edit button position and size": {
+    "pt": "Editar posição e tamanho dos botões",
+    "es": "Editar posición y tamaño de los botones",
+    "fr": "Modifier la position et la taille des boutons",
+    "de": "Position und Größe der Tasten bearbeiten",
+    "it": "Modifica posizione e dimensione dei pulsanti",
+    "ru": "Изменить положение и размер кнопок",
+    "ja": "ボタンの位置と大きさを編集",
+    "ko": "버튼 위치와 크기 편집",
+    "zh": "编辑按钮位置和大小",
+    "tr": "Tuş konumunu ve boyutunu düzenle",
+    "pl": "Edytuj położenie i rozmiar przycisków"
+  },
+  "Open the in-game menu by swiping from left to right.": {
+    "pt": "Abra o menu durante o jogo deslizando da esquerda para a direita.",
+    "es": "Abre el menú durante el juego deslizando de izquierda a derecha.",
+    "fr": "Ouvrez le menu en jeu en balayant de gauche à droite.",
+    "de": "Öffne das Spielmenü durch Wischen von links nach rechts.",
+    "it": "Apri il menu di gioco scorrendo da sinistra a destra.",
+    "ru": "Откройте меню игры свайпом слева направо.",
+    "ja": "左から右へスワイプしてゲーム内メニューを開きます。",
+    "ko": "왼쪽에서 오른쪽으로 스와이프하면 게임 메뉴가 열립니다.",
+    "zh": "从左向右滑动可打开游戏内菜单。",
+    "tr": "Oyun içi menüyü soldan sağa kaydırarak açın.",
+    "pl": "Otwórz menu w grze, przesuwając palcem od lewej do prawej."
+  },
+  "Internal resolution (upscaler off):": {
+    "pt": "Resolução interna (upscaler desligado):",
+    "es": "Resolución interna (reescalado desactivado):",
+    "fr": "Résolution interne (mise à l'échelle désactivée) :",
+    "de": "Interne Auflösung (Upscaling aus):",
+    "it": "Risoluzione interna (upscaling disattivato):",
+    "ru": "Внутреннее разрешение (апскейлер выключен):",
+    "ja": "内部解像度（アップスケーラー無効）：",
+    "ko": "내부 해상도(업스케일러 꺼짐):",
+    "zh": "内部渲染分辨率（升频关闭）：",
+    "tr": "İç çözünürlük (yükseltme kapalı):",
+    "pl": "Rozdzielczość wewnętrzna (skalowanie wyłączone):"
+  },
+  "Manual resolution is available only with temporal upscaling disabled. FSR 3.1 and Snapdragon GSR 2 set their own input resolution; changes apply on the next game start.": {
+    "pt": "A resolução manual só funciona com o upscaling temporal desligado. FSR 3.1 e Snapdragon GSR 2 definem a própria resolução de entrada; as alterações são aplicadas na próxima inicialização do jogo.",
+    "es": "La resolución manual solo funciona con el reescalado temporal desactivado. FSR 3.1 y Snapdragon GSR 2 establecen su propia resolución de entrada; los cambios se aplican al reiniciar el juego.",
+    "fr": "La résolution manuelle n'est disponible que si la mise à l'échelle temporelle est désactivée. FSR 3.1 et Snapdragon GSR 2 choisissent leur résolution d'entrée ; les changements s'appliquent au prochain lancement.",
+    "de": "Manuelle Auflösung ist nur ohne temporales Upscaling verfügbar. FSR 3.1 und Snapdragon GSR 2 legen ihre Eingabeauflösung selbst fest; Änderungen gelten beim nächsten Spielstart.",
+    "it": "La risoluzione manuale è disponibile solo con l'upscaling temporale disattivato. FSR 3.1 e Snapdragon GSR 2 impostano la risoluzione di ingresso; le modifiche si applicano al prossimo avvio.",
+    "ru": "Ручное разрешение доступно только при выключенном временном апскейлинге. FSR 3.1 и Snapdragon GSR 2 задают входное разрешение сами; изменения вступят в силу при следующем запуске.",
+    "ja": "手動解像度は時間的アップスケーリングが無効の場合のみ選べます。FSR 3.1とSnapdragon GSR 2は入力解像度を自動設定します。変更は次回起動時に反映されます。",
+    "ko": "수동 해상도는 시간적 업스케일링이 꺼져 있을 때만 선택할 수 있습니다. FSR 3.1과 Snapdragon GSR 2는 입력 해상도를 자체 설정하며 변경 사항은 다음 실행 때 적용됩니다.",
+    "zh": "仅在关闭时域升频时可手动选择分辨率。FSR 3.1 和 Snapdragon GSR 2 会自行设定输入分辨率；更改将在下次启动游戏时生效。",
+    "tr": "Manuel çözünürlük yalnızca zamansal yükseltme kapalıyken kullanılabilir. FSR 3.1 ve Snapdragon GSR 2 giriş çözünürlüğünü belirler; değişiklikler sonraki açılışta uygulanır.",
+    "pl": "Ręczna rozdzielczość jest dostępna tylko przy wyłączonym skalowaniu czasowym. FSR 3.1 i Snapdragon GSR 2 same wybierają rozdzielczość wejściową; zmiany działają od następnego uruchomienia."
+  },
+  "Required for temporal upscale": {
+    "pt": "Necessário para o upscaling temporal",
+    "es": "Necesario para el reescalado temporal",
+    "fr": "Nécessaire à la mise à l'échelle temporelle",
+    "de": "Für temporales Upscaling erforderlich",
+    "it": "Necessario per l'upscaling temporale",
+    "ru": "Необходимо для временного апскейлинга",
+    "ja": "時間的アップスケーリングに必要",
+    "ko": "시간적 업스케일링에 필요",
+    "zh": "时域升频所必需",
+    "tr": "Zamansal yükseltme için gerekli",
+    "pl": "Wymagane do skalowania czasowego"
+  },
+  "Native AA": {
+    "pt": "AA nativo",
+    "es": "AA nativo",
+    "fr": "AA natif",
+    "de": "Natives AA",
+    "it": "AA nativo",
+    "ru": "Нативное сглаживание",
+    "ja": "ネイティブAA",
+    "ko": "네이티브 AA",
+    "zh": "原生抗锯齿",
+    "tr": "Yerel AA",
+    "pl": "Natywne AA"
+  },
+  "UPSCALE": {
+    "pt": "AMPLIAÇÃO",
+    "es": "REESCALADO",
+    "fr": "MISE À L'ÉCHELLE",
+    "de": "UPSCALING",
+    "it": "UPSCALING",
+    "ru": "АПСКЕЙЛИНГ",
+    "ja": "アップスケール",
+    "ko": "업스케일링",
+    "zh": "升频",
+    "tr": "YÜKSELTME",
+    "pl": "SKALOWANIE"
+  },
+  "Uncharted game files": {
+    "pt": "Arquivos do jogo Uncharted",
+    "es": "Archivos del juego Uncharted",
+    "fr": "Fichiers du jeu Uncharted",
+    "de": "Uncharted-Spieldateien",
+    "it": "File di gioco di Uncharted",
+    "ru": "Файлы игры Uncharted",
+    "ja": "Unchartedのゲームファイル",
+    "ko": "Uncharted 게임 파일",
+    "zh": "Uncharted 游戏文件",
+    "tr": "Uncharted oyun dosyaları",
+    "pl": "Pliki gry Uncharted"
+  },
+  "Licenses": {
+    "pt": "Licenças",
+    "es": "Licencias",
+    "fr": "Licences",
+    "de": "Lizenzen",
+    "it": "Licenze",
+    "ru": "Лицензии",
+    "ja": "ライセンス",
+    "ko": "라이선스",
+    "zh": "许可证",
+    "tr": "Lisanslar",
+    "pl": "Licencje"
+  },
+  "Download a driver package": {
+    "pt": "Baixar um pacote de driver",
+    "es": "Descargar un paquete de controlador",
+    "fr": "Télécharger un pilote",
+    "de": "Treiberpaket herunterladen",
+    "it": "Scarica un pacchetto driver",
+    "ru": "Скачать пакет драйвера",
+    "ja": "ドライバーパッケージをダウンロード",
+    "ko": "드라이버 패키지 다운로드",
+    "zh": "下载驱动程序包",
+    "tr": "Sürücü paketi indir",
+    "pl": "Pobierz pakiet sterownika"
+  },
+  "Select an installed package to remove it.": {
+    "pt": "Selecione um pacote de driver instalado para removê-lo.",
+    "es": "Selecciona un paquete instalado para eliminarlo.",
+    "fr": "Sélectionnez un paquet installé à supprimer.",
+    "de": "Wähle ein installiertes Paket zum Entfernen aus.",
+    "it": "Seleziona un pacchetto installato da rimuovere.",
+    "ru": "Выберите установленный пакет для удаления.",
+    "ja": "削除するインストール済みパッケージを選んでください。",
+    "ko": "삭제할 설치된 패키지를 선택하세요.",
+    "zh": "请选择要删除的已安装包。",
+    "tr": "Kaldırmak için kurulu bir paket seçin.",
+    "pl": "Wybierz zainstalowany pakiet do usunięcia."
+  },
+  "Remove the driver package": {
+    "pt": "Remover pacote de driver",
+    "es": "Eliminar paquete de controlador",
+    "fr": "Supprimer le pilote",
+    "de": "Treiberpaket entfernen",
+    "it": "Rimuovi pacchetto driver",
+    "ru": "Удалить пакет драйвера",
+    "ja": "ドライバーパッケージを削除",
+    "ko": "드라이버 패키지 삭제",
+    "zh": "删除驱动程序包",
+    "tr": "Sürücü paketini kaldır",
+    "pl": "Usuń pakiet sterownika"
+  },
+  "Import your own Lossless.dll first.": {
+    "pt": "Importe sua própria Lossless.dll primeiro.",
+    "es": "Importa primero tu propia Lossless.dll.",
+    "fr": "Importez d'abord votre fichier Lossless.dll.",
+    "de": "Importiere zuerst deine eigene Lossless.dll.",
+    "it": "Importa prima la tua Lossless.dll.",
+    "ru": "Сначала импортируйте свой файл Lossless.dll.",
+    "ja": "先にお持ちのLossless.dllを読み込んでください。",
+    "ko": "먼저 본인의 Lossless.dll을 가져오세요.",
+    "zh": "请先导入自己的 Lossless.dll。",
+    "tr": "Önce kendi Lossless.dll dosyanızı içe aktarın.",
+    "pl": "Najpierw zaimportuj własny plik Lossless.dll."
+  },
+  "Importing Lossless.dll ...": {
+    "pt": "Importando Lossless.dll...",
+    "es": "Importando Lossless.dll...",
+    "fr": "Importation de Lossless.dll...",
+    "de": "Lossless.dll wird importiert...",
+    "it": "Importazione di Lossless.dll...",
+    "ru": "Импорт Lossless.dll...",
+    "ja": "Lossless.dllを読み込み中...",
+    "ko": "Lossless.dll 가져오는 중...",
+    "zh": "正在导入 Lossless.dll...",
+    "tr": "Lossless.dll içe aktarılıyor...",
+    "pl": "Importowanie Lossless.dll..."
+  },
+  "Lossless.dll imported. Select LSFG to enable frame generation.": {
+    "pt": "Lossless.dll importada. Selecione LSFG para ativar a geração de quadros.",
+    "es": "Lossless.dll importada. Selecciona LSFG para activar la generación de cuadros.",
+    "fr": "Lossless.dll importée. Sélectionnez LSFG pour activer la génération d'images.",
+    "de": "Lossless.dll importiert. Wähle LSFG für die Frame-Generierung.",
+    "it": "Lossless.dll importata. Seleziona LSFG per generare fotogrammi.",
+    "ru": "Lossless.dll импортирован. Выберите LSFG, чтобы включить генерацию кадров.",
+    "ja": "Lossless.dllを読み込みました。LSFGを選んでフレーム生成を有効にしてください。",
+    "ko": "Lossless.dll을 가져왔습니다. 프레임 생성을 켜려면 LSFG를 선택하세요.",
+    "zh": "Lossless.dll 已导入。选择 LSFG 以启用帧生成。",
+    "tr": "Lossless.dll içe aktarıldı. Kare oluşturmayı açmak için LSFG'yi seçin.",
+    "pl": "Zaimportowano Lossless.dll. Wybierz LSFG, aby włączyć generowanie klatek."
+  },
+  "Installing the driver package ...": {
+    "pt": "Instalando o pacote de driver...",
+    "es": "Instalando el paquete del controlador...",
+    "fr": "Installation du pilote...",
+    "de": "Treiberpaket wird installiert...",
+    "it": "Installazione del pacchetto driver...",
+    "ru": "Установка пакета драйвера...",
+    "ja": "ドライバーパッケージをインストール中...",
+    "ko": "드라이버 패키지 설치 중...",
+    "zh": "正在安装驱动程序包...",
+    "tr": "Sürücü paketi kuruluyor...",
+    "pl": "Instalowanie pakietu sterownika..."
+  },
+  "Looking up the driver releases ...": {
+    "pt": "Procurando versões dos drivers...",
+    "es": "Buscando versiones de controladores...",
+    "fr": "Recherche des versions des pilotes...",
+    "de": "Treiberversionen werden gesucht...",
+    "it": "Ricerca delle versioni driver...",
+    "ru": "Поиск версий драйверов...",
+    "ja": "ドライバーのリリースを検索中...",
+    "ko": "드라이버 릴리스 검색 중...",
+    "zh": "正在查找驱动版本...",
+    "tr": "Sürücü sürümleri aranıyor...",
+    "pl": "Wyszukiwanie wydań sterowników..."
+  },
+  "Backing up the current saves failed: nothing was changed.": {
+    "pt": "Falha ao fazer backup dos saves atuais: nada foi alterado.",
+    "es": "No se pudieron respaldar los guardados actuales: no se cambió nada.",
+    "fr": "Impossible de sauvegarder les parties actuelles : aucune modification.",
+    "de": "Sicherung der aktuellen Spielstände fehlgeschlagen: nichts wurde geändert.",
+    "it": "Backup dei salvataggi correnti non riuscito: nessuna modifica.",
+    "ru": "Не удалось создать копию сохранений: ничего не изменено.",
+    "ja": "現在のセーブデータのバックアップに失敗しました。変更はありません。",
+    "ko": "현재 저장 데이터 백업 실패: 변경된 내용이 없습니다.",
+    "zh": "备份当前存档失败：未做任何更改。",
+    "tr": "Mevcut kayıtlar yedeklenemedi: hiçbir şey değiştirilmedi.",
+    "pl": "Nie udało się wykonać kopii zapisów: niczego nie zmieniono."
+  },
+  "The game's files are ready.": {
+    "pt": "Os arquivos do jogo estão prontos.",
+    "es": "Los archivos del juego están listos.",
+    "fr": "Les fichiers du jeu sont prêts.",
+    "de": "Die Spieldateien sind bereit.",
+    "it": "I file del gioco sono pronti.",
+    "ru": "Файлы игры готовы.",
+    "ja": "ゲームファイルの準備ができました。",
+    "ko": "게임 파일이 준비되었습니다.",
+    "zh": "游戏文件已准备就绪。",
+    "tr": "Oyun dosyaları hazır.",
+    "pl": "Pliki gry są gotowe."
+  },
+  "Backing up failed.": {
+    "pt": "Falha no backup.",
+    "es": "Falló la copia de seguridad.",
+    "fr": "Échec de la sauvegarde.",
+    "de": "Sicherung fehlgeschlagen.",
+    "it": "Backup non riuscito.",
+    "ru": "Не удалось создать резервную копию.",
+    "ja": "バックアップに失敗しました。",
+    "ko": "백업 실패.",
+    "zh": "备份失败。",
+    "tr": "Yedekleme başarısız.",
+    "pl": "Tworzenie kopii zapasowej nie powiodło się."
+  },
+  "This build has no license file (build.sh PUBLIC=1 with licenses.sh's output).": {
+    "pt": "Esta build não contém arquivo de licenças (gere com build.sh PUBLIC=1 e a saída de licenses.sh).",
+    "es": "Esta compilación no contiene archivo de licencias (build.sh PUBLIC=1 y salida de licenses.sh).",
+    "fr": "Cette version n'a pas de fichier de licences (build.sh PUBLIC=1 et sortie de licenses.sh).",
+    "de": "Dieser Build enthält keine Lizenzdatei (build.sh PUBLIC=1 mit Ausgabe von licenses.sh).",
+    "it": "Questa build non contiene il file licenze (build.sh PUBLIC=1 con output di licenses.sh).",
+    "ru": "В сборке нет файла лицензий (build.sh PUBLIC=1 и вывод licenses.sh).",
+    "ja": "このビルドにはライセンスファイルがありません（build.sh PUBLIC=1とlicenses.shの出力を使用）。",
+    "ko": "이 빌드에는 라이선스 파일이 없습니다(build.sh PUBLIC=1 및 licenses.sh 출력).",
+    "zh": "此版本没有许可证文件（build.sh PUBLIC=1 并附带 licenses.sh 输出）。",
+    "tr": "Bu derlemede lisans dosyası yok (build.sh PUBLIC=1 ve licenses.sh çıktısı).",
+    "pl": "Ta kompilacja nie ma pliku licencji (build.sh PUBLIC=1 i wynik licenses.sh)."
+  },
+  "Saves copied to %s": {
+    "pt": "Saves copiados para %s",
+    "es": "Partidas guardadas copiadas a %s",
+    "fr": "Sauvegardes copiées vers %s",
+    "de": "Spielstände nach %s kopiert",
+    "it": "Salvataggi copiati in %s",
+    "ru": "Сохранения скопированы в %s",
+    "ja": "セーブデータを%sにコピーしました",
+    "ko": "저장 데이터를 %s(으)로 복사했습니다",
+    "zh": "存档已复制到 %s",
+    "tr": "Kayıtlar %s konumuna kopyalandı",
+    "pl": "Zapisy skopiowano do %s"
+  },
+  "Preparing %s ...": {
+    "pt": "Preparando %s...",
+    "es": "Preparando %s...",
+    "fr": "Préparation de %s...",
+    "de": "%s wird vorbereitet...",
+    "it": "Preparazione di %s...",
+    "ru": "Подготовка %s...",
+    "ja": "%sを準備中...",
+    "ko": "%s 준비 중...",
+    "zh": "正在准备 %s...",
+    "tr": "%s hazırlanıyor...",
+    "pl": "Przygotowywanie %s..."
+  },
+  "Preparing failed: %s": {
+    "pt": "Falha na preparação: %s",
+    "es": "Error al preparar: %s",
+    "fr": "Échec de la préparation : %s",
+    "de": "Vorbereitung fehlgeschlagen: %s",
+    "it": "Preparazione non riuscita: %s",
+    "ru": "Ошибка подготовки: %s",
+    "ja": "準備に失敗しました：%s",
+    "ko": "준비 실패: %s",
+    "zh": "准备失败：%s",
+    "tr": "Hazırlama başarısız: %s",
+    "pl": "Błąd przygotowania: %s"
+  },
+  "DLL import failed: %s": {
+    "pt": "Falha ao importar a DLL: %s",
+    "es": "Error al importar DLL: %s",
+    "fr": "Échec de l'importation de la DLL : %s",
+    "de": "DLL-Import fehlgeschlagen: %s",
+    "it": "Importazione DLL non riuscita: %s",
+    "ru": "Ошибка импорта DLL: %s",
+    "ja": "DLLの読み込みに失敗しました：%s",
+    "ko": "DLL 가져오기 실패: %s",
+    "zh": "导入 DLL 失败：%s",
+    "tr": "DLL içe aktarılamadı: %s",
+    "pl": "Nie udało się zaimportować DLL: %s"
+  },
+  "Driver package installed and selected: %s": {
+    "pt": "Pacote de driver instalado e selecionado: %s",
+    "es": "Paquete de controlador instalado y seleccionado: %s",
+    "fr": "Pilote installé et sélectionné : %s",
+    "de": "Treiberpaket installiert und ausgewählt: %s",
+    "it": "Pacchetto driver installato e selezionato: %s",
+    "ru": "Пакет драйвера установлен и выбран: %s",
+    "ja": "ドライバーパッケージをインストールして選択しました：%s",
+    "ko": "드라이버 패키지 설치 및 선택 완료: %s",
+    "zh": "驱动程序包已安装并选中：%s",
+    "tr": "Sürücü paketi kuruldu ve seçildi: %s",
+    "pl": "Pakiet sterownika zainstalowany i wybrany: %s"
+  },
+  "Installing the package failed: %s": {
+    "pt": "Falha ao instalar o pacote: %s",
+    "es": "Error al instalar el paquete: %s",
+    "fr": "Échec de l'installation du paquet : %s",
+    "de": "Paketinstallation fehlgeschlagen: %s",
+    "it": "Installazione pacchetto non riuscita: %s",
+    "ru": "Ошибка установки пакета: %s",
+    "ja": "パッケージのインストールに失敗しました：%s",
+    "ko": "패키지 설치 실패: %s",
+    "zh": "安装包失败：%s",
+    "tr": "Paket kurulamadı: %s",
+    "pl": "Nie udało się zainstalować pakietu: %s"
+  },
+  "Automatic Gen8 driver failed: %s. Using bundled Turnip.": {
+    "pt": "Falha no driver Gen8 automático: %s. Usando o Turnip incluído.",
+    "es": "Falló el controlador Gen8 automático: %s. Se usará Turnip incluido.",
+    "fr": "Échec du pilote Gen8 automatique : %s. Utilisation de Turnip intégré.",
+    "de": "Automatischer Gen8-Treiber fehlgeschlagen: %s. Gebündeltes Turnip wird verwendet.",
+    "it": "Driver Gen8 automatico non riuscito: %s. Uso di Turnip incluso.",
+    "ru": "Автоматический драйвер Gen8 недоступен: %s. Используется встроенный Turnip.",
+    "ja": "自動Gen8ドライバーに失敗しました：%s。内蔵Turnipを使用します。",
+    "ko": "자동 Gen8 드라이버 실패: %s. 내장 Turnip을 사용합니다.",
+    "zh": "自动 Gen8 驱动失败：%s。正在使用内置 Turnip。",
+    "tr": "Otomatik Gen8 sürücüsü başarısız: %s. Dahili Turnip kullanılacak.",
+    "pl": "Automatyczny sterownik Gen8 nie zadziałał: %s. Używany będzie wbudowany Turnip."
+  },
+  "No packages found. %s": {
+    "pt": "Nenhum pacote encontrado. %s",
+    "es": "No se encontraron paquetes. %s",
+    "fr": "Aucun paquet trouvé. %s",
+    "de": "Keine Pakete gefunden. %s",
+    "it": "Nessun pacchetto trovato. %s",
+    "ru": "Пакеты не найдены. %s",
+    "ja": "パッケージが見つかりません。%s",
+    "ko": "패키지를 찾지 못했습니다. %s",
+    "zh": "未找到安装包。%s",
+    "tr": "Paket bulunamadı. %s",
+    "pl": "Nie znaleziono pakietów. %s"
+  },
+  "Downloading %s ...": {
+    "pt": "Baixando %s...",
+    "es": "Descargando %s...",
+    "fr": "Téléchargement de %s...",
+    "de": "%s wird heruntergeladen...",
+    "it": "Download di %s...",
+    "ru": "Загрузка %s...",
+    "ja": "%sをダウンロード中...",
+    "ko": "%s 다운로드 중...",
+    "zh": "正在下载 %s...",
+    "tr": "%s indiriliyor...",
+    "pl": "Pobieranie %s..."
+  },
+  "Downloading failed: %s": {
+    "pt": "Falha no download: %s",
+    "es": "Error de descarga: %s",
+    "fr": "Échec du téléchargement : %s",
+    "de": "Download fehlgeschlagen: %s",
+    "it": "Download non riuscito: %s",
+    "ru": "Ошибка загрузки: %s",
+    "ja": "ダウンロードに失敗しました：%s",
+    "ko": "다운로드 실패: %s",
+    "zh": "下载失败：%s",
+    "tr": "İndirme başarısız: %s",
+    "pl": "Błąd pobierania: %s"
+  },
+  "Remove %s?": {
+    "pt": "Remover %s?",
+    "es": "¿Eliminar %s?",
+    "fr": "Supprimer %s ?",
+    "de": "%s entfernen?",
+    "it": "Rimuovere %s?",
+    "ru": "Удалить %s?",
+    "ja": "%sを削除しますか？",
+    "ko": "%s을(를) 삭제할까요?",
+    "zh": "删除 %s？",
+    "tr": "%s kaldırılsın mı?",
+    "pl": "Usunąć %s?"
+  },
+  "Removed %s": {
+    "pt": "%s removido.",
+    "es": "Se eliminó %s",
+    "fr": "%s supprimé",
+    "de": "%s entfernt",
+    "it": "%s rimosso",
+    "ru": "Удалено: %s",
+    "ja": "%sを削除しました",
+    "ko": "%s 삭제됨",
+    "zh": "已删除 %s",
+    "tr": "%s kaldırıldı",
+    "pl": "Usunięto %s"
+  },
+  "No backups in %s": {
+    "pt": "Nenhum backup encontrado em %s",
+    "es": "No hay copias de seguridad en %s",
+    "fr": "Aucune sauvegarde de secours dans %s",
+    "de": "Keine Sicherungen in %s",
+    "it": "Nessun backup in %s",
+    "ru": "Резервных копий нет в %s",
+    "ja": "%sにバックアップがありません",
+    "ko": "%s에 백업이 없습니다",
+    "zh": "%s 中没有备份",
+    "tr": "%s konumunda yedek yok",
+    "pl": "Brak kopii zapasowych w %s"
+  },
+  "Replace the app's saves with %s? The current ones are backed up first.": {
+    "pt": "Substituir os saves do aplicativo por %s? Os atuais serão salvos em backup antes.",
+    "es": "¿Sustituir las partidas guardadas de la app por %s? Antes se hará una copia de seguridad.",
+    "fr": "Remplacer les sauvegardes de l'application par %s ? Les actuelles seront d'abord sauvegardées.",
+    "de": "Spielstände der App durch %s ersetzen? Die aktuellen werden vorher gesichert.",
+    "it": "Sostituire i salvataggi dell'app con %s? Verrà creato prima un backup.",
+    "ru": "Заменить сохранения приложения на %s? Сначала будет создана резервная копия.",
+    "ja": "アプリのセーブデータを%sに置き換えますか？先に現在のデータをバックアップします。",
+    "ko": "앱 저장 데이터를 %s(으)로 교체할까요? 현재 데이터는 먼저 백업됩니다.",
+    "zh": "用 %s 替换应用存档？当前存档将先备份。",
+    "tr": "Uygulama kayıtları %s ile değiştirilsin mi? Mevcut kayıtlar önce yedeklenir.",
+    "pl": "Zastąpić zapisy aplikacji plikiem %s? Najpierw zostanie utworzona kopia obecnych zapisów."
+  },
+  "Saves restored from %s": {
+    "pt": "Saves restaurados de %s",
+    "es": "Partidas guardadas restauradas desde %s",
+    "fr": "Sauvegardes restaurées depuis %s",
+    "de": "Spielstände aus %s wiederhergestellt",
+    "it": "Salvataggi ripristinati da %s",
+    "ru": "Сохранения восстановлены из %s",
+    "ja": "%sからセーブデータを復元しました",
+    "ko": "%s에서 저장 데이터 복원 완료",
+    "zh": "已从 %s 恢复存档",
+    "tr": "Kayıtlar %s konumundan geri yüklendi",
+    "pl": "Zapisy przywrócono z %s"
+  },
+  "Restoring failed: %s": {
+    "pt": "Falha ao restaurar: %s",
+    "es": "Error al restaurar: %s",
+    "fr": "Échec de la restauration : %s",
+    "de": "Wiederherstellung fehlgeschlagen: %s",
+    "it": "Ripristino non riuscito: %s",
+    "ru": "Ошибка восстановления: %s",
+    "ja": "復元に失敗しました：%s",
+    "ko": "복원 실패: %s",
+    "zh": "恢复失败：%s",
+    "tr": "Geri yükleme başarısız: %s",
+    "pl": "Przywracanie nie powiodło się: %s"
   }
 }

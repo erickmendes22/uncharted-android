@@ -313,7 +313,7 @@ public class Launcher extends Activity {
         if (busy) return;
         if (intent.getBooleanExtra("backup_saves", false)) {
             String done = backupSaves();
-            status(done != null ? "Saves copied to " + done : "Backing up failed.");
+            status(done != null ? AppLanguage.format("Saves copied to %s",done) : AppLanguage.text("Backing up failed."));
         }
         if (intent.getBooleanExtra("prepare", false)) prepare(intent.getBooleanExtra("play", false));
         else if (intent.getBooleanExtra("play", false)) play();
@@ -686,17 +686,17 @@ public class Launcher extends Activity {
         RadioGroup touchStyles=new RadioGroup(this);
         touchStyles.setOrientation(RadioGroup.VERTICAL);
         for(String[] choice:new String[][]{
-            {TouchControllerOverlay.UNCHARTED_STYLE,"Uncharted · icones de acoes (GoW 3)"},
-            {TouchControllerOverlay.CLASSIC_STYLE,"Classico · botoes PlayStation anteriores"}
+            {TouchControllerOverlay.UNCHARTED_STYLE,"Uncharted · action icons (GoW III)"},
+            {TouchControllerOverlay.CLASSIC_STYLE,"Classic · previous PlayStation buttons"}
         }) {
             RadioButton option=new RadioButton(this);
-            option.setText(choice[1]);option.setTag(choice[0]);option.setId(View.generateViewId());
+            option.setText(AppLanguage.text(choice[1]));option.setTag(choice[0]);option.setId(View.generateViewId());
             touchStyles.addView(option);
             if(choice[0].equals(chosenStyle))touchStyles.check(option.getId());
         }
         root.addView(touchStyles);
         final String[] selectedTouchStyle={chosenStyle};
-        final TextView touchSize=text(root,"Tamanho dos controles: "+
+        final TextView touchSize=text(root,AppLanguage.text("Control size")+": "+
             Math.round(touchPrefs.getFloat(chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?
                    "overlay_uncharted_size":"overlay_size",
                    chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?1f:1.2f)*100f)+"%",14,false);
@@ -712,14 +712,14 @@ public class Launcher extends Activity {
                     String key=selectedTouchStyle[0].equals(TouchControllerOverlay.UNCHARTED_STYLE)?
                                "overlay_uncharted_size":"overlay_size";
                     touchPrefs.edit().putFloat(key,value).apply();
-                    touchSize.setText("Tamanho dos controles: "+Math.round(value*100f)+"%");
+                    touchSize.setText(AppLanguage.text("Control size")+": "+Math.round(value*100f)+"%");
                 }
             }
             @Override public void onStartTrackingTouch(android.widget.SeekBar bar){}
             @Override public void onStopTrackingTouch(android.widget.SeekBar bar){}
         });
         root.addView(touchScale);
-        final TextView touchOpacity=text(root,"Opacidade: "+
+        final TextView touchOpacity=text(root,AppLanguage.text("Opacity")+": "+
             Math.round(touchPrefs.getFloat(chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?
                 "overlay_uncharted_opacity":"overlay_opacity",
                 chosenStyle.equals(TouchControllerOverlay.UNCHARTED_STYLE)?.15f:.40f)*100f)+"%",14,false);
@@ -734,7 +734,7 @@ public class Launcher extends Activity {
                 float opacity=.1f+progress/100f;
                 touchPrefs.edit().putFloat(selectedTouchStyle[0].equals(TouchControllerOverlay.UNCHARTED_STYLE)?
                     "overlay_uncharted_opacity":"overlay_opacity",opacity).apply();
-                touchOpacity.setText("Opacidade: "+Math.round(opacity*100f)+"%");
+                touchOpacity.setText(AppLanguage.text("Opacity")+": "+Math.round(opacity*100f)+"%");
             }
             @Override public void onStartTrackingTouch(android.widget.SeekBar bar){}
             @Override public void onStopTrackingTouch(android.widget.SeekBar bar){}
@@ -751,11 +751,11 @@ public class Launcher extends Activity {
             float opacity=touchPrefs.getFloat(action?"overlay_uncharted_opacity":"overlay_opacity",action?.15f:.4f);
             touchScale.setMax(action?50:85);
             touchScale.setProgress(Math.round((size-.8f)*100f));
-            touchSize.setText("Tamanho dos controles: "+Math.round(size*100f)+"%");
+            touchSize.setText(AppLanguage.text("Control size")+": "+Math.round(size*100f)+"%");
             alphaScale.setProgress(Math.round((opacity-.1f)*100f));
-            touchOpacity.setText("Opacidade: "+Math.round(opacity*100f)+"%");
+            touchOpacity.setText(AppLanguage.text("Opacity")+": "+Math.round(opacity*100f)+"%");
         });
-        button(root,"Editar posicao e tamanho dos botoes",v->editTouchLayout());
+        button(root,"Edit button position and size",v->editTouchLayout());
         root = card(home, "FRAME GENERATION");
         text(root, "LSFG requires your own Lossless.dll.", 14, false);
         button(root, "Import Lossless.dll", v -> {
@@ -774,7 +774,7 @@ public class Launcher extends Activity {
             new ExpeditionDialog(this).setTitle(AppLanguage.text("Frame generation"))
                 .setSingleChoiceItems(modes, selected, (dialog, which) -> {
                     if (which > 0 && !new File(files, "Lossless.dll").isFile()) {
-                        status("Import your own Lossless.dll first.");
+                        status(AppLanguage.text("Import your own Lossless.dll first."));
                         dialog.dismiss();
                         return;
                     }
@@ -789,17 +789,10 @@ public class Launcher extends Activity {
         compatibilitySwitch(root,"Fast GPU memory reads (U2/U3)","arm_uma_readback",true);
         compatibilitySwitch(root,"Send GPU work in small batches (U2/U3)","arm_flush_draws",true);
         compatibilitySwitch(root,"Let idle game threads sleep","arm_job_spin",true);
-        // Broad compute readbacks can halve FPS; keep this optional and off by default.
-        // U3's targeted raycaster fix is independent of this control.
+        // The corrected U3 raycaster is no longer gated by EOP/flip labels.
+        // Keep only broad GPU result readbacks optional (OFF by default).
         compatibilitySwitch(root,"Small GPU result readbacks (U2/U3)","gpu_small_readbacks",false);
-        // 0.2.9 regression control: the separate U3 raycaster path was forced
-        // on even with the broad-readback switch off, and can fall back to
-        // a synchronous GPU wait when its 16-slot landing queue is full.
-        compatibilitySwitch(root,"U3 raycaster readback (geometry fix; may lower FPS)",
-                            "u3_raycaster_readback",false);
-        compatibilitySwitch(root,"Shader loop safety (avoids GPU hangs)",
-                            "gpu_shader_loop_safety",true);
-        note(root, "Turn off shader loop safety only to compare performance; unprotected shader loops can freeze the GPU.");
+        note(root,"Optional: small GPU readbacks may reduce FPS. Enable only if necessary.");
         root = card(config, "ADVANCED");
         text(root, "Additional environment variables (optional):", 14, false);
         extraEnv = new EditText(this);
@@ -839,7 +832,7 @@ public class Launcher extends Activity {
         button(credits,"Licenses and upstream credits",v->showLicenses());
         LinearLayout help=card(about,"CONTROLS");
         note(help,"Left: movement. Right: camera.");
-        note(help,"Open the menu with its button, a right-edge swipe or L3+R3.");
+        note(help,"Open the in-game menu by swiping from left to right.");
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout nav = new LinearLayout(this);
         nav.setPadding(dp(8), dp(6), dp(8), dp(6));
@@ -879,6 +872,15 @@ public class Launcher extends Activity {
 
     private final class ExpeditionDialog extends android.app.AlertDialog.Builder {
         ExpeditionDialog(android.content.Context context) { super(context); }
+        @Override public android.app.AlertDialog.Builder setTitle(CharSequence title) {
+            return super.setTitle(AppLanguage.text(title));
+        }
+        @Override public android.app.AlertDialog.Builder setMessage(CharSequence message) {
+            return super.setMessage(AppLanguage.text(message));
+        }
+        @Override public android.app.AlertDialog.Builder setNeutralButton(CharSequence label,android.content.DialogInterface.OnClickListener listener) {
+            return super.setNeutralButton(AppLanguage.text(label),listener);
+        }
         @Override public android.app.AlertDialog.Builder setSingleChoiceItems(CharSequence[] labels,int checked,android.content.DialogInterface.OnClickListener listener) {
             CharSequence[] translated=new CharSequence[labels.length];for(int i=0;i<labels.length;i++)translated[i]=AppLanguage.text(labels[i]);
             return super.setSingleChoiceItems(translated,checked,listener);
@@ -997,7 +999,7 @@ public class Launcher extends Activity {
             return;
         }
         if (request == PICK_LOSSLESS) {
-            status("Importing Lossless.dll ...");
+            status(AppLanguage.text("Importing Lossless.dll ..."));
             new Thread(() -> {
                 File tmp = new File(files, "Lossless.dll.import");
                 try (InputStream in = getContentResolver().openInputStream(data.getData());
@@ -1013,27 +1015,27 @@ public class Launcher extends Activity {
                         out.write(buf, 0, n);
                     }
                 } catch (Exception ex) {
-                    tmp.delete(); status("DLL import failed: " + ex.getMessage()); return;
+                    tmp.delete(); status(AppLanguage.format("DLL import failed: %s",ex.getMessage())); return;
                 }
                 try {
                     java.nio.file.Files.move(tmp.toPath(), new File(files, "Lossless.dll").toPath(),
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
-                    status("Lossless.dll imported. Select LSFG to enable frame generation.");
-                } catch (Exception ex) { tmp.delete(); status("DLL import failed: " + ex.getMessage()); }
+                    status(AppLanguage.text("Lossless.dll imported. Select LSFG to enable frame generation."));
+                } catch (Exception ex) { tmp.delete(); status(AppLanguage.format("DLL import failed: %s",ex.getMessage())); }
             }, "Lossless import").start();
             return;
         }
         if (request == PICK_DRIVER) {
             Uri uri = data.getData();
-            status("Installing the driver package ...");
+            status(AppLanguage.text("Installing the driver package ..."));
             new Thread(() -> {
                 try (InputStream in = getContentResolver().openInputStream(uri)) {
                     String name = installDriver(in, "driver");
                     prefs.edit().putString("driver", "pkg:" + name).apply();
                     runOnUiThread(this::buildDriverList);
-                    status("Driver package installed and selected: " + name);
+                    status(AppLanguage.format("Driver package installed and selected: %s",name));
                 } catch (Exception e) {
-                    status("Installing the package failed: " + e.getMessage());
+                    status(AppLanguage.format("Installing the package failed: %s",e.getMessage()));
                 }
             }).start();
             return;
@@ -1122,7 +1124,7 @@ public class Launcher extends Activity {
             for (String[] g : GAMES) {
                 File out = g[2].isEmpty() ? files : new File(files, g[2]);
                 out.mkdirs();
-                status("Preparing " + g[1] + " ...");
+                status(AppLanguage.format("Preparing %s ...",g[1]));
                 error = prepareGame(dir, g[1], out.getAbsolutePath());
                 if (error != null) {
                     error = g[1] + ": " + error;
@@ -1133,7 +1135,7 @@ public class Launcher extends Activity {
             final String failure = error;
             runOnUiThread(() -> {
                 busy = false;
-                statusText.setText(AppLanguage.text(failure == null ? "The game's files are ready." : "Preparing failed: " + failure));
+                statusText.setText(failure == null ? AppLanguage.text("The game's files are ready.") : AppLanguage.format("Preparing failed: %s",failure));
                 refresh();
                 if (failure == null && thenPlay) play();
             });
@@ -1248,8 +1250,8 @@ public class Launcher extends Activity {
                 :prefs.getBoolean(key,false);
             boolean enabled=!disabled;
             state.setEnabled(!managed);
-            state.setText(managed?"UPSCALE":AppLanguage.text(enabled?"Enabled":"Disabled"));
-            state.setContentDescription(AppLanguage.text(title)+": "+(managed?"Required for temporal upscale":AppLanguage.text(enabled?"Enabled in game":"Disabled in game")));
+            state.setText(managed?AppLanguage.text("UPSCALE"):AppLanguage.text(enabled?"Enabled":"Disabled"));
+            state.setContentDescription(AppLanguage.text(title)+": "+(managed?AppLanguage.text("Required for temporal upscale"):AppLanguage.text(enabled?"Enabled in game":"Disabled in game")));
             state.setTextColor(enabled?accent:0xFFB0AAA0);
             GradientDrawable bg=new GradientDrawable();bg.setCornerRadius(dp(10));
             bg.setColor(enabled?0x333D3321:0xFF222522);bg.setStroke(dp(1),enabled?accent:0xFF555B54);state.setBackground(bg);
@@ -1487,7 +1489,7 @@ public class Launcher extends Activity {
             new File(folder()), prefs.getString("selected_game", "u1"));
         if (assetProblem != null) {
             status(assetProblem);
-            new AlertDialog.Builder(this).setTitle("Uncharted game files")
+            new ExpeditionDialog(this).setTitle("Uncharted game files")
                 .setMessage(assetProblem).setPositiveButton("OK", null).show();
             return;
         }
@@ -1628,7 +1630,7 @@ public class Launcher extends Activity {
                 writeText(marker, installed);
                 return "pkg:" + installed;
             } catch (Exception ex) {
-                status("Automatic Gen8 driver failed: " + ex.getMessage() + ". Using bundled Turnip.");
+                status(AppLanguage.format("Automatic Gen8 driver failed: %s. Using bundled Turnip.",ex.getMessage()));
                 return "turnip";
             }
         }
@@ -1730,7 +1732,7 @@ public class Launcher extends Activity {
 
     /** The zip assets of the sources' latest releases, picked from a list, then fetchDriver. */
     private void downloadDriver() {
-        status("Looking up the driver releases ...");
+        status(AppLanguage.text("Looking up the driver releases ..."));
         new Thread(() -> {
             List<String[]> found = new ArrayList<>(); // {label, url, file name}
             StringBuilder errors = new StringBuilder();
@@ -1757,7 +1759,7 @@ public class Launcher extends Activity {
             }
             runOnUiThread(() -> {
                 if (found.isEmpty()) {
-                    status("No packages found. " + errors);
+                    status(AppLanguage.format("No packages found. %s",errors));
                     return;
                 }
                 status(errors.toString());
@@ -1771,15 +1773,15 @@ public class Launcher extends Activity {
     }
 
     private void fetchDriver(String url, String fileName) {
-        status("Downloading " + fileName + " ...");
+        status(AppLanguage.format("Downloading %s ...",fileName));
         new Thread(() -> {
             try (InputStream in = open(url).getInputStream()) {
                 String name = installDriver(in, fileName.replaceAll("(?i)\\.zip$", ""));
                 prefs.edit().putString("driver", "pkg:" + name).apply();
                 runOnUiThread(this::buildDriverList);
-                status("Driver package installed and selected: " + name);
+                status(AppLanguage.format("Driver package installed and selected: %s",name));
             } catch (Exception e) {
-                status("Downloading failed: " + e.getMessage());
+                status(AppLanguage.format("Downloading failed: %s",e.getMessage()));
             }
         }).start();
     }
@@ -1787,17 +1789,17 @@ public class Launcher extends Activity {
     private void removeDriver() {
         String d = driver();
         if (!d.startsWith("pkg:")) {
-            status("Select an installed package to remove it.");
+            status(AppLanguage.text("Select an installed package to remove it."));
             return;
         }
         File dir = new File(driversDir(), d.substring(4));
         new ExpeditionDialog(this).setTitle(AppLanguage.text("Remove the driver package"))
-            .setMessage(AppLanguage.text("Remove " + dir.getName() + "?"))
+            .setMessage(AppLanguage.format("Remove %s?",dir.getName()))
             .setPositiveButton("Remove", (dl, w) -> {
                 deleteTree(dir);
                 prefs.edit().putString("driver", new File("/dev/kgsl-3d0").exists() ? "turnip" : "system").apply();
                 buildDriverList();
-                status("Removed " + dir.getName());
+                status(AppLanguage.format("Removed %s",dir.getName()));
             })
             .setNegativeButton("Cancel", null).show();
     }
@@ -1885,25 +1887,25 @@ public class Launcher extends Activity {
     private void restoreSaves() {
         File[] list = backups().listFiles(f -> f.isDirectory() && f.getName().startsWith("saves-"));
         if (list == null || list.length == 0) {
-            status("No backups in " + backups());
+            status(AppLanguage.format("No backups in %s",backups()));
             return;
         }
         java.util.Arrays.sort(list);
         File newest = list[list.length - 1];
         new ExpeditionDialog(this).setTitle(AppLanguage.text("Restore saves"))
-            .setMessage(AppLanguage.text("Replace the app's saves with " + newest.getName() + "? The current ones are backed up first."))
+            .setMessage(AppLanguage.format("Replace the app's saves with %s? The current ones are backed up first.",newest.getName()))
             .setPositiveButton("Restore", (d, w) -> {
                 File user = new File(files, "user");
                 if (user.isDirectory() && backupSaves() == null) {
-                    status("Backing up the current saves failed: nothing was changed.");
+                    status(AppLanguage.text("Backing up the current saves failed: nothing was changed."));
                     return;
                 }
                 try {
                     deleteTree(user);
                     copyTree(newest, user);
-                    status("Saves restored from " + newest.getName());
+                    status(AppLanguage.format("Saves restored from %s",newest.getName()));
                 } catch (IOException e) {
-                    status("Restoring failed: " + e.getMessage());
+                    status(AppLanguage.format("Restoring failed: %s",e.getMessage()));
                 }
             })
             .setNegativeButton("Cancel", null).show();

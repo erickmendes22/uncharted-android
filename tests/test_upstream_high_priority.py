@@ -89,7 +89,10 @@ assert 'compatibilitySwitch(root,"Small GPU result readbacks (U2/U3)","gpu_small
 assert 'options.getBoolean("gpu_small_readbacks",false)' in activity
 assert '"u2".equals(game)||"u3".equals(game)' in options
 assert 'BB_READBACK_SMALL_BUFFERS="+(enabled?"1":"0")' in options
-assert 'Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game) &&' in activity
-assert 'options.getBoolean("u3_raycaster_readback",false)' in activity
-assert 'options.getBoolean("gpu_shader_loop_safety",true)' in activity
+assert 'Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game)?"1":"0",true)' in activity
+assert 'Os.setenv("BB_EFFECT_LOOP_CLAMP","1",true)' in activity
+assert 'u3_raycaster_readback' not in launcher
+assert 'gpu_shader_loop_safety' not in launcher
+assert 'getBoolean("u3_raycaster_readback"' not in activity
+assert 'getBoolean("gpu_shader_loop_safety"' not in activity
 print("PASS: six high-priority upstream integration paths wired; optional broad readbacks off by default")

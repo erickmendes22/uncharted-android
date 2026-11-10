@@ -42,7 +42,12 @@ final class AppLanguage {
         if(sep>=0)return text(source.substring(0,sep))+" · "+text(source.substring(sep+3));
         if(source.startsWith("FSR 3.1 "))return "FSR 3.1 "+text(source.substring(8));
         if(source.startsWith("FSR "))return "FSR "+text(source.substring(4));
+        if(source.startsWith("Snapdragon GSR 2 "))return "Snapdragon GSR 2 "+text(source.substring(17));
         return source; // Unknown technical diagnostics retain their exact English meaning.
+    }
+    /** Localize the complete message before substituting file names or error text. */
+    static String format(String pattern, Object... values) {
+        return String.format(Locale.ROOT, text(pattern), values);
     }
     static String summary(Context a) {
         String choice=a.getSharedPreferences("launcher",0).getString("app_language","auto");

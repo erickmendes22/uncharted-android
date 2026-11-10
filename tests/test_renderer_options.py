@@ -55,11 +55,15 @@ for key in ['arm_uma_readback','arm_flush_draws','arm_job_spin']:
 assert '"gpu_small_readbacks",false)' in launcher
 assert 'options.getBoolean("gpu_small_readbacks",false)' in activity
 assert 'RendererOptions.environment(game,options.getBoolean("gpu_small_readbacks",false))' in activity
-assert '"u3_raycaster_readback",false)' in launcher
-assert 'options.getBoolean("u3_raycaster_readback",false)' in activity
-assert '"gpu_shader_loop_safety",true)' in launcher
-assert 'options.getBoolean("gpu_shader_loop_safety",true)' in activity
-assert 'Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game) &&' in activity
+# Both approved fixes must run automatically even for users whose previous
+# diagnostic release stored OFF in SharedPreferences. Only broad readbacks
+# remain a user-facing, disabled-by-default option.
+assert 'u3_raycaster_readback' not in launcher
+assert 'gpu_shader_loop_safety' not in launcher
+assert 'getBoolean("u3_raycaster_readback"' not in activity
+assert 'getBoolean("gpu_shader_loop_safety"' not in activity
+assert 'Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game)?"1":"0",true)' in activity
+assert 'Os.setenv("BB_EFFECT_LOOP_CLAMP","1",true)' in activity
 assert 'options.getBoolean(\"renderer_' not in activity
 assert 'compatibilitySwitch(root,\"Save Vulkan driver cache\"' not in launcher
-print('PASS: compatibility switches remain; small GPU readbacks optional off; U3 raycaster separately enabled')
+print('PASS: U3 raycaster and shader safety forced on; only broad GPU readbacks remain optional and off by default')
