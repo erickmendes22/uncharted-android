@@ -932,6 +932,10 @@ static void install_signature_fixes(Segment *segments, uint64_t ns) {
     const RuntimeGuestFix *fixes=runtime_guest_fixes(&count);
     for (size_t i=0; i<count; ++i) {
         const RuntimeGuestFix *fix=&fixes[i];
+        if (!strcmp(fix->name,"U1/U2 move action pool 256 slots")) {
+            const char* enabled=getenv("BB_ACTION_POOL_256");
+            if (enabled && enabled[0]=='0') continue;
+        }
         size_t matches=0, length=0; uint64_t found=0;
         for (uint64_t j=0; j<ns && matches<2; ++j) {
             if (!(segments[j].flags&1)) continue;
@@ -1168,6 +1172,47 @@ static ABI int job_lock_wait(uint64_t counter, uint64_t a, uint32_t b) {
  *   sete cl; test cl,cl; jne done; test al,al; je not_a_worker; nop10; (suspend loop:) mov rdi,r15;
  *   mov rsi,r14; mov edx,ebx; call SuspendJob
  * The game keeps an uncalled copy of the try function, which job_lock_wait calls. */
+/* The engine's job runner copies a descriptor it reaches through the job's record
+ * (mov rax, [r10+8]; mov rcx, [rax+0x20]); a job run before its descriptor was set read address 0x20
+ * and the game stopped (BilalReloaded's port 0.8.0, its #205 #304 #326, all three games). From
+ * Mevlock's dev builds: before the two loads a jump goes to a stub in the function's dead assert path
+ * (it keeps its int 0x41 first); a null pointer ends the job at the function's own exit, otherwise the
+ * loads run and it jumps back. 1.02 code (US CUSA02320, EU/Russian CUSA02344, EU 1.02): the same bytes
+ * in those dumps. Both sites are found by their exact bytes and patched only together, at the distance
+ * the jumps were made for (1.00 is compiled differently and is left alone). BB_JOB_GUARD=0: off. */
+static void patch_job_descriptor_guard(uint64_t image_size) {
+    const char *env=getenv("BB_JOB_GUARD");
+    if (env && env[0]=='0') return;
+    static const struct {
+        const char *game, *loads, *cave;
+        unsigned char jump[27], stub[24];
+        int64_t distance;
+    } builds[]={
+        {"U1","49c7424800000000488b05a4b6b80049894210498b4208488b4820","488b05efe6a9004885c07427488d3d2ce91e00488d35c4e7",
+         {0x49,0xc7,0x42,0x48,0x00,0x00,0x00,0x00,0x48,0x8b,0x05,0xa4,0xb6,0xb8,0x00,0x49,0x89,0x42,0x10,0xe9,0xff,0x0a,0x00,0x00,0x90,0x90,0x90},
+         {0xcd,0x41,0x49,0x8b,0x42,0x08,0x48,0x85,0xc0,0x0f,0x84,0x9a,0xff,0xff,0xff,0x48,0x8b,0x48,0x20,0xe9,0xee,0xf4,0xff,0xff},0xb15},
+        {"U2","49c7424800000000488b0514e4940049894210498b4208488b4820","488b05618484004885c07427488d3dfa731800488d35ef71",
+         {0x49,0xc7,0x42,0x48,0x00,0x00,0x00,0x00,0x48,0x8b,0x05,0x14,0xe4,0x94,0x00,0x49,0x89,0x42,0x10,0xe9,0xfd,0x0a,0x00,0x00,0x90,0x90,0x90},
+         {0xcd,0x41,0x49,0x8b,0x42,0x08,0x48,0x85,0xc0,0x0f,0x84,0x9a,0xff,0xff,0xff,0x48,0x8b,0x48,0x20,0xe9,0xf0,0xf4,0xff,0xff},0xb13},
+        {"U3","49c7424800000000488b05c4c3d60049894210498b4208488b4820","488b05418dc6004885c07427488d3d08414f00488d35fd3e",
+         {0x49,0xc7,0x42,0x48,0x00,0x00,0x00,0x00,0x48,0x8b,0x05,0xc4,0xc3,0xd6,0x00,0x49,0x89,0x42,0x10,0xe9,0xfd,0x0a,0x00,0x00,0x90,0x90,0x90},
+         {0xcd,0x41,0x49,0x8b,0x42,0x08,0x48,0x85,0xc0,0x0f,0x84,0x9a,0xff,0xff,0xff,0x48,0x8b,0x48,0x20,0xe9,0xf0,0xf4,0xff,0xff},0xb13},
+    };
+    for (size_t b=0;b<sizeof(builds)/sizeof(*builds);++b) {
+        const int64_t loads=find_unique_pattern(image_size,builds[b].loads);
+        if (loads<0) continue;
+        const int64_t cave=find_unique_pattern(image_size,builds[b].cave);
+        if (cave-loads!=builds[b].distance) {
+            printf("Job descriptor guard: %s 1.02 loads found, its stub site not where expected; not patched\n",builds[b].game);
+            return;
+        }
+        memcpy(image+cave,builds[b].stub,sizeof(builds[b].stub));
+        memcpy(image+loads,builds[b].jump,sizeof(builds[b].jump));
+        printf("Job descriptor guard: %s 1.02 job runner skips a job without its descriptor (%#" PRIx64 ", stub %#" PRIx64 ")\n",
+               builds[b].game,(uint64_t)loads,(uint64_t)cave);
+        return;
+    }
+}
 static void patch_job_lock_wait_us(uint64_t image_size) {
     const int64_t at=find_masked("498b4f20 83fb01 75?? 4c39f1 0f9ec1 eb?? 85db 75?? 4c39f1 0f94c1 84c9 75?? 84c0 74?? "
                                  "662e0f1f840000000000 4c89ff 4c89f6 89da e8????????",image_size);
@@ -1683,6 +1728,7 @@ int main(int argc, char **argv) {
         install_game_callbacks(segments, ns, image_end);
         install_ndgi_hooks(image_end);
         patch_job_lock_wait(image_end);
+        patch_job_descriptor_guard(image_end);
         patch_eop_tick_wait(image_end);
         patch_frame_params_wait(image_end);
         for(uint64_t s=0;s<ns;++s)

@@ -13,10 +13,12 @@ final class RendererOptions {
     }
     // Fixed release policy matching the user's tested configuration. Reapplied after old
     // preferences and environment files on every launch, including collection loadexec.
-    static String environment(String game) {
+    static String environment(String game,boolean smallReadbacks) {
+        final boolean enabled=smallReadbacks && ("u2".equals(game)||"u3".equals(game));
         return "BB_DRIVER_CACHE=1\nBB_BACKGROUND_WARMUP=1\n"
             +"BB_PREP_COMPILE=1\nBB_PREP_COMPUTE=1\n"
             +"BB_FULL_LIGHT_TABLE=1\nBB_SCALAR_EXEC_FIX=0\n"
-            +"BB_SATURATE_NAN_FS=1\nBB_READBACK_SMALL_BUFFERS=0\n";
+            +"BB_SATURATE_NAN_FS=1\nBB_READBACK_SMALL_BUFFERS="+(enabled?"1":"0")+"\n";
     }
+    static String environment(String game) { return environment(game,false); }
 }

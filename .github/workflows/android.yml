@@ -67,6 +67,7 @@ jobs:
       - name: Verify renderer comparison and speculative shader safety
         run: |
           python3 tests/test_renderer_options.py
+          python3 tests/test_upstream_high_priority.py
           python3 tests/test_srt_speculative.py
           python3 tests/test_speculative_fault_dispatch.py
           python3 tests/test_shader_selection_recovery.py

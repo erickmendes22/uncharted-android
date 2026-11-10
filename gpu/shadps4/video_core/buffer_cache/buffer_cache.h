@@ -69,6 +69,9 @@ public:
     ~BufferCache();
     bool DeferGuestCopy(VAddr src, VAddr dst, u64 size);
     bool DeferSmallReadback(VAddr address, u64 size);
+    // U3 mesh raycaster: schedule only the exact 64-dword copy shader output,
+    // not a global precise readback or an EOP fence wait.
+    bool DeferCopy64Readback(VAddr address, u64 size);
     u64 PendingLanding() const;
     bool LandingGateActive() const;
     void WaitLanding(u64 seq);

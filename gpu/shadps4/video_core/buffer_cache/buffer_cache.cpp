@@ -343,6 +343,11 @@ bool BufferCache::DeferSmallReadback(VAddr address, u64 size) {
            QueueGuestSnapshot(address, address, size, false);
 }
 
+bool BufferCache::DeferCopy64Readback(VAddr address, u64 size) {
+    return size > 0 && size <= 64_KB &&
+           QueueGuestSnapshot(address, address, size, false);
+}
+
 bool BufferCache::QueueGuestSnapshot(VAddr src, VAddr dst, u64 size, bool submit_now) {
     if (land_stopping.load(std::memory_order_acquire) || size == 0 ||
         size >= 1_MB || !memory->IsValidGpuMapping(src, size) ||

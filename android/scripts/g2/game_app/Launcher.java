@@ -789,6 +789,9 @@ public class Launcher extends Activity {
         compatibilitySwitch(root,"Fast GPU memory reads (U2/U3)","arm_uma_readback",true);
         compatibilitySwitch(root,"Send GPU work in small batches (U2/U3)","arm_flush_draws",true);
         compatibilitySwitch(root,"Let idle game threads sleep","arm_job_spin",true);
+        // Broad compute readbacks can halve FPS; keep this optional and off by default.
+        // U3's targeted raycaster fix is independent of this control.
+        compatibilitySwitch(root,"Small GPU result readbacks (U2/U3)","gpu_small_readbacks",false);
         root = card(config, "ADVANCED");
         text(root, "Additional environment variables (optional):", 14, false);
         extraEnv = new EditText(this);

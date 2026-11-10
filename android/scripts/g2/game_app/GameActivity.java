@@ -288,7 +288,7 @@ public class GameActivity extends SDLActivity {
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
             }
-            String renderer=RendererOptions.environment(game);
+            String renderer=RendererOptions.environment(game,options.getBoolean("gpu_small_readbacks",false));
             for(String line:renderer.split("\n")){
                 int eq=line.indexOf('=');
                 if(eq>0)Os.setenv(line.substring(0,eq),line.substring(eq+1),true);
@@ -302,6 +302,8 @@ public class GameActivity extends SDLActivity {
             // Only this specific copy shader is synchronized; readback mode is unchanged.
             Os.setenv("BB_SCALAR_COPY64_SYNC","u2".equals(game)?"2":"0",true);
             Os.setenv("BB_SCALAR_COPY64_DEFER","u2".equals(game)?"1":"0",true);
+            // U3 raycaster: bounded async result copies, no mandatory EOP GPU wait.
+            Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game)?"1":"0",true);
             // The selected locale must reach Orbis, not just Android/ImGui. Set after
             // old per-game environment files so their stale defaults cannot force English.
             Os.setenv("BB_LANGUAGE",Integer.toString(GameLanguage.id(AppLanguage.code(),android.content.res.Resources.getSystem().getConfiguration().getLocales().get(0))),true);

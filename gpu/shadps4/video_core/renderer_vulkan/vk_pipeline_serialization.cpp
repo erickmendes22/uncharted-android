@@ -17,6 +17,7 @@
 #include "core/emulator_settings.h"
 #include "shader_recompiler/frontend/fetch_shader.h"
 #include "shader_recompiler/info.h"
+#include "shader_recompiler/ir/passes/ir_passes.h"
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
 #include "video_core/cache_storage.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -30,7 +31,11 @@ static constexpr u32 ShaderBinaryVersion = 15u;
 static constexpr u32 ShaderMetaVersion = 12u;
 static constexpr u32 PipelineKeyVersion = 7u;
 static std::string ShaderBinaryName(u64 pgm_hash, size_t perm_idx) {
-    return fmt::format("{:#018x}_{}", pgm_hash, perm_idx);
+    // Never load a pre-clamp SPIR-V binary for the four known effect shaders.
+    // Preserve all other cached shaders, including Daedalus ARM-only variants.
+    const char* clamp = !Shader::Optimization::EffectLoopClamp(pgm_hash) ? "" :
+                        pgm_hash == 0x689d1af9 ? "_lc2" : "_lc1";
+    return fmt::format("{:#018x}_{}{}", pgm_hash, perm_idx, clamp);
 }
 } // namespace Serialization
 

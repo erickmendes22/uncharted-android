@@ -141,6 +141,7 @@ public:
     /// buffers, DMA, WriteData, fences); constants overlapping it are bound there, not copied here.
     void NotePendingGpuWrite(VAddr address, u64 size);
     void NoteSmallWrittenBuffers(const Shader::Info& stage);
+    void NoteCopy64Readback(const Shader::Info& stage);
     void ReadBackSmallWrittenBuffers();
     /// Before a guest-visible write: fences deferred earlier are written first.
     void WaitDeferredSignals() {
@@ -375,6 +376,7 @@ private:
     VideoCore::TextureCache texture_cache;
     std::mutex small_written_mutex;
     std::vector<std::pair<VAddr, u32>> small_written_buffers;
+    std::vector<std::pair<VAddr, u32>> copy64_readbacks;
     AmdGpu::Liverpool* liverpool;
     Core::MemoryManager* memory;
     boost::icl::interval_set<VAddr> mapped_ranges;

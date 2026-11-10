@@ -2525,6 +2525,21 @@ void Rasterizer::DrawIndirectRecord(const GraphicsPipeline* pipeline, bool is_in
     SyncCheckpoint(scheduler);
 }
 
+namespace {
+constexpr u64 Copy64ShaderHash = 0x6a6422a9;
+constexpr u64 Copy64ReadbackMax = 64_KB;
+constexpr size_t Copy64ReadbackRanges = 256;
+bool Copy64EopReadback() {
+    static const bool enabled = [] {
+        const char* flag = std::getenv("BB_COPY64_EOP_READBACK");
+        const bool on = flag && flag[0] == '1';
+        if (on) std::printf("COPY64EOP: U3 raycaster GPU results deferred to CPU without EOP wait\n");
+        return on;
+    }();
+    return enabled;
+}
+} // namespace
+
 void Rasterizer::NoteSmallWrittenBuffers(const Shader::Info& stage) {
     if (!BbRenderer::SmallReadbacks()) return;
     for (const auto& desc : stage.buffers) {
@@ -2545,24 +2560,54 @@ void Rasterizer::NoteSmallWrittenBuffers(const Shader::Info& stage) {
     }
 }
 
+void Rasterizer::NoteCopy64Readback(const Shader::Info& stage) {
+    if (!Copy64EopReadback() || u32(stage.pgm_hash) != u32(Copy64ShaderHash) ||
+        stage.buffers.size() != 2 || stage.buffers[1].IsSpecial()) return;
+    const auto ud = stage.UserData();
+    if (ud.size() <= 6) return;
+    const auto dst = stage.buffers[1].GetSharp(stage);
+    if (dst.GetStride() != 4 || !dst.base_address) return;
+    // Keep only the dwords the dispatch writes; ignore the large copies that
+    // do not contain the CPU-visible 0.5-1 KiB raycaster result records.
+    const u64 count = std::min<u64>({u64(CsRegs().dim_x) * 64, u64(ud[6]),
+                                    u64(dst.num_records)});
+    const u64 bytes = count * sizeof(u32);
+    if (!bytes || bytes > Copy64ReadbackMax) return;
+    std::scoped_lock lock{small_written_mutex};
+    const std::pair<VAddr, u32> range{dst.base_address, static_cast<u32>(bytes)};
+    if (std::ranges::find(copy64_readbacks, range) != copy64_readbacks.end()) return;
+    if (copy64_readbacks.size() < Copy64ReadbackRanges) copy64_readbacks.push_back(range);
+}
+
 void Rasterizer::ReadBackSmallWrittenBuffers() {
-    if (!BbRenderer::SmallReadbacks()) return;
-    std::vector<std::pair<VAddr, u32>> ranges;
+    if (!BbRenderer::SmallReadbacks() && !Copy64EopReadback()) return;
+    std::vector<std::pair<VAddr, u32>> ranges, copy64;
     {
         std::scoped_lock lk{small_written_mutex};
         ranges.swap(small_written_buffers);
+        copy64.swap(copy64_readbacks);
     }
     bool captured = false;
     for (const auto& [address, size] : ranges) {
         if (!buffer_cache.IsRegionGpuModified(address, size)) continue;
-        // No synchronous fallback: retry at the next event if the bounded pool is busy.
-        // Existing U2 mesh copies retain their own synchronous fallback unchanged.
+        // Never wait synchronously for an optional 64-byte result when the
+        // deferred snapshot queue is full; retry at the next EOP.
         if (!buffer_cache.DeferSmallReadback(address, size)) {
             std::scoped_lock lk{small_written_mutex};
             if (small_written_buffers.size() < 16)
                 small_written_buffers.emplace_back(address, size);
         } else {
             captured = true;
+        }
+    }
+    for (const auto& [address, size] : copy64) {
+        if (!buffer_cache.IsRangeGpuWritten(address, size)) continue;
+        if (buffer_cache.DeferCopy64Readback(address, size)) {
+            captured = true;
+        } else {
+            // Correctness fallback only if the bounded landing queue is full.
+            // Normal U3 gameplay follows the async path with no EOP GPU wait.
+            buffer_cache.ReadMemory(address, size, false, true);
         }
     }
     if (captured) scheduler.Flush(); // one submission for this event, no GPU wait
@@ -2667,6 +2712,7 @@ void Rasterizer::DispatchRecord(const ComputePipeline* pipeline) {
         return;
     }
     NoteSmallWrittenBuffers(cs);
+    NoteCopy64Readback(cs);
     if (StaleCheckEnabled()) {
         VAddr slot = ~VAddr{0};
         u64 slot_size = 0;

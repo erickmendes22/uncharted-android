@@ -56,7 +56,15 @@ static const unsigned char u3_focus_reset_102[]={
 };
 _Static_assert(sizeof(u3_focus_reset_100)==51 && sizeof(u3_focus_reset_102)==53,"patch sizes");
 
+/* U1/U2 MoveActionController: 64 slots exhaust at high frame rates (often after jumping).
+ * Upstream v0.3.11: expand the allocation to 256; only patch the exact 16-byte
+ * signature in a unique executable segment, not arbitrary 64-valued constants.
+ */
+static const unsigned char move_pool_256[]={0xb9,0x00,0x01,0x00,0x00};
 static const RuntimeGuestFix fixes[]={
+{"U1/U2 move action pool 256 slots",
+ "ba 06 00 00 00 b9 40 00 00 00 41 b8 20 00 00 00",
+ 0x5, sizeof(move_pool_256), NULL, move_pool_256},
 {"U2 leg IK NaN delta",
       "e8 ?? ?? ?? ?? 48 85 c0 74 27 48 8d 3d ?? ?? ?? ?? 48 8d 35 "
       "?? ?? ?? ?? 48 8d 15 ?? ?? ?? ?? 48 8d 0d ?? ?? ?? ?? 41 b8 "

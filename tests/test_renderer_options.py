@@ -52,7 +52,10 @@ assert 'Changes apply on the next game start. Disable one option at a time to co
 for key in ['arm_uma_readback','arm_flush_draws','arm_job_spin']:
  assert '\"'+key+'\",true)' in launcher,key
  assert 'options.getBoolean(\"'+key+'\",true)' in activity,key
-assert 'RendererOptions.environment(game)' in activity
+assert '"gpu_small_readbacks",false)' in launcher
+assert 'options.getBoolean("gpu_small_readbacks",false)' in activity
+assert 'RendererOptions.environment(game,options.getBoolean("gpu_small_readbacks",false))' in activity
+assert 'Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game)?"1":"0",true)' in activity
 assert 'options.getBoolean(\"renderer_' not in activity
 assert 'compatibilitySwitch(root,\"Save Vulkan driver cache\"' not in launcher
-print('PASS: only three Performance switches remain, default on in UI and boot; obsolete renderer preferences cannot change the fixed policy')
+print('PASS: compatibility switches remain; small GPU readbacks optional off; U3 raycaster separately enabled')

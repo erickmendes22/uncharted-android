@@ -455,9 +455,11 @@ static int memory_log(void) {
 }
 static ABI int32_t direct_map(void **out, uint64_t size, int prot, int flags, int64_t physical, uint64_t alignment) {
     void *requested=out ? *out : NULL;
+    void *where=requested;
     write_lock();
-    int32_t result=map_direct_locked(out,size,prot,flags,physical,alignment);
+    int32_t result=map_direct_locked(out ? &where : NULL,size,prot,flags,physical,alignment);
     write_unlock();
+    if (out && !result) *out=where;
     flush_hooks();
     if (memory_log())
         printf("Memory: map direct want=%p size=0x%" PRIx64 " prot=0x%x flags=0x%x phys=0x%" PRIx64 " align=0x%" PRIx64 " -> %p result=0x%x\n",
@@ -540,9 +542,11 @@ static int32_t map_flexible_locked(void **inout, uint64_t size, int prot, int fl
 }
 static ABI int32_t map_flexible(void **inout, uint64_t size, int prot, int flags) {
     if (memory_log()) printf("Memory: map flexible want=%p size=0x%" PRIx64 " prot=0x%x flags=0x%x\n",inout ? *inout : NULL,size,prot,flags);
+    void *where=inout ? *inout : NULL;
     write_lock();
-    int32_t result=map_flexible_locked(inout,size,prot,flags);
+    int32_t result=map_flexible_locked(inout ? &where : NULL,size,prot,flags);
     write_unlock();
+    if (inout && !result) *inout=where;
     flush_hooks();
     if (!result) printf("Runtime: mapped flexible memory %p, size=%" PRIu64 ", prot=0x%x\n", *inout, size, prot);
     else fprintf(stderr,"Runtime: flexible map of %" PRIu64 " bytes failed (0x%x), in use=%" PRIu64 "\n",
@@ -556,13 +560,16 @@ static ABI int32_t release_flexible(void *address, uint64_t size) { return direc
 static ABI int32_t reserve_range(void **inout, uint64_t size, int flags, uint64_t alignment) {
     if (!alignment) alignment=PAGE;
     if (!inout || !size || size%PAGE || !valid_alignment(alignment)) return INVALID;
+    // place() can update the output pointer: write only after releasing the lock.
+    void *where=*inout;
     write_lock();
-    if ((flags & MAP_FIXED_FLAG) && overlaps((uintptr_t)*inout,(uintptr_t)*inout+size,0)) {
+    if ((flags & MAP_FIXED_FLAG) && overlaps((uintptr_t)where,(uintptr_t)where+size,0)) {
         write_unlock(); return NO_MEMORY;
     }
-    if (memory_log()) printf("Memory: reserve want=%p size=0x%" PRIx64 " flags=0x%x align=0x%" PRIx64 "\n",*inout,size,flags,alignment);
-    int32_t result=place(inout,size,0,flags,alignment,KIND_RESERVED,0,0);
+    if (memory_log()) printf("Memory: reserve want=%p size=0x%" PRIx64 " flags=0x%x align=0x%" PRIx64 "\n",where,size,flags,alignment);
+    int32_t result=place(&where,size,0,flags,alignment,KIND_RESERVED,0,0);
     write_unlock();
+    if (!result) *inout=where;
     if (!result) printf("Runtime: reserved virtual range %p, size=%" PRIu64 "\n", *inout, size);
     return result;
 }
@@ -596,11 +603,13 @@ static ABI int32_t query_protection(void *address, void **start, void **end, uin
     size_t first=i, last=i;
     while (first && vmas[first-1].end==vmas[first].start && vmas[first-1].kind!=KIND_RESERVED && vmas[first-1].prot==vmas[i].prot) --first;
     while (last+1<vma_count && vmas[last+1].start==vmas[last].end && vmas[last+1].kind!=KIND_RESERVED && vmas[last+1].prot==vmas[i].prot) ++last;
-    if (start) *start=(void *)vmas[first].start;
-    if (end) *end=(void *)vmas[last].end;
-    if (prot) *prot=(uint32_t)vmas[i].prot;
+    const uintptr_t run_start=vmas[first].start, run_end=vmas[last].end;
+    const uint32_t run_prot=(uint32_t)vmas[i].prot;
     __atomic_add_fetch(&queries,1,__ATOMIC_RELAXED);
     read_unlock();
+    if (start) *start=(void *)run_start;
+    if (end) *end=(void *)run_end;
+    if (prot) *prot=run_prot;
     return 0;
 }
 static ABI int32_t virtual_query(const void *address, int flags, VirtualQueryInfo *info, uint64_t info_size) {
@@ -609,23 +618,27 @@ static ABI int32_t virtual_query(const void *address, int flags, VirtualQueryInf
     size_t i=vma_index((uintptr_t)address);
     if (i==vma_count || (vmas[i].start>(uintptr_t)address && !(flags & 1))) { read_unlock(); return ACCESS; }
     Vma v=vmas[i];
-    memset(info,0,sizeof(*info));
-    info->start=v.start; info->end=v.end;
-    info->offset=v.kind==KIND_DIRECT ? v.phys : 0;
-    info->protection=v.prot; info->memory_type=v.type;
-    info->flags=(v.kind==KIND_FLEXIBLE ? 1u : 0) | (v.kind==KIND_DIRECT ? 2u : 0) | (v.kind!=KIND_RESERVED ? 16u : 0);
-    strcpy(info->name, v.kind==KIND_RESERVED ? "reserved" : v.kind==KIND_DIRECT ? "direct" : "flexible");
     __atomic_add_fetch(&queries,1,__ATOMIC_RELAXED);
     read_unlock();
+    VirtualQueryInfo result;
+    memset(&result,0,sizeof(result));
+    result.start=v.start; result.end=v.end;
+    result.offset=v.kind==KIND_DIRECT ? v.phys : 0;
+    result.protection=v.prot; result.memory_type=v.type;
+    result.flags=(v.kind==KIND_FLEXIBLE ? 1u : 0) | (v.kind==KIND_DIRECT ? 2u : 0) | (v.kind!=KIND_RESERVED ? 16u : 0);
+    strcpy(result.name, v.kind==KIND_RESERVED ? "reserved" : v.kind==KIND_DIRECT ? "direct" : "flexible");
+    memcpy(info,&result,sizeof(result));
     return 0;
 }
 static ABI int32_t direct_memory_type(uint64_t phys, int *type, void **start, void **end) {
     read_lock();
     for (int i=0;i<LIMIT;++i) if (blocks[i].used && phys>=blocks[i].start && phys-blocks[i].start<blocks[i].size) {
-        if (type) *type=blocks[i].type;
-        if (start) *start=(void *)(uintptr_t)blocks[i].start;
-        if (end) *end=(void *)(uintptr_t)(blocks[i].start+blocks[i].size);
-        read_unlock(); return 0;
+        const Block b=blocks[i];
+        read_unlock();
+        if (type) *type=b.type;
+        if (start) *start=(void *)(uintptr_t)b.start;
+        if (end) *end=(void *)(uintptr_t)(b.start+b.size);
+        return 0;
     }
     read_unlock();
     return ACCESS;
@@ -633,23 +646,34 @@ static ABI int32_t direct_memory_type(uint64_t phys, int *type, void **start, vo
 static ABI int32_t batch_map2(BatchEntry *entries, int count, int *processed, int flags) {
     if (!entries || count<0) return INVALID;
     int32_t result=0; int done=0;
+    /* The mapped addresses are written to the guest's entries after the lock is released (a
+     * write to a GPU-tracked page faults, and the fault handler must not wait behind this lock). */
+    void **starts=count ? malloc((size_t)count*sizeof(*starts)) : NULL;
+    // Never fall back to guest writes while holding the region lock (OOM).
+    if (count && !starts) return NO_MEMORY;
     write_lock();
     for (; done<count; ++done) {
         BatchEntry *e=&entries[done];
         if (memory_log())
             printf("Memory: batch op=%d start=%p length=0x%" PRIx64 " offset=0x%" PRIx64 " prot=0x%x type=%d flags=0x%x\n",
                    (int)e->operation,e->start,(uint64_t)e->length,(uint64_t)e->offset,(unsigned)(uint8_t)e->prot,(int)e->type,flags);
+        void *where=e->start;
         switch (e->operation) {
-        case 0: result=map_direct_locked(&e->start,e->length,(uint8_t)e->prot,flags,(int64_t)e->offset,0); break;
-        case 1: result=unmap_locked((uintptr_t)e->start,e->length); break;
-        case 2: result=protect_locked((uintptr_t)e->start,e->length,(uint8_t)e->prot,-1); break;
-        case 3: result=map_flexible_locked(&e->start,e->length,(uint8_t)e->prot,flags); break;
-        case 4: result=protect_locked((uintptr_t)e->start,e->length,(uint8_t)e->prot,e->type); break;
+        case 0: result=map_direct_locked(&where,e->length,(uint8_t)e->prot,flags,(int64_t)e->offset,0); break;
+        case 1: result=unmap_locked((uintptr_t)where,e->length); break;
+        case 2: result=protect_locked((uintptr_t)where,e->length,(uint8_t)e->prot,-1); break;
+        case 3: result=map_flexible_locked(&where,e->length,(uint8_t)e->prot,flags); break;
+        case 4: result=protect_locked((uintptr_t)where,e->length,(uint8_t)e->prot,e->type); break;
         default: result=INVALID;
         }
+        if (!result) { if (starts) starts[done]=where; else e->start=where; }
         if (result) break;
     }
     write_unlock();
+    if (starts) {
+        for (int i=0;i<done;++i) entries[i].start=starts[i];
+        free(starts);
+    }
     flush_hooks();
     if (processed) *processed=done;
     return result;

@@ -32,6 +32,10 @@ ResourceDiscoveryList ResourceDiscoverPass(IR::Program& program, const Profile& 
 void ResourcePatchingPass(Shader::Info& info, const ResourceDiscoveryList& sharp_usages,
                           const Profile& profile);
 void CollectShaderInfoPass(IR::Program& program, const Profile& profile);
+// Guard effect/crowd skinning and shadow-tap loops against corrupt guest counts.
+// Only the four known shaders are touched, with a cache-specific suffix.
+void EffectLoopClampPass(IR::Program& program);
+bool EffectLoopClamp(u64 pgm_hash);
 void LowerBufferFormatToRaw(IR::Program& program);
 void LowerUserClipPlanes(IR::Program& program, const RuntimeInfo& runtime_info);
 void LowerFp64ToFp32(IR::Program& program);
