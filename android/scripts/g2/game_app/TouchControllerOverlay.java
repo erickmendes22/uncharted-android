@@ -49,7 +49,7 @@ final class TouchControllerOverlay extends View {
     private final PadBridge pad;
     private final SharedPreferences preferences;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
-    // Cache the detailed gold silhouettes extracted from the approved concept.
+    // Cache detailed action silhouettes using steel/sandstone colors, not the old GoW gold.
     // This paint is separate from the circles/labels so bitmap alpha is not
     // affected by the current stroke color or style.
     private final Paint glyphPaint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
@@ -426,7 +426,7 @@ final class TouchControllerOverlay extends View {
     // Compact action pictograms, not emoji or generic shapes.
     private void drawActionGlyph(Canvas c,String name,float x,float y,float size) {
         c.save(); c.translate(x,y); c.scale(size,size);
-        paint.setColor(0xfff2d59a);
+        paint.setColor(ACTION_GLYPH);
         paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(.13f);
         paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeJoin(Paint.Join.ROUND);
         android.graphics.Path path=new android.graphics.Path();
@@ -434,10 +434,10 @@ final class TouchControllerOverlay extends View {
             case "l1": // recognisable grenade with pin and grooves
                 paint.setStyle(Paint.Style.FILL);
                 c.drawOval(-.43f,-.27f,.43f,.72f,paint);
-                paint.setColor(0xff493322);paint.setStyle(Paint.Style.STROKE);
+                paint.setColor(0xff304650);paint.setStyle(Paint.Style.STROKE);
                 c.drawLine(-.33f,.03f,.33f,.03f,paint);
                 c.drawLine(-.30f,.32f,.30f,.32f,paint);
-                paint.setColor(0xfff2d59a);
+                paint.setColor(ACTION_GLYPH);
                 c.drawRoundRect(-.17f,-.49f,.17f,-.23f,.05f,.05f,paint);
                 c.drawCircle(.31f,-.55f,.17f,paint);
                 break;
@@ -463,7 +463,7 @@ final class TouchControllerOverlay extends View {
                 path.lineTo(-.10f,.65f);path.lineTo(-.49f,.65f);
                 path.lineTo(-.36f,.06f);path.lineTo(-.74f,.06f);
                 path.close();c.drawPath(path,paint);
-                paint.setColor(0xff493322);paint.setStyle(Paint.Style.STROKE);
+                paint.setColor(0xff304650);paint.setStyle(Paint.Style.STROKE);
                 c.drawLine(-.41f,-.08f,.33f,-.08f,paint);
                 break;
             case "triangle": // open palm reaching for an object
@@ -483,7 +483,7 @@ final class TouchControllerOverlay extends View {
                 paint.setStyle(Paint.Style.FILL);
                 c.drawRoundRect(-.66f,-.32f,.61f,.31f,.16f,.16f,paint);
                 c.drawRoundRect(-.41f,.13f,.40f,.68f,.13f,.13f,paint);
-                paint.setStyle(Paint.Style.STROKE);paint.setColor(0xff493322);
+                paint.setStyle(Paint.Style.STROKE);paint.setColor(0xff304650);
                 for(int i=-1;i<=1;i++)c.drawLine(i*.29f,-.24f,i*.29f,.10f,paint);
                 break;
             case "circle": // crouching figure behind cover
@@ -565,9 +565,15 @@ final class TouchControllerOverlay extends View {
         c.drawText(name.equals("leftstick") ? "L" : "R",knobX,
                    knobY-(paint.ascent()+paint.descent())/2,paint);
     }
+    // Uncharted: desaturated slate surfaces and weathered metallic edges.
+    // Gold is reserved for selected-state highlights, not the entire controller.
+    private static final int ACTION_EDGE=0xff8d9da2;
+    private static final int ACTION_EDGE_ACTIVE=0xffc8b28a;
+    private static final int ACTION_GLYPH=0xffd0d8d6;
+    private static final int ACTION_GLYPH_ACTIVE=0xfff1dfba;
     private int actionFill(boolean down) {
-        float a=Math.min(.95f,surfaceOpacity+(down?.25f:0f));
-        return (Math.round(a*255f)<<24)|0x000c0b09;
+        float a=Math.min(.95f,surfaceOpacity+(down?.19f:0f));
+        return (Math.round(a*255f)<<24)|(down?0x00354c5a:0x00132230);
     }
     private int classicFill(boolean down) {
         float a=Math.min(.95f,surfaceOpacity+(down?.25f:0f));
@@ -579,7 +585,7 @@ final class TouchControllerOverlay extends View {
     private void drawFirePistol(Canvas c,float x,float y,float size) {
         c.save();c.translate(x,y);c.scale(size,size);
         android.graphics.Path p=new android.graphics.Path();
-        paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff4d293);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(ACTION_GLYPH);
         // A horizontal pistol slide/barrel pointed right, with a proper grip.
         p.moveTo(-.78f,-.28f);p.lineTo(.53f,-.28f);
         p.lineTo(.68f,-.14f);p.lineTo(.66f,.04f);
@@ -590,11 +596,11 @@ final class TouchControllerOverlay extends View {
         paint.setColor(0xff513820);paint.setStrokeWidth(.07f);
         c.drawRect(-.64f,-.13f,.30f,-.05f,paint);
         c.drawOval(-.30f,.02f,.03f,.27f,paint);
-        paint.setStyle(Paint.Style.STROKE);paint.setColor(0xfff4d293);
+        paint.setStyle(Paint.Style.STROKE);paint.setColor(ACTION_GLYPH);
         paint.setStrokeWidth(.09f);
         c.drawLine(-.43f,.17f,-.37f,.52f,paint);
         // Small muzzle flash is explicitly attached to the barrel's tip.
-        paint.setStyle(Paint.Style.FILL);paint.setColor(0xffffe6a7);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(ACTION_GLYPH_ACTIVE);
         p.reset();p.moveTo(.71f,-.26f);
         p.lineTo(1.07f,-.37f);p.lineTo(.92f,-.07f);
         p.lineTo(1.19f,.04f);p.lineTo(.88f,.12f);
@@ -604,7 +610,7 @@ final class TouchControllerOverlay extends View {
     }
     private void drawInteractHand(Canvas c,float x,float y,float size) {
         c.save();c.translate(x,y);c.scale(size,size);
-        paint.setStyle(Paint.Style.FILL);paint.setColor(0xfff5d7a1);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(ACTION_GLYPH);
         // Four separated fingers, a thumb, and a broad open palm; no thin
         // line-art that disappears at a 46-unit button radius.
         c.drawRoundRect(-.41f,-.63f,-.19f,.13f,.10f,.10f,paint);
@@ -620,7 +626,7 @@ final class TouchControllerOverlay extends View {
         palm.lineTo(-.47f,-.04f);palm.close();
         c.drawPath(palm,paint);
         // Fingers remain individually readable against the gold silhouette.
-        paint.setColor(0xff5f4228);paint.setStyle(Paint.Style.STROKE);
+        paint.setColor(0xff344955);paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(.045f);
         c.drawLine(-.18f,-.35f,-.18f,.04f,paint);
         c.drawLine(.09f,-.42f,.09f,.04f,paint);
@@ -633,7 +639,7 @@ final class TouchControllerOverlay extends View {
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(actionFill(pressed.contains(name)));
         c.drawCircle(p.x,p.y,r,paint);
-        paint.setColor(0xffcfaa70);paint.setStyle(Paint.Style.STROKE);
+        paint.setColor(pressed.contains(name)?ACTION_EDGE_ACTIVE:ACTION_EDGE);paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(2.3f);c.drawCircle(p.x,p.y,r,paint);
         if (name.equals("touchpad")) {
             c.drawRoundRect(p.x-r*.49f,p.y-r*.22f,p.x+r*.26f,p.y+r*.36f,
@@ -662,7 +668,7 @@ final class TouchControllerOverlay extends View {
         }
         paint.setStyle(Paint.Style.FILL);
         if(label!=null&&!label.isEmpty()) {
-            paint.setColor(0xffede2c6);paint.setTextAlign(Paint.Align.CENTER);
+            paint.setColor(ACTION_GLYPH);paint.setTextAlign(Paint.Align.CENTER);
             paint.setTypeface(Typeface.DEFAULT_BOLD);
             paint.setTextSize(18*sizeMultiplier);
             c.drawText(label,p.x,p.y+r+22*sizeMultiplier,paint);
@@ -689,14 +695,14 @@ final class TouchControllerOverlay extends View {
             final boolean selected=pressed.contains(DPAD_DIRECTIONS[i]);
             final float x0=arm[0]*s,y0=arm[1]*s,x1=arm[2]*s,y1=arm[3]*s;
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(selected?0xff785737:0xd9232932);
+            paint.setColor(selected?0xff405868:0xd91a2b38);
             c.drawRoundRect(x0,y0,x1,y1,6f*s,6f*s,paint);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(2.1f*s);
-            paint.setColor(selected?0xffffd997:0xffbd9865);
+            paint.setColor(selected?ACTION_EDGE_ACTIVE:ACTION_EDGE);
             c.drawRoundRect(x0,y0,x1,y1,6f*s,6f*s,paint);
             // Engraved directional chevrons: visible on each separate arm.
-            paint.setColor(selected?0xffffe8b5:0xffdec398);
+            paint.setColor(selected?ACTION_GLYPH_ACTIVE:ACTION_GLYPH);
             paint.setStrokeWidth(3.3f*s);
             paint.setStrokeCap(Paint.Cap.ROUND);
             if (i==0) {
@@ -715,11 +721,11 @@ final class TouchControllerOverlay extends View {
         }
         paint.setStrokeCap(Paint.Cap.BUTT);
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(0xff1b2029);
+        paint.setColor(0xff1a2c39);
         c.drawRoundRect(-12f*s,-12f*s,12f*s,12f*s,3f*s,3f*s,paint);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1.4f*s);
-        paint.setColor(0xff866c4f);
+        paint.setColor(ACTION_EDGE);
         c.drawRoundRect(-12f*s,-12f*s,12f*s,12f*s,3f*s,3f*s,paint);
         paint.setStyle(Paint.Style.FILL);
         c.restore();
@@ -729,7 +735,7 @@ final class TouchControllerOverlay extends View {
         float r=80*sizeMultiplier;
         paint.setStyle(Paint.Style.FILL);paint.setColor(actionFill(false));
         c.drawCircle(p.x,p.y,r,paint);
-        paint.setStyle(Paint.Style.STROKE);paint.setColor(0xffcfaa70);
+        paint.setStyle(Paint.Style.STROKE);paint.setColor(ACTION_EDGE);
         paint.setStrokeWidth(2.5f);c.drawCircle(p.x,p.y,r,paint);
         float kx=p.x,ky=p.y;
         for(int i=0;i<controls.size();i++) {
@@ -743,16 +749,16 @@ final class TouchControllerOverlay extends View {
                 break;
             }
         }
-        paint.setStyle(Paint.Style.FILL);paint.setColor(0x77a14231);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(0xa04d6573);
         c.drawCircle(kx,ky,31*sizeMultiplier,paint);
     }
     private void actionClickStick(Canvas c,String name) {
         PointF p=center(name);float r=25*sizeMultiplier;
         paint.setStyle(Paint.Style.FILL);paint.setColor(actionFill(pressed.contains(name)));
         c.drawCircle(p.x,p.y,r,paint);
-        paint.setStyle(Paint.Style.STROKE);paint.setColor(0xffcfaa70);
+        paint.setStyle(Paint.Style.STROKE);paint.setColor(ACTION_EDGE);
         paint.setStrokeWidth(2);c.drawCircle(p.x,p.y,r,paint);
-        paint.setStyle(Paint.Style.FILL);paint.setColor(0xffede2c6);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(ACTION_GLYPH);
         paint.setTypeface(Typeface.DEFAULT_BOLD);paint.setTextAlign(Paint.Align.CENTER);
         paint.setTextSize(16*sizeMultiplier);
         c.drawText(name.toUpperCase(),p.x,p.y-(paint.ascent()+paint.descent())/2f,paint);
@@ -793,7 +799,7 @@ final class TouchControllerOverlay extends View {
             paint.setStyle(Paint.Style.FILL);paint.setColor(0xcc15171d);
             c.drawRoundRect(548,9,732,62,13,13,paint);
             paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(2);
-            paint.setColor(0xffc6ad76);c.drawRoundRect(548,9,732,62,13,13,paint);
+            paint.setColor(ACTION_EDGE);c.drawRoundRect(548,9,732,62,13,13,paint);
             paint.setStyle(Paint.Style.FILL);paint.setTextSize(20);
             paint.setTextAlign(Paint.Align.CENTER);
             c.drawText("DONE",640,36-(paint.ascent()+paint.descent())/2f,paint);

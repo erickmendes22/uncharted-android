@@ -50,7 +50,11 @@ final class UnchartedActionGlyphs {
                     int b=packed[i>>1]&255;
                     int alpha=((i&1)==0 ? b>>>4 : b&15)*17;
                     float y=(float)(i/SIZE)/(SIZE-1);
-                    int red=Math.round(249-32*y),green=Math.round(215-67*y),blue=Math.round(158-69*y);
+                    // The masks retain their detail, but no longer use GoW's
+                    // saturated gold. Uncharted steel/ivory is neutral and
+                    // readable against the desaturated slate button fill.
+                    int red=Math.round(226-46*y),green=Math.round(234-48*y),
+                        blue=Math.round(231-46*y);
                     rgba[i]=(alpha<<24)|(red<<16)|(green<<8)|blue;
                 }
                 Bitmap bitmap=Bitmap.createBitmap(SIZE,SIZE,Bitmap.Config.ARGB_8888);

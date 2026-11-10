@@ -19,7 +19,10 @@ assert "VERSION_CODE=$((100000 + VERSION_CODE))" not in flow
 assert "versionName='0.3.0'" in flow and "versionCode='100300'" in flow
 assert "Uncharted-Daedalus-0.3.0.apk" in flow
 assert 'gameCard(gallery,g[0])' in launcher
-assert 'button(actions,"Play"' in launcher and 'button(actions,"Configure"' in launcher
+assert 'gameCardAction(actions,"Play",true' in launcher
+assert 'gameCardAction(actions,"Configure",false' in launcher
+assert 'gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL)' in launcher
+assert 'categoryScroll.setHorizontalScrollBarEnabled(false)' in launcher
 assert 'chooseGame(game,2)' in launcher
 assert "private void saveGameProfile(String game)" in launcher
 assert "private void loadGameProfile(String game)" in launcher

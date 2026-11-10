@@ -227,45 +227,80 @@ public class Launcher extends Activity {
                "u2".equals(id)?"UNCHARTED 2 · Among Thieves":
                "UNCHARTED 3 · Drake's Deception";
     }
+
+    private boolean portraitLayout() {
+        return getResources().getConfiguration().orientation==
+               android.content.res.Configuration.ORIENTATION_PORTRAIT;
+    }
+    /** Small text-only action: full width on phones, no oversized slider icon. */
+    private Button gameCardAction(LinearLayout parent,String title,boolean primary,View.OnClickListener click) {
+        Button item=new Button(this,null,android.R.attr.borderlessButtonStyle);
+        item.setText(AppLanguage.text(title));
+        item.setTextSize(14);
+        item.setAllCaps(false);
+        item.setSingleLine(true);
+        item.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        item.setMinWidth(0);item.setMinimumWidth(0);
+        item.setMinHeight(dp(44));item.setMinimumHeight(dp(44));
+        item.setPadding(dp(9),0,dp(9),0);
+        item.setTextColor(primary?0xff152737:0xffe2e9e8);
+        GradientDrawable surface=new GradientDrawable();
+        surface.setCornerRadius(dp(10));
+        surface.setColor(primary?accent:0xff253c4b);
+        surface.setStroke(dp(1),primary?0xffd4b982:0xff687e88);
+        item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x44ffffff),surface,null));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
+            parent.getOrientation()==LinearLayout.HORIZONTAL?0:-1,dp(44));
+        if(parent.getOrientation()==LinearLayout.HORIZONTAL)lp.weight=1;
+        lp.setMargins(dp(4),dp(4),dp(4),0);
+        parent.addView(item,lp);
+        item.setOnClickListener(click);
+        return item;
+    }
     private LinearLayout gameCard(LinearLayout parent,String game) {
+        final boolean portrait=portraitLayout();
         LinearLayout container=new LinearLayout(this);
-        container.setOrientation(LinearLayout.VERTICAL);
+        container.setOrientation(portrait?LinearLayout.HORIZONTAL:LinearLayout.VERTICAL);
         GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[]{0xF0213541,0xFF0B1926});
-        bg.setStroke(dp(2),game.equals(prefs.getString("selected_game","u1"))?accent:0xAA4D6371);
+            new int[]{0xff1b3443,0xff0c1c2a});
+        bg.setStroke(dp(2),game.equals(prefs.getString("selected_game","u1"))?accent:0xaa536d79);
         bg.setCornerRadius(dp(13));
         container.setBackground(bg);
-        LinearLayout.LayoutParams panel=new LinearLayout.LayoutParams(0,dp(280),1f);
-        panel.setMargins(dp(6),dp(8),dp(6),dp(8));
+        LinearLayout.LayoutParams panel=portrait?
+            new LinearLayout.LayoutParams(-1,dp(182)):
+            new LinearLayout.LayoutParams(0,dp(292),1f);
+        panel.setMargins(dp(5),dp(7),dp(5),dp(7));
         parent.addView(container,panel);
+
         android.widget.FrameLayout poster=new android.widget.FrameLayout(this);
         android.widget.ImageView img=new android.widget.ImageView(this);
         img.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-        for(String path:new String[]{"art/"+game+".png","art/"+game+".jpg","art/collection.png"}) {
+        for(String path:new String[]{"art/"+game+".jpg","art/"+game+".png","art/collection.png"}) {
             try(InputStream in=getAssets().open(path)){
                 img.setImageBitmap(android.graphics.BitmapFactory.decodeStream(in));
                 break;
             }catch(Exception ignored){}
         }
         poster.addView(img,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        TextView name=new TextView(this);
-        name.setText(AppLanguage.text(gameName(game)));
-        name.setTextColor(0xFFFFE0A2);name.setTypeface(Typeface.create("serif",Typeface.BOLD));
-        name.setTextSize(17);name.setPadding(dp(10),dp(8),dp(10),dp(10));
-        name.setGravity(android.view.Gravity.BOTTOM);
-        name.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[]{0x00121E2B,0xED09131D}));
-        poster.addView(name,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        container.addView(poster,new LinearLayout.LayoutParams(-1,0,1));
-        TextView state=text(container,prepared()? "Prepared":"Not prepared",12,false);
-        state.setTextColor(prepared()?0xFF91CD8E:muted);
-        state.setPadding(dp(10),dp(2),dp(10),0);
+        container.addView(poster,portrait?
+            new LinearLayout.LayoutParams(0,-1,.40f):
+            new LinearLayout.LayoutParams(-1,0,1f));
+
+        LinearLayout details=new LinearLayout(this);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.setPadding(dp(8),dp(6),dp(8),dp(8));
+        if(portrait)container.addView(details,new LinearLayout.LayoutParams(0,-1,.60f));
+        else container.addView(details,new LinearLayout.LayoutParams(-1,dp(102)));
+        TextView name=text(details,gameName(game),portrait?15:14,true);
+        name.setTextColor(0xfff0debc);
+        name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        TextView state=text(details,prepared()?"Prepared":"Not prepared",12,false);
+        state.setTextColor(prepared()?0xffa2c8a2:muted);
         LinearLayout actions=new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setPadding(dp(6),dp(2),dp(6),dp(8));
-        container.addView(actions);
-        button(actions,"Play",v->{chooseGame(game,0);play();});
-        button(actions,"Configure",v->chooseGame(game,2));
+        actions.setOrientation(portrait?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
+        details.addView(actions,new LinearLayout.LayoutParams(-1,-2));
+        gameCardAction(actions,"Play",true,v->{chooseGame(game,0);play();});
+        gameCardAction(actions,"Configure",false,v->chooseGame(game,2));
         return container;
     }
 
@@ -671,7 +706,11 @@ public class Launcher extends Activity {
         final LinearLayout[] configSections=new LinearLayout[categories.length];
         final LinearLayout sectionPicker=new LinearLayout(this);
         sectionPicker.setOrientation(LinearLayout.HORIZONTAL);
-        config.addView(sectionPicker);
+        android.widget.HorizontalScrollView categoryScroll=new android.widget.HorizontalScrollView(this);
+        categoryScroll.setHorizontalScrollBarEnabled(false);
+        categoryScroll.setFillViewport(!portraitLayout());
+        categoryScroll.addView(sectionPicker);
+        config.addView(categoryScroll);
         for(int n=0;n<categories.length;n++){
             configSections[n]=new LinearLayout(this);
             configSections[n].setOrientation(LinearLayout.VERTICAL);
@@ -683,8 +722,16 @@ public class Launcher extends Activity {
                     configSections[j].setVisibility(j==section?View.VISIBLE:View.GONE);
                 if(pageScroll!=null)pageScroll.smoothScrollTo(0,0);
             });
-            tab.setTextSize(11);
-            tab.setPadding(dp(6),0,dp(6),0);
+            tab.setTextSize(12);
+            tab.setSingleLine(true);
+            tab.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tab.setCompoundDrawables(null,null,null,null);
+            tab.setPadding(dp(10),0,dp(10),0);
+            LinearLayout.LayoutParams tabLayout=(LinearLayout.LayoutParams)tab.getLayoutParams();
+            tabLayout.width=dp(portraitLayout()?132:150);
+            tabLayout.height=dp(46);
+            tabLayout.weight=0f;
+            tab.setLayoutParams(tabLayout);
         }
         android.widget.FrameLayout hero = new android.widget.FrameLayout(this);
         android.widget.ImageView artwork = new android.widget.ImageView(this);
@@ -699,11 +746,11 @@ public class Launcher extends Activity {
         heroCaption.setGravity(android.view.Gravity.BOTTOM);heroCaption.setPadding(dp(18),dp(16),dp(18),dp(16));
         heroCaption.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,new int[]{0x0015110C,0xE615110C}));
         hero.addView(heroCaption,new android.widget.FrameLayout.LayoutParams(-1,-1));
-        home.addView(hero,new LinearLayout.LayoutParams(-1,dp(210)));
+        home.addView(hero,new LinearLayout.LayoutParams(-1,dp(portraitLayout()?126:210)));
         LinearLayout games = card(home, "CHOOSE YOUR ADVENTURE");
         note(games,"Choose a game to play or configure its own video and patches.");
         LinearLayout gallery=new LinearLayout(this);
-        gallery.setOrientation(LinearLayout.HORIZONTAL);
+        gallery.setOrientation(portraitLayout()?LinearLayout.VERTICAL:LinearLayout.HORIZONTAL);
         games.addView(gallery);
         for(String[] g:GAMES)gameCard(gallery,g[0]);
         playButton=primaryButton(games,"Play selected game",v->play());

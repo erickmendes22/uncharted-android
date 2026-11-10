@@ -410,7 +410,7 @@ void AndroidMenu(float base_scale,float frame_ms,bool& keep_open) {
                     std::fclose(file);
                 }
             }
-            Note(action?"Current: Uncharted (GoW3 action icons)":"Current: Classic PlayStation");
+            Note(action?"Current: Uncharted action icons":"Current: Classic PlayStation");
             if(ImGui::Button(BbLocale::Text(action?"Switch to Classic PlayStation":
                                                "Switch to Uncharted action icons"),{-1,0})){
                 if(const char* request=std::getenv("BB_TOUCH_STYLE_REQUEST"))
