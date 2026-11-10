@@ -11,7 +11,8 @@ assert 'name.equals("Disable motion blur") ? UpscalePreset.disableMotionBlur(' i
 assert 'if (group.getKey().equals("Disable anti-aliasing")) nativeAaReady = true;' in make
 assert 'return fsrRequested?null:nativePreset;' in make
 assert 'putBoolean("patch_Disable anti-aliasing"' not in s
-assert 'state.setEnabled(!managed)' in s and 'state.setText(managed?"UPSCALE"' in s
+assert 'state.setEnabled(!managed)' in s
+assert 'state.setText(managed?AppLanguage.text("UPSCALE")' in s
 assert 'if(refreshNativeAa!=null)refreshNativeAa.run();' in s
 patches=json.loads((root/'android/scripts/g2/recipes/bachata.json').read_text())['patches']
 for elf in ['eboot.bin','big2-ps4_Shipping.elf','big3-ps4_Shipping.elf']:
