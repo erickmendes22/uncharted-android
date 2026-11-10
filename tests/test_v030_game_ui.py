@@ -27,9 +27,11 @@ assert 'i.putExtra("launch_game",selected)' in launcher
 assert 'SelectedGameArgs.filename(requested)' in activity
 assert 'PocoF7BootPolicy.conservative(' in activity
 assert 'PocoF7BootPolicy.environment(pocoSafe)' in activity
-assert 'uncharted-daedalus-' in launcher and '.append(g[0]).append(".log' in launcher
+assert '"/uncharted-daedalus.log\\n"' in launcher
+assert 'uncharted-daedalus-"+previousGame+"-previous.log' in activity
+assert 'java.nio.file.Files.copy(attemptLog.toPath(),gameLog.toPath()' in activity
 assert 'boot-attempt.txt' in activity
-assert 'SelectedGameArgs.valid(game)' in src("android/scripts/g2/game_app/LogExport.java")
+assert 'File f=new File(root,"uncharted-daedalus.log")' in src("android/scripts/g2/game_app/LogExport.java")
 assert 'TestPocoF7BootPolicy' in flow
 assert 'if (bootArgs.isEmpty() && !SelectedGameArgs.valid(requested))' in activity
 assert 'img.setScaleType(portrait?android.widget.ImageView.ScaleType.CENTER_CROP:' in launcher

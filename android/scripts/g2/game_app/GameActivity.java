@@ -381,7 +381,19 @@ public class GameActivity extends SDLActivity {
         // Persist the attempted game *before* native SDL/FEX starts. If a
         // native SIGSEGV kills the process prior to opening the per-game log,
         // LogExport returns this diagnostic instead of a stale U1 logfile.
-        try(FileWriter writer=new FileWriter(new File(d,"boot-attempt.txt"),false)) {
+        File attemptLog=new File(d,"boot-attempt.txt");
+        File gameLog=new File(d,"uncharted-daedalus.log");
+        android.content.SharedPreferences bootPrefs=getSharedPreferences("launcher",MODE_PRIVATE);
+        String previousGame=bootPrefs.getString("previous_boot_game","u1");
+        if(gameLog.isFile()&&gameLog.length()>0&&SelectedGameArgs.valid(previousGame)) {
+            try {
+                java.nio.file.Files.copy(gameLog.toPath(),
+                    new File(d,"uncharted-daedalus-"+previousGame+"-previous.log").toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }catch(IOException error){android.util.Log.w("UnchartedBoot","Cannot archive previous game log",error);}
+        }
+        bootPrefs.edit().putString("previous_boot_game",game).apply();
+        try(FileWriter writer=new FileWriter(attemptLog,false)) {
             writer.write("Uncharted Daedalus boot attempt\n");
             writer.write("game="+game+"\n");
             writer.write("device="+android.os.Build.MODEL+" / "+android.os.Build.DEVICE+"\n");
@@ -393,9 +405,18 @@ public class GameActivity extends SDLActivity {
             writer.write("compatibility="+(PocoF7BootPolicy.conservative(
                 android.os.Build.MODEL,android.os.Build.DEVICE,
                 android.os.Build.VERSION.SDK_INT>=31?android.os.Build.SOC_MODEL:"",game)?"poco-f7-safe":"default")+"\n");
+            writer.write("native_log=uncharted-daedalus.log\n");
         }catch(IOException error){
             android.util.Log.w("UnchartedBoot","Cannot save startup diagnostics",error);
         }
+        // Keep the published LogExport.java unchanged (hash-pinned release
+        // base): before SDL's native logger begins, replace the shared export
+        // file with THIS game's boot attempt. If native startup SIGSEGVs before
+        // opening its own log, export no longer returns an old U1 session.
+        try{
+            java.nio.file.Files.copy(attemptLog.toPath(),gameLog.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }catch(IOException error){android.util.Log.w("UnchartedBoot","Cannot initialize game log",error);}
         super.onCreate(savedInstanceState);
         keepGameImmersive(); // SDL may reconfigure window flags during surface creation.
         // A View above the SDL surface draws and receives touches in the SAME
