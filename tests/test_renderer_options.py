@@ -59,7 +59,7 @@ assert '"u3_raycaster_readback",false)' in launcher
 assert 'options.getBoolean("u3_raycaster_readback",false)' in activity
 assert '"gpu_shader_loop_safety",true)' in launcher
 assert 'options.getBoolean("gpu_shader_loop_safety",true)' in activity
-assert 'Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game)?"1":"0",true)' in activity
+assert 'Os.setenv("BB_COPY64_EOP_READBACK","u3".equals(game) &&' in activity
 assert 'options.getBoolean(\"renderer_' not in activity
 assert 'compatibilitySwitch(root,\"Save Vulkan driver cache\"' not in launcher
 print('PASS: compatibility switches remain; small GPU readbacks optional off; U3 raycaster separately enabled')
