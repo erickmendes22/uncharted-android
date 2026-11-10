@@ -47,7 +47,8 @@ assert 'final String[] qualityLabels={"Native AA","Quality","Balanced","Performa
 assert 'UpscalePreset.compose(provider,quality)' in launcher
 assert '@drawable/uncharted_icon_approved' in src("android/scripts/g2/game_app/res/drawable/collection.xml")
 assert 'drawable-nodpi/uncharted_icon_approved.webp' in src("android/scripts/g2/game_app/build.sh")
-assert 'not collection cover art' in src("android/scripts/g2/game_app/build.sh")
+assert 'approved Uncharted app icon resource' in src("android/scripts/g2/game_app/build.sh")
+assert '@drawable/uncharted_icon_approved' in src("android/scripts/g2/game_app/res/drawable/collection.xml")
 assert 'for(Button play:gamePlayButtons)play.setEnabled(problem == null && !busy);' in launcher
 assert 'gamePlayButtons.clear();' in launcher
 assert 'primaryButton(games,"Play selected game"' not in launcher
