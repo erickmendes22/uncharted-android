@@ -26,7 +26,7 @@ assert "return display_redirect && image == ui_color && !MovieFsrBypass();" in h
 assert "if (!ui_phase || depth != ui_depth || MovieFsrBypass())" in u
 # Preserve good Android pad and left-edge-only menu.
 assert "pad.virtual(pressed,lx,ly,rx,ry,left,right,l2,r2)" in menu
-assert "x<=40f && hit(x,y)==null" in menu
+assert "x<=Math.min(getWidth()*.10f" in menu
 assert 'c.drawText("MENU"' not in menu
 # Full-size movie fix from previous turn stays in place.
 assert '"-BB_VDEC_CONTENT\\n-BB_VDEC_EXPLICIT_CONTENT\\n-BB_VDEC_SIZE\\n"' in launcher
