@@ -29,7 +29,8 @@ assert 'sample_host(d);' in runtime and 'read_inject();' in runtime
 assert 'merge_touch_pad(d,axes)' in runtime
 assert 'if (leftActive)' in pad and 'if (rightActive)' in pad
 assert 'pad.virtual(pressed,lx,ly,rx,ry,left,right,l2,r2)' in touch
-assert 'x<=40f && hit(x,y)==null' in touch
+assert 'x<=Math.min(getWidth()*.10f' in touch
+assert 'x-menuSwipeStartX>=distance' in touch
 # Android 0.3.0 orientation on portrait-native phones.
 assert 'void setOrientationBis(int width, int height, boolean resizable, String hint)' in activity
 assert 'SCREEN_ORIENTATION_SENSOR_LANDSCAPE' in activity
