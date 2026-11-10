@@ -31,7 +31,9 @@ assert 'TouchControllerOverlay.CLASSIC_STYLE' in launcher
 assert 'BB_TOUCH_STYLE_REQUEST' in game and 'BB_TOUCH_STYLE_STATE' in game
 assert 'BB_TOUCH_STYLE_REQUEST' in overlay and 'BB_TOUCH_STYLE_STATE' in overlay
 assert "✋" not in touch and "✊" not in touch and "⬡" not in touch
-assert "Editar posicao e tamanho dos botoes" in launcher
+assert 'button(root,"Edit button position and size",v->editTouchLayout());' in launcher
+assert "Editar posicao e tamanho dos botoes" not in launcher
+assert 'option.setText(AppLanguage.text(choice[1]))' in launcher
 assert "GSR 2 Native AA" in preset and 'return normalize(mode)>=5?"gsr2":"fsr3";' in preset
 assert 'iniPut("upscaler",UpscalePreset.provider(upscale))' in launcher
 assert "UpscalerGsr2" in header or "UseGsr2" in header
